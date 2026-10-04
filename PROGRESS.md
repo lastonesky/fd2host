@@ -32,6 +32,12 @@ Windows MIDI（Miles AIL 的 16 个入口已被宿主实现替换，见 §11）�
   第 1 步已落地：`render.h`+`render_gdi.c`+`host.h`+`main_win32.c` 拆出，GDI 变成第一个后端，
   `regress.ps1` **8/8 PASS**、帧 900 画面与重构前一致。详见 **§13**。
 
+- **第 15 轮（2026-10-05）：FDPS 的 AIL 入口表 + 定时器族** —— FDPS 自己的 90 个 AIL 入口
+  从 IDA 库的 trace 串 + 全量 `call` 扫描重建（`re/fdps_ail_patchset.csv`），宿主新增
+  **1 ms tick 的定时器线程**直接调 guest 回调，**动画时钟精确 25 Hz**（`fire #100 at +4000 ms`），
+  标题不再卡第一帧；同轮补齐 FDPS 用到而 FD2 没用到的 4 个样本入口、采样句柄池 4→8。
+  FD2 回归 **8/8 PASS**。**下一道关口是 `INT 21h AH=4B`（EXEC，spawn `FD.EXE`）**。详见 **§15**。
+
 ⇒ 路线 C 的 POC 目标"**窗口中看到游戏画面**"**已达成**。下一步见 §7。
 逆向侧：IDA Pro 9.5 + ida MCP 环境已建好，测绘结果在 `port/re/RE_MAP.md`（见 §10）。
 
@@ -355,11 +361,13 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
 7. ~~**文件写入 / 存档路径**~~ **平台侧已补完**（§12）：`AH=3C/41` + `AH=40 CX=0` 截断，
    `regress.ps1` 回归 8/8 PASS。**剩余**：“新游戏 → 首次存档 → `FD2.SAV` 从无到有”与
    “存档变小后的截断对拍”两条还没实测；`AH=49/4A` 仍是空操作（账本只增不减）。
-8. **FDPS（炎龙外传）跑起来**（§14，已到“设模式 + 调色板 + 首帧”）：下一道关口是
-   **AIL 定时器**（`AIL_register_timer` 注册成功但回调不触发 → 动画时钟不动）。
-   做法：用 ida MCP 按 **AIL trace 串**定位 FDPS 的 AIL 入口表（同 FD2 当年的 §10/RE_MAP §3 手法），
-   在 `ail.c` 实现定时器族 + 由宿主线程直接调用 guest 回调；同一张表顺带把 FDPS 的音效/音乐接上。
-   新游戏支持的体检工具：`re/preflight.py`、`re/fixup_scan.py`。
+8. **FDPS（炎龙外传）跑起来**（§14 首跑、§15 已过 AIL 定时器关）：
+   标题动画时钟已 25 Hz 走起来（实测 `fire #100 at +4000 ms`），画面不再卡第一帧。
+   **下一道关口 = `INT 21h AH=4B`（EXEC）**：标题流程 `spawnlp(0,"<dir>FD.EXE",…)` 要把真游戏
+   `FD.EXE` 拉起来（§15.6，`re/fdps_30CB0_spawn.c`）；未实现时日志打印
+   `UNHANDLED INT21 AH=4B exec .\fd.exe`，游戏落回标题 → spawn 死循环。
+   做法：宿主把 AH=4B 实现为“再拉一个 `fd2host.exe --exe <path> --gamedir <cwd>` 并等待”，
+   命令行尾巴写进 PSP:0x80。换新游戏前先体检：`re/preflight.py`、`re/fixup_scan.py`。
 
 ---
 
@@ -559,6 +567,24 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     遇到 FREE 子块先 RESERVE。另注意：早期预留失败的提示只能在 CRT 起来后打印（`fd2_entry` 里不能用
     stdio），所以 **原因与报错往往不在同一行** —— 早预留的掩码写在 `stderr`（`host.err`）。
 
+42. **IDA 会把相邻函数并成一个，trace 串反查出的“函数地址”不一定是入口**（第 15 轮）：
+    FDPS 的 `AIL_start_all_timers()` 那条 printf 落在 `AIL_start_timer` 的函数体内（`0x3E323`），
+    `AIL_release_sequence_handle` 同理并进了 `0x403ED`；按 `get_func(ref).start_ea` 反查会把
+    **别名指到前一个函数**。**真入口以 `call`/`jmp` 目标为准**（全量扫完：AIL 公共区 52 个 call
+    目标 = 47 个公共入口 + 5 个内部工具），别名只用于给补丁表起名字。另：打 5 字节 `jmp` 前
+    **必须做两两间距 ≥5 字节的检查**（90 个地址实测 0 处冲突）。
+
+43. **宿主的采样句柄池要够大，且 shutdown 必须释放**（第 15 轮）：FDPS 一次性
+    `AIL_allocate_sample_handle` × 8（FD2 只要 2 个），池 = 4 时第 5 个开始打
+    `out of handles`；而 FDPS **在同一个进程里会先 `AIL_shutdown` 再重新 init**（spawn 回来后
+    `sub_30CB0 → sub_30270(25)`），不释放的话第二次连一个句柄都拿不到 ⇒ 音效彻底消失。
+    现在池 = 8，`host_AIL_shutdown` 把 sample/seq 句柄全清零。
+
+44. **`AIL_sample_status` 必须回 `4` 才算“空闲”**（第 15 轮，值来自 FDPS 自己的 DIG 驱动）：
+    游戏用 `status == 4` 找空闲句柄（`sub_303C0`/`sub_30790`）并判断“播完了”（`sub_304D0`），
+    原版写入点 `mov dword [h+4], 1/2/4/8`（`re/fdps_digcore_*.c`：1=播中、2=循环中、4=空闲、8=停止）。
+    回 `0` 或其它值会让游戏认为句柄全忙 ⇒ 8 个句柄用完后**再也不播音效**。
+
 ---
 
 ## 9. 调试手册
@@ -594,6 +620,7 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
 | 工具 | ida MCP（`use_capability` → `mcp-tool:ida/open_database \| execute_python \| reference \| save_database`） |
 | IDA | IDA Professional 9.5 + Hex-Rays (x86) |
 | 数据库 | `E:\FD2\FD2.EXE.i64`（4.4 MB，已含 51 个 AIL 函数重命名）；直接打开 .i64 可跳过重新分析 |
+| 第二个数据库 | `E:\Games\FDCollection\Game\FDPS\FDPS.EXE.i64`（2026-10-05 由 ida MCP `open_database` 自动分析并 `save_database` 生成，**无需手动在 IDA GUI 里加载**：1353 函数、437 串、入口 `start`=0x43008，与 `preflight.py` 一致） |
 | 已验证 | IDA 段布局/入口与 Ghidra **逐项一致**（cseg01=0x10000、入口 0x3CCB4），fixup 已被 IDA 应用 |
 
 **一句话结论**：游戏区 569 个函数（0x10000..0x37000）**零条 `int` 指令**，DOS 交互全走 CRT 包装
@@ -1079,6 +1106,16 @@ extender: RATIONAL DOS/4G, WATCOM
 
 ### 14.5 下一轮入口：FDPS 的 AIL 定时器（进而是它的音效/音乐）
 
+> **加载方式已实测（2026-10-05）**：不需要手动在 IDA GUI 里加载 FDPS.EXE。ida MCP 的
+> `open_database("E:\\Games\\FDCollection\\Game\\FDPS\\FDPS.EXE")` 直接以 idalib 无头跑完自动分析
+> （1353 函数 / 437 串 / 入口 `start`=0x43008 = `preflight.py` 的 `entry=0x43008`），随后
+> `save_database()` 落盘 `FDPS.EXE.i64`；**下一轮直接开 .i64，秒级跳过重新分析**。
+> 多库切换：`execute_python(instance_id=...)` 或先 `list_databases()`；当前默认 target 会被新打开的库顶掉。
+> AIL trace 串已在库里，首条证据已到手：
+> `AIL_register_timer(0x%X)\n`@`0x62508` ← xref `0x3df51`（即 §14.3 的 `sub_3DF06`）；
+> `AIL_set_timer_period(%u,%u)\n`@`0x6253d` ← `0x3e133`；`AIL_start_timer(%u)\n`@`0x625b1` ← `0x3e36d`。
+> ⇒ **定时器族入口集中在 `0x3DF00..0x3E400` 一带**，第 1 步的“反查入口表”可直接从这里续做。
+
 1. 用 ida MCP 按 **AIL trace 串**（`"AIL_register_timer(0x%X)\n"` 等）反查 FDPS 的 AIL 入口地址表 ——
    与 FD2 当年建 52 条表的手法相同（`re/RE_MAP.md` §3、`PROGRESS.md` §10）。
 2. 在 `ail.c` 实现定时器族：`AIL_register_timer`（存回调）、`AIL_set_timer_period/frequency`、
@@ -1089,3 +1126,113 @@ extender: RATIONAL DOS/4G, WATCOM
 4. 工具与存档：`re/preflight.py`（静态体检）、`re/fixup_scan.py`（fixup 语法核对）、
    `re/fdps_*.c`（本次反编译存档：`main`、`sub_2A280` 标题循环、`sub_3C3A6` CD 检测、`sub_3DF06` 等）。
 
+> **第 15 轮已完成上面第 1、2 步（入口表 + 定时器族），见 §15**；第 3 步的样本侧 4 个入口也已接上，
+> 剩下的音效实测被 `AH=4B` 挡在标题 → spawn 循环里（§15.6）。
+
+
+---
+
+## 15. 第 15 轮：FDPS 的 AIL 入口表 + 定时器族（25 Hz 动画时钟打通）（2026-10-05）
+
+**目标**（= §14.5 的第 1、2 步）：给 FDPS 建它自己的 AIL 入口表，在 `ail.c` 实现定时器族，
+让宿主线程按周期**直接调用 guest 回调**，动画时钟 `dword_69D64` 走起来、标题不再卡第一帧。
+
+### 15.1 开工前的前提：IDA 库已就位，不用手动加载
+
+见 §14.5 的实测注记：`open_database(FDPS.EXE)` → idalib 无头自动分析 → `save_database()`
+落盘 `E:\Games\FDCollection\Game\FDPS\FDPS.EXE.i64`（1353 函数 / 437 串 / 入口 `0x43008`）。
+本轮所有反查都在这个库上跑，**没有手动在 IDA GUI 里加载过任何东西**。
+
+### 15.2 入口表怎么建的（判据可复现）
+
+| 步骤 | 结果 | 产物 |
+|---|---|---|
+| 扫 `AIL_xxx(` trace 串 → 串的代码 xref → 所在函数 | 107 条串 → **90 个不同函数** | `re/fdps_ail_trace.csv` |
+| 全量扫 `call`/`jmp`，目标落在 AIL 公共区 `0x3D488..0x41FFE` | **52 个 call 目标** = 47 个公共入口 + 5 个内部工具（`0x3D7B4`/`0x3D7B9` 加解锁、`0x3DA20`/`0x3DA25`/`0x3DBA8`） | `re/fdps_ail_patchset.csv` |
+| 只看"游戏侧"（调用者 < `0x3D488`） | **18 个入口**是游戏真正调的 | `re/fdps_ail_gamecalls.csv` |
+| 补丁地址两两间距检查 | 90 个地址 **0 处 <5 字节**（5 字节 `jmp` 不会互踩） | `re/fdps_ail_table.inc` |
+
+- 5 个内部工具**不打补丁**（它们只被 AIL 自己的包装函数调用，包装已被打桩）；其余 90 个全打。
+- 18 个游戏入口接真实现，其余 72 个接 `host_AIL_unused`（返回 0），保证**没有任何原版 AIL 代码可执行**。
+- ⚠️ trace 串反查出的地址**不一定是入口**：IDA 把 `AIL_start_all_timers`/`AIL_resume_sequence` 等
+  **别名**并进了前一个函数体（§8-42）。真入口一律以 `call` 目标为准，别名只用来起名字。
+
+游戏侧那 18 个（宿主必须真实现）：
+`startup / shutdown / install_DIG_INI / install_MDI_INI / allocate_sample_handle /
+allocate_sequence_handle / init_sample / set_sample_address / set_sample_type /
+start_sample / stop_sample / set_sample_playback_rate / set_sample_volume /
+set_sample_loop_count / sample_status / register_timer / set_timer_frequency / start_timer`。
+
+### 15.3 定时器语义（从 FDPS 自己的 AIL 反编译得到，不是猜的）
+
+存档：`re/fdps_ail_AIL_*.c`（公共包装）、`re/fdps_core_*.c`（核心）、`re/fdps_timer_core_*.c`（ISR/编程）。
+
+- **15 个槽，句柄 = 表内字节偏移**（`0,4,8,…,56`），`-1` = 无效；`AIL_register_timer` 满了回 `-1`
+  （游戏 `sub_30540` 判 `== -1` 打 `"Timer fail !!!"`）。核心表：`used[15]`、`cb[15]`、
+  `period[15]`、`counter[15]`、`pending[15]`、`user[15]`。
+- 状态机：`0` 空闲 / `1` 已分配 / `2` 运行中（`start` 1→2、`stop` 2→1、`release` →0）。
+- `AIL_set_timer_frequency(hz)` 就是 `set_period(1000000 / hz)`（原码 `0xF4240 / a2`）。
+- 原版 ISR：`counter += 基准周期(所有活动定时器的最小 period)`，`>= period` 就 `pending++`，
+  然后 `while (pending) { --pending; cb(user); }` ⇒ **停机后会追帧而不是丢帧**。
+  宿主照抄这条语义，只把单次追帧上限设为 `AIL_TIMER_MAXPEND = 8`，避免长卡顿把游戏时钟一次推飞。
+- **游戏侧只用 3 个**：`register_timer(sub_30520)` → `set_timer_frequency(h, 0x19)` → `start_timer(h)`，
+  即**动画时钟 = 25 Hz**；回调 `sub_30520 = inc dword_69D64; call rand; ret`（`retn` = cdecl，
+  多余的 user 参数无害）。
+
+### 15.4 宿主实现（`src/ail.c`、`src/host.c`）
+
+- **定时器子系统**：`CRITICAL_SECTION` + 一条 **1 ms tick 的宿主线程**（`QueryPerformanceCounter`
+  计时，按每个定时器的 `period_us` 累加）；回调**在锁外**调用（guest 回调可能反手调 AIL）。
+  `register_timer` 时惰性启动线程，`AIL_shutdown` 时停线程并清表。
+- **样本侧补 4 个 FD2 没用到的入口**：`set_sample_type`（0/1/2/3 → 声道+位深，决定 waveOut 格式）、
+  `set_sample_playback_rate`、`set_sample_volume`（先记录、全音量播，值打日志待定标）、
+  `sample_status`（**回 4 = 空闲**，见 §8-44）。样本格式从"全局 `--ail-rate`"改成
+  **每样本字段**（默认值仍取全局 ⇒ FD2 行为不变）。
+- **句柄池 4 → 8**、`shutdown` 释放句柄（§8-43）。
+- **按 exe 名选表**（`host.c`）：`FD2.EXE` → 52 条、`FDPS.EXE` → 90 条、其它 → 跳过并打印提示；
+  `--ail=fd2` 强制 FD2 表、`--ail=none` 全关。
+
+### 15.5 实测判据（`build/host.log`）
+
+```
+ail: patched 90 AIL entry points (FDPS layout) to host implementations (11025 Hz, 8-bit, 1 ch)
+ail: register_timer(cb=00030520) -> handle 0        ← 没有 "Timer fail !!!"
+ail: set_timer_frequency(h=0, 25 Hz -> period 40000 us)
+ail: start_timer(h=0)
+ail: timer fire #100 at +4000 ms                     ← 精确 25 Hz
+ail: timer fire #1000 at +32625 ms                   ← 第二个音频会话，100 次 = 4000 ms 恒定
+ail: shutdown (timer callbacks fired 185)            ← 第一个会话 ~7.4 s
+```
+
+- 45 s 内游戏**不再卡在第一帧**：读 `FDE.SAV`、二次写调色板、fade，随后走标题 → spawn 流程。
+- `--screenshot --shot-frame=700` → `build/fdps_f700.bmp`：**82 种颜色**、非黑非单色（第 14 轮是 18 色首帧）。
+- **FD2 未被破坏**：`regress.ps1` **8/8 PASS**，`FD2.TMP = 207360` 字节 = 原件同尺寸。
+
+### 15.6 下一关口：`INT 21h AH=4B`（EXEC）
+
+日志（本轮新增的诊断，会打印被 exec 的路径）：
+
+```
+dos: UNHANDLED INT21 AH=4B exec .\fd.exe (al=00 bx=61528)
+```
+
+反编译（`re/fdps_30CB0_spawn.c`，调用者 `0x1C233`/`0x2A533`）：`sub_30CB0` =
+
+1. `AIL_shutdown` → 排空按键 → `sub_3C217()` → 调色板淡出；
+2. `sprintf(v7, "%sFD.EXE", &unk_643E8)`、`v8/v9 = "%s<SVID/SAUD>"`（前缀是游戏目录字符串）；
+3. **`spawnlp(0 /*P_WAIT*/, v7, v7, v8, v9, 0)`** —— 真正的游戏是同目录的 **`FD.EXE`**（125 KB），
+   带 2 个命令行参数；CRT 走 Watcom `__dospawn` → `mov ah,4Bh`（`0x55FDB`）；
+4. 子进程返回后：清屏 64000 字节 → 淡入 → `sub_30270(25)` **重新初始化音频**（这就是日志里第二次
+   `ail: startup` 的来源）。
+
+⇒ FDPS.EXE 自己只是**引子**：标题后 spawn 真游戏，等它退出再回来重开标题。
+**AH=4B 不实现 = 标题 ↔ spawn 死循环**（未实现时 `set_cf(1)` 失败返回，游戏直接落到第 4 步）。
+
+实现方向（下一轮）：
+1. `dos.c` 实现 `AH=4B`：读 `DS:DX` 路径 + `ES:BX` 参数块里的命令行尾巴，
+   **再拉起一个 `fd2host.exe --exe <path> --gamedir <cwd> --cmdtail=<尾巴>`** 并 `WaitForSingleObject`
+   （`AL=0` 等待、`AL=1/3` 不等待），返回 `AL = 子进程退出码`、`CF=0`。
+2. 宿主新增 `--cmdtail=`（或复用现成参数）把尾巴写进子进程的 **PSP:0x80**，`FD.EXE` 才拿得到
+   SVID/SAUD 参数；父进程退出前要处理好 stdout/host.log —— 子进程会**覆盖**同一个 `host.log`
+   （`freopen(...,"w")`），需要改成追加或按 PID 分文件，否则父进程日志被冲掉。
+3. 现成的 AH=4B 诊断日志已经会打印路径与 `al/bx`，够定位参数块布局（下一步先反编译 `__dospawn`）。

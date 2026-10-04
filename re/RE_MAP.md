@@ -2,7 +2,8 @@
 
 > 由 **ida MCP** 生成，与 `port/PROGRESS.md`（宿主/加载层）、`FD2_analysis.md`（资源格式）三足鼎立。
 > 所有地址为线性地址（obj0=0x10000 / obj1=0x50000 / obj2=0x60000），已与 Ghidra 实证一致。
-> 结论凡未经运行验证的均标注"待确认"。
+> 结论凡未经运行验证的均标注"待确认"。**第二个游戏《炎龙外传》FDPS.EXE 的地图见 `re/FDPS_MAP.md`**
+> （90 条 AIL 入口表、定时器族、spawn FD.EXE 流程；IDA 库 `…\\FDPS\\FDPS.EXE.i64`）。
 
 ---
 

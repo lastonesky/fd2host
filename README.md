@@ -109,7 +109,9 @@ LE 加载 + 7937 条 fixup 应用
 → sokol 选型实测：0 DLL、exe +146 KB、Win 上直接 D3D11            ✅ 头文件已 vendor（pin 2e75443）
 → 第 14 轮通用化：`--exe` 可跑任意 LE 游戏（10 处 FD2 专属依赖补齐，见 PROGRESS §14）  ✅ FD2 回归 8/8
 → 炎龙外传 FDPS 首跑：LE/fixup/低内存自动挪位/启动链/设 13h 模式/调色板/首帧  ✅ 120 s 无崩溃
-   └ 卡点：`AIL_register_timer` 回调不触发（原版 AIL 要硬件定时器）→ 标题动画不推进
+→ 第 15 轮：FDPS 专属 90 条 AIL 入口表 + 宿主定时器线程  ✅ 动画时钟精确 25 Hz，标题不再卡首帧
+   └ 实测 `ail: timer fire #100 at +4000 ms`；帧 700 = 82 色非黑；FD2 回归 8/8 PASS（PROGRESS §15）
+   └ 下一道关口：`INT 21h AH=4B` —— 标题 `spawnlp(0,".\FD.EXE",…)` 把真游戏拉起来，未实现则标题↔spawn 死循环
 ```
 
 ## 当前状态与下一步
@@ -147,9 +149,11 @@ LE 加载 + 7937 条 fixup 应用
    `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入
    `platform_win32.c`/`platform_posix.c`，在那之前 Win32 调用仍留在 `dos.c`/`ail.c` 原处）。
    先出 **Linux x86-64**，ARM 需完成源码化。顺序见 `PROGRESS.md` §13.5/§13.6；sokol 实测见 `§13.1`。
-8. **FDPS（炎龙外传）跑起来**：`--exe` 已能加载它并跑到“设 13h 模式 + 调色板 + 首帧”（`§14.3`），
-   下一道关口是 **AIL 定时器回调**（`AIL_register_timer` 注册成功但不触发），同一张表顺带接上音效/音乐。
-   换新游戏前先体检：`re/preflight.py`（LE/冲突/AIL 特征）、`re/fixup_scan.py`（fixup 语法）。
+8. **FDPS（炎龙外传）跑起来**：`--exe` 能加载它，标题动画时钟已 25 Hz 走起来（`§14.3` 首跑、
+   `§15` 过 AIL 定时器关）。**下一道关口 = `INT 21h AH=4B`（EXEC）**：标题流程要 spawn 真游戏
+   `FD.EXE`，未实现时游戏落回标题形成死循环（日志 `UNHANDLED INT21 AH=4B exec .\fd.exe`，`§15.6`）。
+   换新游戏前先体检：`re/preflight.py`（LE/冲突/AIL 特征）、`re/fixup_scan.py`（fixup 语法）；
+   FDPS 的 IDA 库已存 `E:\Games\FDCollection\Game\FDPS\FDPS.EXE.i64`（开库即用，不必手动加载）。
 
 ## 调试手法（可复用）
 

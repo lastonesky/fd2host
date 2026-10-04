@@ -42,7 +42,7 @@
 1. **随改随写文档**：任何代码/结论/选型一改，**同一轮**就更新对应文档——
    - 行为、命令、对外约定变了 → `README.md`
    - 进度、根因、修复、实测数据、踩坑 → `PROGRESS.md`（对应小节，没有就新开一节并编号）
-   - 逆向测绘结论变了 → `re/RE_MAP.md`、`re/funcmap.csv`
+   - 逆向测绘结论变了 → `re/RE_MAP.md`（FD2）、`re/FDPS_MAP.md`（炎龙外传）、`re/funcmap.csv`
    禁止"先改代码、以后再补文档"；交接文档的价值就在于及时。
 2. **逆向一律走 ida MCP**（首选分析环境），不要用别的反汇编工具重做一遍：
    - 工具：ida MCP（`open_database` / `execute_python` / `reference` / `save_database`）
@@ -143,7 +143,8 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 |---|---|
 | `README.md` | 目标、目录、构建/运行、已验证事实、下一步、调试手法 |
 | `PROGRESS.md` | 交接文档：§2 环境与命令、§3 二进制事实、§4 宿主设计与服务语义、§6 历史卡点、§7 计划、**§8 踩坑清单（必读）**、§9 调试手册、§10 ida 环境、§11 声音、§12 文件服务、§13 显示/跨平台决策、**§14 通用化 + FDPS 首跑** |
-| `re/RE_MAP.md` | 逆向测绘地图：函数分区、AIL 边界、核心函数档案、转译路线 |
+| `re/RE_MAP.md` | 逆向测绘地图（FD2）：函数分区、AIL 边界、核心函数档案、转译路线 |
+| `re/FDPS_MAP.md` | 逆向测绘地图（FDPS 炎龙外传）：90 条 AIL 入口表、定时器族、spawn FD.EXE 流程 |
 | `re/funcmap.csv` | 全量函数表（1359 行） |
 | `re/*.txt` / `re/*.c` | 静态扫描清单与关键函数反编译存档 |
 | 外部：github.com/wicanr2/fd2_re（`docs/`、`docs/knowledge-base/`） | 反编译踩坑与知识库（同游戏逆向资料） |
