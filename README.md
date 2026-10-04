@@ -153,12 +153,14 @@ LE 加载 + 7937 条 fixup 应用
    `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入
    `platform_win32.c`/`platform_posix.c`，在那之前 Win32 调用仍留在 `dos.c`/`ail.c` 原处）。
    先出 **Linux x86-64**，ARM 需完成源码化。顺序见 `PROGRESS.md` §13.5/§13.6；sokol 实测见 `§13.1`。
-8. **FDPS（炎龙外传）跑起来**：`--exe` 能加载它；标题动画 25 Hz（`§14.3` 首跑、`§15` AIL 定时器）；
-   **`INT 21h AH=4B` 已实现**（`§16`）—— 父进程真的开子进程把 `FD.EXE` 拉起来、等它退出、取回退出码。
-   **当前卡点**：`FD1.Aud`/`FD1.Vid` 两个配置文件整个合集都不存在 ⇒ FD.EXE `exit(8)`；
-   且 FD.EXE 还没有自己的 AIL 表（子进程会跑原版 Miles ⇒ 动画再次卡死）。
-   换新游戏前先体检：`re/preflight.py`（LE/冲突/AIL 特征）、`re/fixup_scan.py`（fixup 语法）；
-   FDPS 的 IDA 库已存 `E:\Games\FDCollection\Game\FDPS\FDPS.EXE.i64`（开库即用，不必手动加载）。
+8. **FDPS（炎龙外传）跑起来**：`--exe` 能加载它；标题动画 25 Hz（`§14.3`/`§15`）；
+   **`INT 21h AH=4B` 已实现**（`§16`）—— 父进程真开子进程拉起 `FD.EXE`、等它退出、取回退出码。
+   **剩下两道（`§17` 已定性，顺序即做法）**：
+   ① 键盘：游戏自己挂 **INT 9** ISR（`sub_56560` → `sub_565A7` → 环形队列 `byte_7000F[10]`），
+   宿主从不投递硬件中断 ⇒ 标题菜单读不到键（autokey 实测无效，画面/直方图不变）；
+   ② `FD1.Vid`/`FD1.Aud` 过场数据全合集缺失 ⇒ `FD.EXE exit(8)`（空文件也 8），只能先跳过 intro。
+   换新游戏前先体检：`re/preflight.py`、`re/fixup_scan.py`；
+   FDPS 与 FD.EXE 的 IDA 库都已存盘（开库即用，不必手动加载）。
 
 ## 调试手法（可复用）
 

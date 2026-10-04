@@ -178,3 +178,20 @@ obj1 `0x30000` vsize `0x3C50`，入口 `start = 0x12280`，fixup 2458 条 `bad=0
 文件不存在 → `AH=4Ch code=8`；沙箱里放**空文件**同样 `code=8` ⇒ 内容有格式要求。
 `FD1.Vid`/`FD1.Aud` **整个 FDCollection 都没有**（`SETSOUND.EXE` 同目录，怀疑是它生成）。
 另：`ail: 'fd.exe' has no AIL table` ⇒ FD.EXE 还需要自己的一张表（用 §3 的手法）。
+
+---
+
+## 8. FD.EXE（过场播放器）与 FDPS 的键盘 ISR（第 17 轮入口调研，详见 `PROGRESS.md` §17）
+
+| 项 | 结论 | 证据存档 |
+|---|---|---|
+| FD.EXE 是什么 | **过场动画播放器**：`main(0x10230)` 读 `argv[2]`(`.Aud`) 整块作音轨、`sub_10420` 解析 `argv[1]`(`.Vid`) 成 349 字节对象，然后 `memcpy(0xA0000, obj+337, 64000)` 逐帧 blit + `sub_10B80(buf,1,-1,-1)` 播音 | `re/fdexe_main.c` |
+| 为什么 `exit(8)` | `fopen(argv[2])` 失败 **或 `filelength==0`** 都 `return 8`；`FD1.Vid`/`FD1.Aud`/`FD2.*` **整个 FDCollection 都没有**（空文件实测同样 8） | 子日志 `open '.\FD1.Aud' -> FFFFFFFF (2)` |
+| FD.EXE LE | 2 对象 24 页，obj0 `0x10000` vsize `0x148A9`、obj1 `0x30000` vsize `0x3C50`，入口 `0x12280`，fixup 2458 `bad=0`；**无预留冲突** | `re/preflight.py` |
+| FD.EXE AIL | 有 `AIL_startup/...`，**尚无该 build 的表** ⇒ 子进程跑原版 Miles（需按 §3 手法另建） | 子日志 `ail: 'fd.exe' has no AIL table` |
+| **键盘为什么无效** | 游戏**自己挂 INT 9**：`sub_56560` = `AH=3509` 取旧向量 → `push cs/pop ds; mov edx,offset sub_565A7; AH=2509` 挂上；ISR `sub_565A7` = `in 0x60`/`in·out 0x61` 应答 → 扫描码 `<0x80` 就写进 **`byte_7000F`（10 项环形队列，`dword_70019` 头 / `dword_7001D` 尾，全在 obj2 `0x70000..0x70054` 内）** → `out 0x20,0x20; iret`；出队是 `sub_5652E`（空则返回 -1） | `re/fdps_int9_56560.c`、`re/fdps_keyq_565A7.c` |
+| 宿主缺口 | `dispatch_swint` 对 `0x08/0x09/0x1A` 只计数不投递 ⇒ 队列恒空；`--autokey` 实测（日志有 `autokey vk=0D`）画面直方图**逐像素不变** | 帧 400/600/750 直方图全等 |
+
+**下一步（`PROGRESS.md` §17.3）**：`AH=25 AL=09` 时记 `g_guest_int9 = EDX`（用完整 32 位，DS=CS 基址 0），
+`host_key` 时置"待读扫描码"让 `in 0x60` 返回它，再**按中断帧调用 guest ISR**（栈上放 `EFLAGS、CS、返回地址`
+后 `call`，ISR 的 `iret` 正好弹回；VEH 需补 `iret` 的模拟）。

@@ -45,6 +45,12 @@ Windows MIDI（Miles AIL 的 16 个入口已被宿主实现替换，见 §11）�
   实测：子进程跑起 `FD.EXE`、设 13h 模式、尾巴逐字节正确；**FD2 回归 8/8 PASS**。
   **新卡点：`FD1.Aud`/`FD1.Vid` 在整个 FDCollection 都不存在 ⇒ FD.EXE `exit(8)`**（空文件也不行）。详见 **§16**。
 
+- **第 17 轮入口调研（只读）**：`FD.EXE` = **过场动画播放器**（`main` 把 `argv[2]` 整个读成音轨、
+  解析 `argv[1]` 成画面对象逐帧 blit），缺的 `FD1.Vid`/`FD1.Aud` **整个合集都不存在**（空文件也 `exit(8)`）；
+  父进程 spawn 后确实进了标题菜单（帧 150 = 23 色 → 帧 400 = 82 色），但**再无变化** ——
+  根因是**游戏自己挂了 INT 9**（`sub_56560`/ISR `sub_565A7`，队列 `byte_7000F[10]`），
+  宿主从不投递硬件中断 ⇒ 菜单永远读不到键（autokey 实测无效）。做法见 **§17**。
+
 ⇒ 路线 C 的 POC 目标"**窗口中看到游戏画面**"**已达成**。下一步见 §7。
 逆向侧：IDA Pro 9.5 + ida MCP 环境已建好，测绘结果在 `port/re/RE_MAP.md`（见 §10）。
 
@@ -368,12 +374,13 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
 7. ~~**文件写入 / 存档路径**~~ **平台侧已补完**（§12）：`AH=3C/41` + `AH=40 CX=0` 截断，
    `regress.ps1` 回归 8/8 PASS。**剩余**：“新游戏 → 首次存档 → `FD2.SAV` 从无到有”与
    “存档变小后的截断对拍”两条还没实测；`AH=49/4A` 仍是空操作（账本只增不减）。
-8. **FDPS（炎龙外传）跑起来**（§14 首跑、§15 过 AIL 定时器关、**§16 过 EXEC 关**）：
-   标题动画 25 Hz 走起来，`AH=4B` 能真开子进程把 `FD.EXE` 拉起来（子进程独立 `host.<pid>.log`）。
-   **当前卡点 = `FD1.Aud` / `FD1.Vid` 两个文件整个 FDCollection 都没有** ⇒ FD.EXE `exit(8)`
-   （空文件也 `exit(8)`，内容有格式）。入口：FDPS 的格式串 `'%s\\%s.Vid'`/`'%s\\%s.Aud'`（`0x61EE0`/`0x61EEC`）。
-   同时 **FD.EXE 还没有自己的 AIL 表**（子进程跑原版 Miles ⇒ 动画时钟会再次卡死），
-   用 §15.2 同一套手法建表；先 `python re/preflight.py <FD.EXE>` 体检。
+8. **FDPS（炎龙外传）跑起来**（§14 首跑、§15 AIL 定时器、**§16 EXEC**、**§17 入口调研**）：
+   `AH=4B` 已能真开子进程拉起 `FD.EXE`。**剩下两件（顺序即做法，见 §17.3）**：
+   ① **投递 INT 9**：游戏自己挂键盘 ISR（`sub_56560` → `sub_565A7`，环形队列 `byte_7000F[10]`），
+   宿主 `dispatch_swint` 对 `0x09` 是直接忽略 ⇒ 菜单读不到键；要记 `AH=25 AL=09` 的 `EDX`、
+   `host_key` 时按中断帧调 guest ISR（补 `iret` 模拟）。
+   ② 过场数据 `FD1.Vid`/`FD1.Aud` 全合集缺失 ⇒ `FD.EXE exit(8)`，没有它就保持跳过 intro（已验证可用）；
+   另需给 FD.EXE 建 AIL 表（`python re/preflight.py <FD.EXE>` 已过，`bad=0 leftover=0`）。
 
 ---
 
@@ -1326,3 +1333,74 @@ dos: INT 21h AH=4Ch terminate, code=8
    （trace 串 + 全量 `call` 扫描）给 FD.EXE 建表；先 `python re/preflight.py <FD.EXE>` 体检。
 3. **`0x10000` 偶发被抢**（§8-48）：一次子进程启动失败（487，`type=MAPPED region=0x3000`），
    重跑即好；失败路径现在会用 `K32GetMappedFileNameA` 打出**映射的是哪个文件**，复现即可定位。
+
+---
+
+## 17. 下一轮入口调研（只读，未改代码）：FD.EXE 是过场播放器 / FDPS 自己挂 INT 9（2026-10-05）
+
+第 16 轮跑通 exec 之后做了两件事：把子进程为什么 `exit(8)`、父进程为什么"画面定住且按键无效"
+查到底。**两条根因都已定位，代码未动**（下面每条都有判据）。
+
+### 17.1 FD.EXE = 过场动画播放器，缺的是 `.Vid`/`.Aud` 两个数据文件
+
+IDA 库 `E:\Games\FDCollection\Game\FDPS\FD.EXE.i64`（`open_database` 自动分析，618 函数，
+入口 `0x12280`，`preflight.py`：无预留冲突、`fixup bad=0 leftover=0`）。
+`main`（存档 `re/fdexe_main.c`）：
+
+```c
+v4 = argv[1];                       /* ".\FD1.Vid" */
+f  = fopen(argv[2], "rb");          /* ".\FD1.Aud"  */
+if (!f) return 8;                   /* ← 文件不存在 */
+len = filelength(...); if (len == 0) return 8;   /* ← 空文件，同样 8 */
+buf = malloc(len); fread(buf, len);
+obj = new(0x15D); sub_10420(obj, v4);            /* 解析 .Vid → 349 字节对象 */
+sub_104D0(obj);                                  /* 初始化 */
+sub_10B80(buf, 1, -1, -1);                       /* 播放 .Aud 音轨 */
+loop: memcpy(0xA0000, obj+337, 64000); sub_10770(obj); ...   /* 逐帧 blit */
+```
+
+- 判据：子日志 `dos: open '.\FD1.Aud' -> FFFFFFFF (2)` → `AH=4Ch terminate, code=8`；
+  沙箱里放**空文件** → `open -> 338 (0)` 之后**照样 `code=8`**（走了 `len==0` 分支）。
+- `FD1.Vid`/`FD1.Aud`（以及 `FD2.*`）**整个 `E:\Games\FDCollection` 都不存在**，
+  名字由父进程拼出：`'%s\%s.Vid'`/`'%s\%s.Aud'`（`0x61EE0`/`0x61EEC`）+ `sprintf(v10,"FD%d",v27+1)`。
+- **结论：这份拷贝缺过场数据文件**，与宿主无关；缺了只是 intro 被跳过，
+  父进程 `sub_30CB0` 返回后会继续 `byte_60008=1; sub_30960(1)` 进标题菜单（日志里第二次 `ail: startup` 即此）。
+
+### 17.2 父进程标题菜单不响应键盘：**游戏自己挂了 INT 9，而宿主从不投递硬件中断**
+
+画面证据（`--screenshot` 直方图对比）：
+
+| 帧 | 颜色数 | 说明 |
+|---|---|---|
+| 150（≈5 s，spawn 前） | 23 | logo 阶段 |
+| 400（≈12.5 s）/ 600（≈19 s）/ 750（含 3 次 autokey 之后） | 82，**三张逐像素直方图完全相同** | spawn 后进入标题菜单，之后画面与按键都不再变 |
+
+机制（IDA 存档 `re/fdps_int9_56560.c`、`re/fdps_keyq_565A7.c`）：
+
+```asm
+sub_56560:  mov ax,3509h; int 21h          ; 取旧的 INT 9 向量 → 存 dword_70002/word_70000
+           push cs; pop ds                  ; DS = CS（平坦，基址 0）
+           mov edx, offset sub_565A7        ; ← ISR 本体
+           mov ax,2509h; int 21h            ; 挂到 INT 9
+sub_565A7: sti; in(0x60) → sc; in(0x61)/out(0x61) 应答
+           if (sc < 0x80 && sc != last) byte_7000F[tail++] = sc   ; 10 项环形队列
+           out(0x20,0x20); iret
+sub_5652E: 出队（空队列返回 -1）            ; 菜单循环用它取键
+```
+
+- **ISR 没有任何 `call` 引用**（只被当向量装），所以静态扫描找不到调用者；
+- 队列的唯一写入点就是这个 ISR ⇒ 宿主不投递 INT 9 → `sub_5652E()` 恒 `-1` → 菜单永远等不到键；
+- 宿主侧 `dispatch_swint` 对 `0x08/0x09/0x1A` 是**直接忽略**（`case 0x09: g_calls[vec]++; break;`）；
+- 实测：`--autokey` 打进去的 `RETURN/DOWN` 在日志里有 `host: autokey vk=0D (scan 1C)`，画面零变化。
+
+### 17.3 下一轮的做法（顺序）
+
+1. **投递 INT 9**：
+   - `int21 AH=25 AL=09` 时记下 `g_guest_int9 = EDX`（**用完整 32 位 EDX**：`mov edx,imm32` 后
+     DS=CS 基址 0，线性地址就是 EDX；别按 DX 截成 16 位）；
+   - `host_key(scan)` → 置"待读扫描码"（让 `in 0x60` 返回它）→ 在宿主线程上**按中断帧调用 guest ISR**：
+     栈上依次放 `EFLAGS、CS、返回地址` 再 `call ISR`，ISR 结尾的 `iret` 就正好弹回我们的返回地址
+     （`iret` 在 ring3 是特权指令，VEH 里要补"弹 EIP/CS/EFLAGS 跳回"的模拟；`sti/cli/in/out` 已有模拟）；
+   - 队列写完后菜单自然能读到键（`sub_5652E` 是游戏自己的代码，宿主不用碰它）。
+2. **过场数据**：确认这批文件是不是要从 CD/别的拷贝补齐；没有就保持"跳过 intro"（现状已验证可用）。
+3. **FD.EXE 的 AIL 表**：只有真要跑过场时才需要（§15.2 同一套手法）。
