@@ -4,7 +4,11 @@
 #         pwsh -File build.ps1 -Target probe   # build one target
 param(
     [string]$Target = "all",
-    [switch]$Debug
+    [switch]$Debug,
+    # Render backend (PROGRESS.md §13): gdi = current StretchDIBits path
+    # (reference implementation), sokol = sokol_gfx (step 2).
+    [ValidateSet("gdi", "sokol")]
+    [string]$Render = "gdi"
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,7 +30,7 @@ $targets = @{
     probe3 = @{ srcs = @("probe3.c"); libs = @(); subsystem = "console" }
     probe4 = @{ srcs = @("probe4.c"); libs = @(); subsystem = "console" }
     letest = @{ srcs = @("letest.c", "le.c"); libs = @(); subsystem = "console" }
-    fd2host = @{ srcs = @("host.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c");
+    fd2host = @{ srcs = @("host.c", "main_win32.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";
                  # ASLR must stay on (with /DYNAMICBASE:NO Windows reserves the
@@ -36,6 +40,18 @@ $targets = @{
                  # game once turned into the host's own image base and the CPU
                  # jumped into our .text. Push the preferred base far away.
                  link = "/ENTRY:fd2_entry /BASE:0x60000000 /MAP:fd2host.map" }
+}
+
+# --- render backend selection (PROGRESS.md §13.1) ---------------------------
+# The kernel (host.c) only sees render.h; the entry layer (main_win32.c) sees
+# it too. Exactly one backend implementation is compiled in.
+$renderSrc = if ($Render -eq "gdi") { "render_gdi.c" } else { "render_sokol.c" }
+if (-not (Test-Path (Join-Path $src $renderSrc))) {
+    throw "render backend '$Render' not implemented yet: src/$renderSrc is missing (step 2)"
+}
+if ($targets.ContainsKey("fd2host")) {
+    $targets["fd2host"].srcs = $targets["fd2host"].srcs + @($renderSrc)
+    $targets["fd2host"].defs = "/D FD2_RENDER_$($Render.ToUpperInvariant())"
 }
 if ($Target -ne "all") { $targets = @{ $Target = $targets[$Target] } }
 

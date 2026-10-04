@@ -33,16 +33,16 @@
 #include "ail.h"
 #include "xmidi.h"
 #include "synth.h"
+#include "render.h"
+#include "host.h"
 
 /* ------------------------------------------------------------------ state */
 
 static le_image  g_le;
-static HWND      g_hwnd;
 static int       g_scale = 3;
 static int       g_show_frame = 1;
 
 static uint32_t  g_rgb[320 * 200];
-static BITMAPINFO g_bmi;
 static volatile int g_running  = 1;
 static volatile int g_use_image;         /* load pre-relocated images     */
 static volatile int g_frames;
@@ -102,15 +102,8 @@ static int vk_from_name(const char *s, size_t n)
     return 0;
 }
 
-static void post_vk(int vk)
-{
-    UINT sc = MapVirtualKeyA((UINT)vk, MAPVK_VK_TO_VSC);
-    LPARAM lp = (LPARAM)((sc << 16) | 1);
-
-    printf("host: autokey vk=%02X (scan %02X)\n", vk, (unsigned)sc);
-    PostMessageA(g_hwnd, WM_KEYDOWN, (WPARAM)vk, lp);
-    PostMessageA(g_hwnd, WM_KEYUP, (WPARAM)vk, lp | 0xC0000000);
-}
+/* post_vk() moved to main_win32.c as input_post_vk(): only the entry layer
+ * owns the window, so keystroke injection belongs there. */
 
 static DWORD WINAPI autokey_thread(LPVOID param)
 {
@@ -134,7 +127,7 @@ static DWORD WINAPI autokey_thread(LPVOID param)
                 int vk;
                 if (comma) *comma = 0;
                 vk = vk_from_name(k, strlen(k));
-                if (vk) post_vk(vk);
+                if (vk) input_post_vk(vk);
                 else    printf("host: autokey: unknown key '%s'\n", k);
                 k = comma ? comma + 1 : NULL;
             }
@@ -208,9 +201,13 @@ static void dump_frame_bmp(const char *path)
     printf("host: frame %d dumped to %s\n", g_frames, path);
 }
 
-static void blit(void)
+/* One frame: guest framebuffer -> 32bpp BGRA -> backend.
+ *
+ * The palette conversion and the --screenshot dump deliberately stay in this
+ * shared layer: every render backend receives exactly the same pixels, so
+ * two backends can be diffed byte for byte (PROGRESS.md §13.6). */
+void host_frame(void)
 {
-    HDC hdc = GetDC(g_hwnd);
     const uint8_t *fb = vga();
     int i;
 
@@ -228,9 +225,8 @@ static void blit(void)
          * channel values (the 6-bit DAC values are stretched on capture). */
         g_rgb[i] = ((uint32_t)c[0] << 16) | ((uint32_t)c[1] << 8) | c[2];
     }
-    StretchDIBits(hdc, 0, 0, 320 * g_scale, 200 * g_scale,
-                  0, 0, 320, 200, g_rgb, &g_bmi, DIB_RGB_COLORS, SRCCOPY);
-    ReleaseDC(g_hwnd, hdc);
+
+    render_present(g_rgb, 320, 200);
 
     if (g_screenshot_path && !g_screenshot_done &&
         g_frames >= g_screenshot_frame) {
@@ -242,41 +238,14 @@ static void blit(void)
 
 /* ---------------------------------------------------------------- keyboard */
 
-/* Keys the BIOS reports with an 0xE0 prefix (arrows, editing keypad). The game
- * compares scan codes coming out of int 16h, but keeping the buffer faithful to
- * the BIOS costs nothing and avoids surprises. */
-static int is_extended_key(UINT vk)
-{
-    switch (vk) {
-    case VK_UP: case VK_DOWN: case VK_LEFT: case VK_RIGHT:
-    case VK_HOME: case VK_END: case VK_PRIOR: case VK_NEXT:
-    case VK_INSERT: case VK_DELETE:
-        return 1;
-    default:
-        return 0;
-    }
-}
+/* is_extended_key() and kbd_ascii_for() (Win32 -> BIOS translation) moved to
+ * main_win32.c together with the message pump. */
 
-/* The ascii byte the BIOS would place in the keyboard buffer for this key:
- * 0xE0 for extended keys, the translated character otherwise (0 when the key
- * does not produce one, e.g. F-keys or with the wrong modifier state). */
-static uint8_t kbd_ascii_for(WPARAM w, LPARAM l)
-{
-    BYTE ks[256];
-    WORD ch = 0;
-    UINT sc;
-
-    if (is_extended_key((UINT)w))
-        return 0xE0;
-    if (!GetKeyboardState(ks))
-        return 0;
-    sc = (UINT)(((UINT_PTR)l >> 16) & 0xFF);
-    if (ToAscii((UINT)w, sc, ks, &ch, 0) == 1 && ch < 0x100)
-        return (uint8_t)ch;
-    return 0;
-}
-
-static void kbd_push(uint8_t scan, uint8_t ascii)
+/* One keystroke for the BIOS keyboard buffer.  The Win32-specific parts
+ * (scan code translation, extended-key detection) live in main_win32.c; this
+ * side only writes the BDA ring buffer, which is the same work any other
+ * input backend would do. */
+void host_key(uint8_t scan, uint8_t ascii)
 {
     uint8_t *lm = lowmem();
     uint16_t tail = (uint16_t)(lm[0x41C] | (lm[0x41D] << 8));
@@ -306,86 +275,42 @@ static DWORD WINAPI game_thread(LPVOID param)
     return 0;
 }
 
-/* --------------------------------------------------------------- window */
-
-static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l)
-{
-    switch (m) {
-    case WM_CLOSE:
-        g_running = 0;
-        PostQuitMessage(0);
-        return 0;
-
-    case WM_KEYDOWN:
-    case WM_SYSKEYDOWN: {
-        uint8_t scan = (uint8_t)MapVirtualKeyA((UINT)w, MAPVK_VK_TO_VSC);
-        kbd_push(scan, kbd_ascii_for(w, l));
-        if (w == VK_ESCAPE && (GetKeyState(VK_CONTROL) & 0x8000)) {
-            g_running = 0;
-            PostQuitMessage(0);
-        }
-        return 0;
-    }
-
-    case WM_KEYUP:
-    case WM_SYSKEYUP: {
-        uint8_t scan = (uint8_t)MapVirtualKeyA((UINT)w, MAPVK_VK_TO_VSC);
-        kbd_push((uint8_t)(scan | 0x80), kbd_ascii_for(w, l));
-        return 0;
-    }
-
-    case WM_TIMER:
-        if (g_show_frame) blit();
-        return 0;
-
-    case WM_PAINT: {
-        PAINTSTRUCT ps;
-        BeginPaint(h, &ps);
-        blit();
-        EndPaint(h, &ps);
-        return 0;
-        }
-    }
-    return DefWindowProcA(h, m, w, l);
-}
-
-static int create_window(void)
-{
-    WNDCLASSA wc;
-    RECT r = { 0, 0, 320 * g_scale, 200 * g_scale };
-
-    memset(&wc, 0, sizeof wc);
-    wc.lpfnWndProc = wndproc;
-    wc.hInstance = GetModuleHandleA(NULL);
-    wc.lpszClassName = "FD2NATIVE";
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    if (!RegisterClassA(&wc)) return -1;
-
-    g_bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    g_bmi.bmiHeader.biWidth = 320;
-    g_bmi.bmiHeader.biHeight = -200;          /* top-down */
-    g_bmi.bmiHeader.biPlanes = 1;
-    g_bmi.bmiHeader.biBitCount = 32;
-    g_bmi.bmiHeader.biCompression = BI_RGB;
-
-    AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
-    g_hwnd = CreateWindowA("FD2NATIVE", "FlameDragon2 - native host (POC)",
-                           WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
-                           r.right - r.left, r.bottom - r.top,
-                           NULL, NULL, GetModuleHandleA(NULL), NULL);
-    if (!g_hwnd) return -1;
-    ShowWindow(g_hwnd, SW_SHOW);
-    SetTimer(g_hwnd, 1, 20, NULL);
-    return 0;
-}
+/* window creation, window procedure and the message pump live in
+ * main_win32.c; WM_TIMER/WM_PAINT call back into host_frame(). */
 
 /* ------------------------------------------------------------------- main */
 
-int main(int argc, char **argv)
+/* ------------------------------------------------------- command line parsing
+ *
+ * AGENTS.md promises that every option accepts both `--opt value` and
+ * `--opt=value`. Only the `=` form used to work for most options, and the
+ * space form then fell back to the default *silently* - a whole contrast run
+ * went against the wrong directory that way (PROGRESS.md §8-32). Normalize
+ * first so the parser below only has to deal with `--opt=value`. */
+static int opt_wants_value(const char *a)
 {
-    MSG msg;
-    HANDLE th;
-    int fixups = 0, i;
+    static const char *opts[] = {
+        "--exe", "--gamedir", "--exit-after", "--trace", "--screenshot",
+        "--shot-frame", "--ail-dump", "--ail-rate", "--ail-bits",
+        "--midi-rate", "--midi-backend", "--gm-bank", "--autokey",
+        "--midi-dump"
+    };
+    size_t i;
+    for (i = 0; i < sizeof opts / sizeof opts[0]; i++)
+        if (!strcmp(a, opts[i])) return 1;
+    return 0;
+}
+
+/* ---------------------------------------------------------- kernel bring-up
+ *
+ * The process entry point, the window and the message pump live in
+ * main_win32.c; this file keeps only the backend-independent kernel so a
+ * different entry layer (main_sokol.c) can drive exactly the same code. */
+int host_init(int argc, char **argv)
+{
+    static char  merged[48][512];
+    static char *av[64];
+    int fixups = 0, i, ac = 0;
     const char *exe = "E:\\FD2\\FD2.EXE";
     const char *gamedir = "E:\\FD2";
     char logpath[MAX_PATH];
@@ -409,6 +334,29 @@ int main(int argc, char **argv)
     setvbuf(stdout, NULL, _IONBF, 0);
     printf("FD2 native host - POC\n");
     printf("image base 0x%p\n", (void *)GetModuleHandleA(NULL));
+
+    /* rewrite `--opt value` into `--opt=value` (see opt_wants_value above).
+     * av[0] must stay the program name: the parser below starts at i = 1, so
+     * dropping it would silently skip the first merged option (the symptom:
+     * --exit-after works while --gamedir falls back to the default). */
+    av[0] = argv[0];
+    ac = 1;
+    for (i = 1; i < argc && ac < 63; i++) {
+        if (argv[i][0] == '-' && argv[i][1] == '-' &&
+            !strchr(argv[i], '=') && opt_wants_value(argv[i]) &&
+            i + 1 < argc && ac < 47) {
+            snprintf(merged[ac], sizeof merged[ac], "%s=%s", argv[i], argv[i + 1]);
+            av[ac] = merged[ac];
+            ac++;
+            i++;                       /* consume the value token */
+        } else {
+            av[ac] = argv[i];
+            ac++;
+        }
+    }
+    av[ac] = NULL;
+    argc = ac;
+    argv = av;
 
     for (i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--image")) g_use_image = 1;
@@ -513,39 +461,48 @@ int main(int argc, char **argv)
     synth_set_dump_path(g_midi_dump);
     ail_install((uint8_t *)(uintptr_t)0x00010000u, g_ail_dump_dir);
 
-    if (create_window() != 0) {
-        fprintf(stderr, "host: cannot create window: %lu\n", GetLastError());
-        return 1;
-    }
+    return 0;
+}
 
-    th = CreateThread(NULL, 4 * 1024 * 1024, game_thread, NULL, 0, NULL);
-    if (!th) { fprintf(stderr, "host: cannot start game thread\n"); return 1; }
+render_desc host_render_desc(void)
+{
+    render_desc d;
+    d.native_window = NULL;        /* the entry layer fills this in */
+    d.logical_w     = 320;
+    d.logical_h     = 200;
+    d.scale         = g_scale;
+    return d;
+}
+
+int host_start(void)
+{
+    HANDLE th = CreateThread(NULL, 4 * 1024 * 1024, game_thread, NULL, 0, NULL);
+    if (!th) { fprintf(stderr, "host: cannot start game thread\n"); return -1; }
     printf("host: game thread started\n");
 
     if (g_autokey && g_autokey[0]) {
         printf("host: autokey schedule: %s\n", g_autokey);
         CreateThread(NULL, 0, autokey_thread, (LPVOID)g_autokey, 0, NULL);
     }
-
-    while (GetMessageA(&msg, NULL, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessageA(&msg);
-    }
-
-    printf("host: shutting down (%d frames drawn)\n", g_frames);
-    dos_dump_stats();
     return 0;
 }
 
-/* ------------------------------------------------------- process entry point
- *
- * The CRT heap starts at 0x10000 and would take the window the DOS/4GW objects
- * must live in, so the reservation has to happen before CRT initialisation.
- * Zero CRT usage is allowed here. */
-int __cdecl mainCRTStartup(void);
-
-void __cdecl fd2_entry(void)
+int host_wants_frames(void)
 {
-    le_reserve_address_space_early();
-    ExitProcess((UINT)mainCRTStartup());
+    return g_show_frame;
 }
+
+void host_request_quit(void)
+{
+    g_running = 0;
+}
+
+void host_shutdown(void)
+{
+    printf("host: shutting down (%d frames drawn)\n", g_frames);
+    dos_dump_stats();
+}
+
+/* The process entry point (fd2_entry) and the Win32 message pump live in
+ * main_win32.c - see the comment above host_init(). */
+
