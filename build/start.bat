@@ -1,0 +1,1 @@
+start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=120' -WorkingDirectory 'E:\FD2'
