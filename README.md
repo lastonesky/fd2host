@@ -134,12 +134,11 @@ LE 加载 + 7937 条 fixup 应用
    + "存档变小"时的截断对拍。可复现回归：`pwsh -File port\regress.ps1`。
 6. **逐步源码化（路线 C 主体）**：按 `re/RE_MAP.md` 的模块顺序把机器码替换为 C 源码，
    最终形成可编译 x86-64 的引擎。
-7. **跨平台**：单代码库 + 后端选择（**不用 git 分支**）——抽 `render.h`/`platform.h`/`audio.h`
-   并把 `host.c` 的 `main` 拆成 `host_init/host_frame/host_event/host_shutdown` + 两个入口
-   （`main_win32.c` 消息泵 / `main_sokol.c` 回调）；Windows 走 `platform_win32.c`（VEH），
-   非 Windows 走 `platform_posix.c`（sigaction + mmap + pthread），音频走 **sokol_audio**，
-   先出 **Linux x86-64**，ARM 需完成源码化。
-   分层与实施顺序见 `PROGRESS.md` §13.5/§13.6；sokol 实测见 `§13.1`。
+7. **跨平台**：单代码库 + 后端选择（**不用 git 分支**）。已抽出的是 `render.h`/`host.h` +
+   入口层 `main_win32.c`（第 1 步完成）；`audio.h` 随**第 3 步**（sokol_audio 替换 waveOut）抽，
+   `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入
+   `platform_win32.c`/`platform_posix.c`，在那之前 Win32 调用仍留在 `dos.c`/`ail.c` 原处）。
+   先出 **Linux x86-64**，ARM 需完成源码化。顺序见 `PROGRESS.md` §13.5/§13.6。
 
 ## 调试手法（可复用）
 

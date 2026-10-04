@@ -959,8 +959,10 @@ probe = `sokol_app`（`SOKOL_WIN32_FORCE_MAIN`，建 960×600 窗口）+ `sokol_
    每帧 `sg_update_image` + **手写 HLSL textured quad** + `swap_interval=1`（顺带解掉 32 fps）；
    键码 `SAPP_KEYCODE_*` → BIOS 扫描码表（~60 行）。`--render=sokol` 默认，`gdi` 保底对拍。
    **验收**：GDI vs sokol 同帧截图逐像素一致。
-3. **`audio_sokol.c`**：sokol_audio 回调流式替换 `waveOut + Sleep(200)`，
-   并修 §12 提到的“音量在 synth 后端不生效 / 渐变未实现”。
-4. **POSIX**：Linux（`libX11-dev` + GL 后端 + `platform_posix.c`：sigaction/mmap/pthread），
+3. **`audio_sokol.c` + 抽出 `audio.h`**：sokol_audio 回调流式替换 `waveOut + Sleep(200)` 轮询，
+   让 `ail.c`/`synth.c` 只见接口；并修 §12 提到的“音量在 synth 后端不生效 / 渐变未实现”。
+4. **POSIX + `platform.h`**：抽 OS 适配层（内存/线程/文件/异常），Win32 实现进
+   `platform_win32.c`（VEH 暂时仍留 `dos.c`，语义转换见下），POSIX 实现进 `platform_posix.c`
+   （`sigaction`/`mmap`/`pthread`）；Linux 侧需要 `libX11-dev` + sokol GL 后端。
    `int NN`/`in out` 的信号语义用 `probe4.c` 的方法在目标机重测 → 首个非 Windows 产物。
 
