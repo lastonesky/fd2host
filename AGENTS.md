@@ -124,6 +124,7 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 | 抓画面证据 | `--screenshot` + `--shot-frame`，BMP→PNG 用 `[System.Drawing.Image]::FromFile(...).Save(...)` |
 | 无人值守菜单路径 | `--autokey=...`（例：`5000:SPACE;2500:RETURN;2500:RETURN;2500:DOWN,RETURN` 走 continue） |
 | 平台层还缺什么 | ida MCP 对照静态清单 `re/int21_ah_used.txt`、`re/int_sites_all.txt` vs `src/dos.c` 的 `switch (ah)`；日志会打印前 40 条 `UNHANDLED INT21` |
+| 游戏自己挂 INT 9 / 按键无效 | 日志链：`dos: INT 9 vector :=`（挂上）→ `INT 9 queued scan=` → `INT 9 injected ... esp →`（栈必须配平）；画面判据：`--screenshot` 前后两张图对比（§18.4）。若 `pop ds` 处 #GP，先看 `isr: handler bytes:` 是否被 fixup 踩过（§8-49） |
 | **换游戏前先体检（不运行）** | `python re\preflight.py <exe>`（LE/对象表/与预留区冲突/AIL 特征）+ `python re\fixup_scan.py <exe>`（fixup 语法要 `bad=0 leftover=0`）；然后 `--exe <新exe> --gamedir <新目录>` 跑，看日志 `fixups applied / low-memory window moved / INT10 / DAC`（§14） |
 | 游戏 `spawn`/`exec` 另一个 EXE | `INT 21h AH=4B` 已实现（§16）：子进程是另一个 `fd2host.exe`，日志在 **`port/build/host.<pid>.log`**（父日志 `host.log`）；尾巴看 `dos: PSP:0x80 command tail`，子进程退出码看父日志 `child exited with N` |
 | 游戏自己不报错也没画面 | 看 `dos: write h=1 ... n=` 是否为 0（游戏 printf 被丢，§8-35）；看“端口操作数”是否暴涨到几千万（`0x3DA` 死循环，§8-38）；看是否卡在 `AIL_register_timer`（回调不触发，§14.5） |

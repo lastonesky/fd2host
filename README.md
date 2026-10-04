@@ -115,7 +115,10 @@ LE 加载 + 7937 条 fixup 应用
    └ 实测 `ail: timer fire #100 at +4000 ms`；帧 700 = 82 色非黑；FD2 回归 8/8 PASS（PROGRESS §15）
 → 第 16 轮：`INT 21h AH=4B`(EXEC)  ✅ 真开子进程拉起 FD.EXE，尾巴 19 字节逐字节正确（PROGRESS §16）
    └ 新坑：DOS 尾巴是 `[len][chars][0x0D]` 不是 C 串；`rep scasb` 扫低内存需宿主整条模拟
-   └ 当前卡点：`FD1.Aud`/`FD1.Vid` 全集都不存在 ⇒ FD.EXE `exit(8)`（空文件也不行）
+   └ 当前卡点（已过）：`FD1.Aud`/`FD1.Vid` 全集都不存在 ⇒ FD.EXE `exit(8)`（空文件也不行）
+→ 第 18 轮：游戏自挂 **INT 9** 投递 + 修 `type 0x02` fixup 写宽度  ✅ 标题菜单 → START NEW GAME → 进游戏场景
+   └ 判据：`build/fdps_menu2.png`（游戏场景，97 色）vs `fdps_static.png`（标题菜单，82 色）；FD2 回归 8/8（PROGRESS §18）
+   └ 当前卡点：场景读完 `FACE.CEL` 后跳到 `EIP=0x1FFFC`（解引用 `0x43B4` < 64 KiB）
 ```
 
 ## 当前状态与下一步
@@ -153,12 +156,10 @@ LE 加载 + 7937 条 fixup 应用
    `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入
    `platform_win32.c`/`platform_posix.c`，在那之前 Win32 调用仍留在 `dos.c`/`ail.c` 原处）。
    先出 **Linux x86-64**，ARM 需完成源码化。顺序见 `PROGRESS.md` §13.5/§13.6；sokol 实测见 `§13.1`。
-8. **FDPS（炎龙外传）跑起来**：`--exe` 能加载它；标题动画 25 Hz（`§14.3`/`§15`）；
-   **`INT 21h AH=4B` 已实现**（`§16`）—— 父进程真开子进程拉起 `FD.EXE`、等它退出、取回退出码。
-   **剩下两道（`§17` 已定性，顺序即做法）**：
-   ① 键盘：游戏自己挂 **INT 9** ISR（`sub_56560` → `sub_565A7` → 环形队列 `byte_7000F[10]`），
-   宿主从不投递硬件中断 ⇒ 标题菜单读不到键（autokey 实测无效，画面/直方图不变）；
-   ② `FD1.Vid`/`FD1.Aud` 过场数据全合集缺失 ⇒ `FD.EXE exit(8)`（空文件也 8），只能先跳过 intro。
+8. **FDPS（炎龙外传）跑起来**：标题菜单已能**按键进到游戏内场景**（`§14.3`/`§15`/`§16`/`§18`）：
+   25 Hz 动画时钟、`AH=4B` 拉起 FD.EXE、游戏自挂的 INT 9 由宿主在 guest 线程上注入中断帧。
+   **下一道关口（`§18.5`）**：场景里读完 `FACE.CEL` 后跳到 `EIP=0x1FFFC`（解引用 `0x43B4` < 64 KiB）。
+   挂账：`FD1.Vid`/`FD1.Aud` 过场数据全集缺失（跳过 intro，已验证可用）、FD.EXE 尚无自己的 AIL 表。
    换新游戏前先体检：`re/preflight.py`、`re/fixup_scan.py`；
    FDPS 与 FD.EXE 的 IDA 库都已存盘（开库即用，不必手动加载）。
 

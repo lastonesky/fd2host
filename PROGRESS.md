@@ -51,6 +51,12 @@ Windows MIDI（Miles AIL 的 16 个入口已被宿主实现替换，见 §11）�
   根因是**游戏自己挂了 INT 9**（`sub_56560`/ISR `sub_565A7`，队列 `byte_7000F[10]`），
   宿主从不投递硬件中断 ⇒ 菜单永远读不到键（autokey 实测无效）。做法见 **§17**。
 
+- **第 18 轮（2026-10-05）：INT 9 投递打通** —— 在**跑 guest 代码的线程**上压真正的中断帧注入
+  handler（在宿主线程上跑会因异常帧残留崩）；修掉 **`type 0x02` fixup 写 4 字节**这个第 14 轮就有的
+  加载器 bug（它把 ISR 的 `mov ds,eax` 改成了 `pop es`）。实测：标题菜单按 START NEW GAME
+  **直接进到游戏内场景**（两张截图 + 直方图对比），FD2 回归 **8/8 PASS**。**新卡点：场景里读完
+  `FACE.CEL` 后跳到 `EIP=0x1FFFC`（解引用 `0x43B4` 这个低于 64 KiB 的地址）**。详见 **§18**。
+
 ⇒ 路线 C 的 POC 目标"**窗口中看到游戏画面**"**已达成**。下一步见 §7。
 逆向侧：IDA Pro 9.5 + ida MCP 环境已建好，测绘结果在 `port/re/RE_MAP.md`（见 §10）。
 
@@ -374,13 +380,11 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
 7. ~~**文件写入 / 存档路径**~~ **平台侧已补完**（§12）：`AH=3C/41` + `AH=40 CX=0` 截断，
    `regress.ps1` 回归 8/8 PASS。**剩余**：“新游戏 → 首次存档 → `FD2.SAV` 从无到有”与
    “存档变小后的截断对拍”两条还没实测；`AH=49/4A` 仍是空操作（账本只增不减）。
-8. **FDPS（炎龙外传）跑起来**（§14 首跑、§15 AIL 定时器、**§16 EXEC**、**§17 入口调研**）：
-   `AH=4B` 已能真开子进程拉起 `FD.EXE`。**剩下两件（顺序即做法，见 §17.3）**：
-   ① **投递 INT 9**：游戏自己挂键盘 ISR（`sub_56560` → `sub_565A7`，环形队列 `byte_7000F[10]`），
-   宿主 `dispatch_swint` 对 `0x09` 是直接忽略 ⇒ 菜单读不到键；要记 `AH=25 AL=09` 的 `EDX`、
-   `host_key` 时按中断帧调 guest ISR（补 `iret` 模拟）。
-   ② 过场数据 `FD1.Vid`/`FD1.Aud` 全合集缺失 ⇒ `FD.EXE exit(8)`，没有它就保持跳过 intro（已验证可用）；
-   另需给 FD.EXE 建 AIL 表（`python re/preflight.py <FD.EXE>` 已过，`bad=0 leftover=0`）。
+8. **FDPS（炎龙外传）跑起来**（§14 首跑、§15 AIL 定时器、§16 EXEC、§17 入口调研、**§18 INT9**）：
+   标题菜单已能按键进到游戏内场景（`build/fdps_menu2.png`，FD2 回归 8/8）。
+   **下一道关口：场景里读完 `FACE.CEL` 后跳飞**（`EIP=0x1FFFC`，解引用 `0x43B4` < 64 KiB，§18.5）。
+   仍挂账：`FD1.Vid`/`FD1.Aud` 过场数据全合集缺失（跳过 intro，已验证可用）、
+   FD.EXE 还没有自己的 AIL 表（`python re/preflight.py <FD.EXE>` 已过，`bad=0 leftover=0`）。
 
 ---
 
@@ -620,6 +624,22 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     prot=0x2 region=0x3000`，重跑就好 ⇒ 是某个 DLL 在 DllMain 阶段建的只读文件映射碰上了
     低址 ASLR。预留发生在 `fd2_entry`（DllMain 之后、CRT 之前），抢不回来；
     现在失败路径会用 `K32GetMappedFileNameA` 打出**是谁**，下次复现直接知道。
+
+49. **`type 0x02` fixup 的源只有 16 位，写 4 字节会踩掉后面 2 字节代码**（第 18 轮，第 14 轮引入）：
+    FDPS 唯一一条 `0x02` 记录指向 `mov ax,seg X` 的 imm16（2 字节），当时的处理写成了
+    “4 字节对象基址” ⇒ 把下一条指令 `8E D8`（`mov ds,eax`）改成了 `07 00`（`pop es`），
+    INT 9 handler 从那里开始**指令流错位**：多出的 `PUSHA` 吃 32 字节 → `pop ds` 弹垃圾 → #GP。
+    判据：**文件 / IDA / 运行时三份字节对照**（§18.2）+ 单步日志看每条指令的 ESP 增量。
+    修法：写 2 字节，值 = 本进程的平坦数据选择子（`mov sel,ds`）。
+
+50. **guest ISR 不要在宿主线程上跑**（第 18 轮）：`pushfd/push cs/call` + 依赖它的 `iret` 的写法
+    会在宿主线程上留下 **28 字节没回收的异常帧**（`sti`/`in` 的 PRIV 异常），`pop ds` 因此 #GP；
+    而同样的异常在跑 guest 代码的线程上完全配平。做法：**在 VEH 里压真正的中断帧**
+    （`Esp-12` 写 `[EIP][CS][EFLAGS]`、`EIP=handler`），handler 的 `iret` 天然弹回被打断的指令。
+
+51. **游戏自己挂了 INT9 就不能再写 BIOS 环形队列**（第 18 轮）：真机上游戏替换了 BIOS 的键盘
+    处理器且不链回 ⇒ `0x41E` 环是空的；宿主两条路都写 = **一次按键给两次**，菜单多走一格后
+    跳进没填好的表（`EIP=0x1FFFC`）。`dos_deliver_key()` 返回“游戏已接管”时 `host_key` 直接 return。
 
 ---
 
@@ -1404,3 +1424,86 @@ sub_5652E: 出队（空队列返回 -1）            ; 菜单循环用它取键
    - 队列写完后菜单自然能读到键（`sub_5652E` 是游戏自己的代码，宿主不用碰它）。
 2. **过场数据**：确认这批文件是不是要从 CD/别的拷贝补齐；没有就保持"跳过 intro"（现状已验证可用）。
 3. **FD.EXE 的 AIL 表**：只有真要跑过场时才需要（§15.2 同一套手法）。
+
+---
+
+## 18. 第 18 轮：INT 9 投递打通（顺带揪出 fixup 写宽度 bug）（2026-10-05）
+
+**目标**（= §17.3 第 1 步）：让 FDPS 标题菜单吃到按键。**结果：从标题菜单按 START NEW GAME
+直接进了游戏场景**（`--screenshot` 前后两张图，见 §18.4），过程中挖出一个**从第 14 轮就在的加载器 bug**。
+
+### 18.1 三条设计结论（每条都是被崩溃逼出来的）
+
+| # | 错误做法 | 现象 | 正确做法 |
+|---|---|---|---|
+| 1 | 在**宿主线程**上 `pushfd/push cs/call ISR`，让它的 `iret` 弹回来 | `pop ds` 处 **#GP**（`read from address 0xFFFFFFFF`）。单步显示 `sti`~`in 61h` 之间栈凭空少了 **28 字节**——异常帧在“从不跑 guest 代码的线程”上没被回收 | **在跑 guest 代码的线程上注入真正的中断帧**：VEH 里 `Esp-=12` 写 `[EIP][CS][EFLAGS]`、`EIP=handler`，handler 自己的 `iret` 弹回被打断的指令 |
+| 2 | 每次异常都检查“有没有排队的键”并注入 | 按键排队时 handler 还没跑完就再注入 → **return address 落在 handler 内部**，handler 从头重启、帧层层叠加 | `inject_int9()` 先判 `EIP ∈ [handler, handler+0x100)` → **在 handler 里绝不再注入**（相当于 PIC 等 IF 再置位） |
+| 3 | BIOS 环形队列和游戏自己的队列**都写** | 游戏菜单一次按键走两遍（`cx=4141` 之类的脏值 + 跳飞） | 真机上游戏替换 INT9 后**不会链回 BIOS** ⇒ `dos_deliver_key()` 返回 1 就**不再写 0x41E**（`host_key` 直接 return） |
+
+补充：注入必须落在**执行 guest 代码的线程**上（`dispatch_swint` 第一次跑到时记下 `g_guest_tid`），
+否则又回到第 1 条；键在该线程的下一次异常（`int 21h` / 端口读都是异常）被投递，FDPS 每帧读
+`0x3DA` ⇒ 延迟 <1 帧。
+
+### 18.2 真正的根因：`type 0x02` fixup 写了 4 字节，源操作数只有 2 字节
+
+第 14 轮为 FDPS 那条唯一的 `type 0x02` 记录加的处理是"写 4 字节对象基址"，而它的源操作数是
+`mov ax, seg dseg03` 的 **imm16（2 字节）** ⇒ **多踩了后面 2 字节代码**。三份字节对照
+（`0x565A7` = FDPS 的 INT 9 handler `sub_565A7`）：
+
+| 来源 | `66 B8` 之后的 6 字节 |
+|---|---|
+| 文件 `FDPS.EXE` | `00 00 8E D8 E4 60` |
+| IDA（16 位写） | `03 00 8E D8 E4 60` |
+| **我们的运行时（4 位写）** | `00 00 **07 00** E4 60` ⇒ `8E D8`（`mov ds,eax`）被改成了 `07 00` |
+
+后果链（单步日志逐条实证，`t ...` 行）：
+
+```
+0x565B1: 执行 1 字节 07 (pop es)   esp +4
+0x565B2: 执行 00 E4 (add ah,al)    esp 0
+0x565B4: 执行 60  (PUSHA)          esp -32   ← 32 字节凭空压栈
+... → 0x56602 pop ds 弹到垃圾 → #GP(0xFFFFFFFF) → 崩
+```
+
+**修法**（`le.c`）：`type 0x02` 是 16 位选择子 fixup → **写 2 字节**，值 = 本进程的平坦数据选择子
+（`__asm mov sel, ds`）；这正是真 DOS/4GW loader 会给 `mov ax,seg X` 填的东西，
+之后 `mov ds,eax` 拿到合法平坦选择子，VEH 里连替换都不用触发。
+同一条记录就是 §8-37 那次"指针留 0 崩 `mov es,[ebx]`"的记录。
+
+### 18.3 实测判据（`build/host.log`）
+
+```
+dos: INT 9 vector := 0x565A7 (game ISR - keys will be delivered there)
+isr: handler bytes: FB 52 51 53 50 1E 66 B8 2B 00 8E D8 E4 60 ...   ← 代码完好、选择子=2B
+dos: INT 9 queued  scan=0x1C -> handler 0x565A7     （make/break 成对：1C/9C、50/D0）
+dos: INT 9 injected scan=0x1C (eip 0x3D25B -> 0x565A7, esp 0x369FC20 -> 0x369FC14)
+isr: evt ... eax=0000009C ... bytes=E4 61            ← `in al,60h` 拿到扫描码
+（下一次注入 esp 回到 0x369FC20 ⇒ handler 的 pop/iret 完全配平）
+```
+- 整轮 **0 次 `ACCESS VIOLATION`**、无 `cpu:` 崩溃报告（清理诊断后重跑仍复现）。
+- **FD2 未被破坏**：`regress.ps1` **8/8 PASS**（`FD2.TMP = 207360` = 原件同尺寸）——
+  FD2 没有 `type 0x02` fixup、也不挂 INT9，两条改动对它都是空操作。
+
+### 18.4 画面证据（`--screenshot --shot-frame=450`，`build/fdps_sbx` 沙箱）
+
+| 图 | 内容 | 直方图 |
+|---|---|---|
+| `build/fdps_static.png`（按键前） | **标题菜单**：START NEW GAME / LOAD GAME / CONTINUE / EXIT + “FANATaDRAGON 風之聖歌” | 82 色 |
+| `build/fdps_menu2.png`（`--autokey=11000:RETURN,RETURN` 之后） | **游戏内场景**：木屋房间、红毯上两个角色、墙上挂钟 | 97 色，与基线逐像素不同 |
+
+⇒ 标题菜单 → START NEW GAME → 进入场景，**按键链路端到端打通**。
+
+### 18.5 下一关口：场景里读完 `FACE.CEL` 后跳飞
+
+```
+dos: open 'FACE.CEL' -> 00000340 (0)   （lseek/read/close 正常）
+ail: timer fire #400 at +8610 ms
+cpu: fault at unreadable EIP=0x1FFFC (read from address 0x43B4)
+     eax=04CA9930 ebx=002F9FFE ecx=00000009 edx=00000000 esi=0006A3C1 edi=0006A3BC
+```
+- `0x43B4` **低于 64 KiB**（Windows 不映射的区域）⇒ 游戏拿一个"本该是线性地址"的值当指针解引用；
+  `EIP=0x1FFFC` 说明它是**跳进/执行到**未映射处，不是简单读错。
+- 已排除：INT9 注入（注入点 EIP 每次都是 `0x3D25B`、栈配平）、双路按键（已改单路）、fixup 踩字节（已修）。
+- **待查**：`FACE.CEL` 解析出来的指针为何是 `0x43B4`/`0x1FFFC` —— 入口是反编译读 FACE.CEL 的那段
+  （文件句柄 `00000340`，`int 21 AH=3D/42/3F/3E` 序列在 §18.3 日志末尾），重点看
+  **它读的偏移是否来自我们没读对的结构**（如 `AH=42` 的 CX:DX 高位、或 `0x400` 低内存镜像）。
