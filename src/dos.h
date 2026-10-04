@@ -15,10 +15,23 @@
 
 /* Low-memory window that stands in for the first 64 KiB (which Windows will
  * not map in a user process). Holds the BIOS data area, the PSP and the
- * interrupt vector table image the game pokes at. */
-#define DOS_LOWMEM_BASE   0x00070000u
+ * interrupt vector table image the game pokes at.
+ *
+ * The base is a *runtime* value, not a constant: FD2 parks its objects in
+ * 0x10000..0x6FFFF so the mirror can live at 0x70000, but other titles of the
+ * same family put an object there too (FDPS has obj2 at 0x70000, only 0x54
+ * bytes). dos_choose_lowmem() slides the window above the game's objects -
+ * every use goes through these macros, so call sites stay unchanged. */
+extern uint32_t dos_lowmem_base;          /* chosen before dos_init_lowmem() */
+
+#define DOS_LOWMEM_BASE   (dos_lowmem_base)
 #define DOS_LOWMEM_SIZE   0x00010000u
-#define DOS_LOWMEM_SEG    (DOS_LOWMEM_BASE >> 4)   /* 0x7000 */
+#define DOS_LOWMEM_SEG    (DOS_LOWMEM_BASE >> 4)   /* e.g. 0x7000 */
+
+/* Pick a window that clears the game's objects (paragraph aligned, below the
+ * VGA window when possible). `game_end` = first address above all objects.
+ * Call after the LE header is parsed and before dos_init_lowmem(). */
+void dos_choose_lowmem(uint32_t game_end);
 
 /* Software interrupts are *not* patched: `int NN` faults in ring 3 and the
  * VEH reads the vector from the faulting instruction (see src/dos.c). This

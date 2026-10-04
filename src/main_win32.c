@@ -24,7 +24,7 @@
 #include <stdio.h>
 #include "host.h"
 #include "render.h"
-#include "le.h"
+#include "winshot.h"
 #include "host.h"
 #include "render.h"
 
@@ -78,7 +78,17 @@ void input_post_vk(int vk)
     PostMessageA(g_hwnd, WM_KEYUP, (WPARAM)vk, lp | 0xC0000000);
 }
 
-/* --------------------------------------------------------------- window */
+/* ------------------------------------------------------------------ window */
+
+/* One frame + the optional window capture for backend verification. */
+static void frame_or_shot(HWND h)
+{
+    if (host_frame()) {
+        const char *shot = host_window_shot_path();
+        if (shot)
+            winshot_capture(h, shot);
+    }
+}
 
 static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l)
 {
@@ -108,13 +118,13 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l)
 
     case WM_TIMER:
         if (host_wants_frames())
-            host_frame();
+            frame_or_shot(h);
         return 0;
 
     case WM_PAINT: {
         PAINTSTRUCT ps;
         BeginPaint(h, &ps);
-        host_frame();
+        frame_or_shot(h);
         EndPaint(h, &ps);
         return 0;
         }
@@ -186,15 +196,7 @@ int main(int argc, char **argv)
     return 0;
 }
 
-/* ------------------------------------------------------- process entry point
- *
- * The CRT heap starts at 0x10000 and would take the window the DOS/4GW objects
- * must live in, so the reservation has to happen before CRT initialisation.
- * Zero CRT usage is allowed here. */
-int __cdecl mainCRTStartup(void);
+/* The process entry point lives in entry.c (shared by both entry layers) so
+ * that the address-space reservation runs before CRT initialisation no matter
+ * which backend is linked. */
 
-void __cdecl fd2_entry(void)
-{
-    le_reserve_address_space_early();
-    ExitProcess((UINT)mainCRTStartup());
-}

@@ -36,8 +36,15 @@ render_desc host_render_desc(void);
 int host_start(void);
 
 /* Renders one frame: VGA buffer + palette -> BGRA -> render_present(),
- * then the --screenshot dump.  Safe to call from WM_TIMER and WM_PAINT. */
-void host_frame(void);
+ * then the --screenshot dump.  Safe to call from the timer, WM_PAINT and
+ * sokol's frame callback.  Returns non-zero on the shot frame, i.e. the one
+ * frame for which the entry layer should also capture the window content
+ * (--wshot), so both images describe the same instant. */
+int host_frame(void);
+
+/* --wshot=<file.bmp>: where the entry layer should write the window capture
+ * (NULL when not requested). */
+const char *host_window_shot_path(void);
 
 /* 0 in --headless mode: the entry layer may skip timer-driven frames. */
 int host_wants_frames(void);

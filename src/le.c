@@ -5,6 +5,18 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Guest window: everything below 1 MiB - the LE objects (including foreign
+ * ones such as FDPS's obj2 at 0x70000), the low-memory mirror, the real-mode
+ * pool, the VGA window and the "ROM" area. It is reserved as ONE block before
+ * the CRT exists: reserving only 0x10000..0x70000 left 0x80000 and 0xA0000
+ * free and the CRT heap took them (mirror refused -> files_init() skipped ->
+ * every game printf dropped; VGA unmapped -> host_frame() faulted at 0xA1000). */
+#define FD2_OBJ_REGION_BASE   0x00010000u
+#define FD2_LOW_LIMIT         0x00100000u   /* everything below 1 MiB */
+#define FD2_OBJ_REGION_SIZE   (FD2_LOW_LIMIT - FD2_OBJ_REGION_BASE)
+#define FD2_VGA_BASE          0x000A0000u
+#define FD2_VGA_SIZE          0x00020000u   /* 0xA0000 .. 0xBFFFF */
+
 static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
 static uint32_t rd32(const uint8_t *p)
 {
@@ -62,6 +74,33 @@ int le_open(le_image *le, const char *path)
     }
     le->le_offset = off;
 
+    /* Objects outside the pre-CRT reservation (0x10000..0x6FFFF) have to be
+     * reserved *now*, while the CRT heap is still tiny: le_map_and_relocate()
+     * runs a few allocations later, and by then the heap may have grown over
+     * a foreign image's object (FDPS parks obj2 at 0x70000). Reserving only -
+     * map_at() commits later. */
+    {
+        uint32_t k;
+        for (k = 0; k < le->object_count; k++) {
+            uint32_t b = le->objects[k].base;
+            uint32_t span = le->objects[k].page_count * LE_PAGE_SIZE;
+            if (span < le->objects[k].vsize)
+                span = le->objects[k].vsize;
+            if (span == 0)
+                continue;
+            if (b >= FD2_OBJ_REGION_BASE && b + span <= FD2_LOW_LIMIT)
+                continue;                 /* covered by the early reservation */
+            if (!VirtualAlloc((void *)(uintptr_t)b, span, MEM_RESERVE,
+                              PAGE_NOACCESS)) {
+                /* not fatal: map_at() retries and reports if it really fails */
+                fprintf(stderr, "le: cannot reserve object %u @0x%X+%X (%lu)\n",
+                        k, b, span, GetLastError());
+            } else {
+                printf("le: reserved foreign object %u @0x%X+%X\n", k, b, span);
+            }
+        }
+    }
+
     {
         const uint8_t *h = le->data + off;
         le->module_pages       = rd32(h + 0x14);
@@ -72,6 +111,7 @@ int le_open(le_image *le, const char *path)
         objpage                = rd32(h + 0x48);
         le->fixup_page_table   = rd32(h + 0x68);
         le->fixup_record_table = rd32(h + 0x6C);
+        le->last_page_bytes    = rd32(h + 0x2C);   /* tail size, see le.h */
 
         if (le->object_count == 0 || le->object_count > LE_MAX_OBJECTS) {
             fprintf(stderr, "le: implausible object count %u\n", le->object_count);
@@ -184,6 +224,33 @@ static int apply_fixups(le_image *le, int *applied)
             uint32_t i;
 
             if (type == 0x00) { pos += 1; continue; }
+
+            /* Type 0x02: [02][flags][src:2][obj:1] - 5 bytes, the target is
+             * the object base itself, there is no target-offset field.
+             * FD2 never uses it, FDPS does exactly once, and the previous
+             * "unknown type -> bail out of this page" handling silently threw
+             * away the remaining 987 bytes of records on that page (+140
+             * fixups). The first casualty was a pointer left at 0, which the
+             * game then dereferenced: `mov es,[ebx]` with EBX=0 at 0x565AF's
+             * owner. Verified against the raw file: after this record the
+             * following 0x07 records line up again on their 7-byte stride. */
+            if (type == 0x02) {
+                if (pos + 5 > end) { unknown++; break; }
+                srcoff = rd16(rt + pos + 2);
+                tobj   = rt[pos + 4];
+                if (tobj == 0 || tobj > le->object_count) { unknown++; break; }
+                if ((uint32_t)srcoff + 4u > LE_PAGE_SIZE) {
+                    cross_page++;
+                    pos += 5;
+                    continue;
+                }
+                *(uint32_t *)(uintptr_t)(page_base + srcoff) =
+                    le->objects[tobj - 1].base;
+                total++;
+                pos += 5;
+                continue;
+            }
+
             if (type != 0x07) { unknown++; break; }
 
             b1    = rt[pos + 1];
@@ -227,38 +294,92 @@ static int apply_fixups(le_image *le, int *applied)
 
 static void *map_at(uint32_t base, uint32_t size, DWORD prot, const char *what)
 {
-    /* the region may already be reserved by le_reserve_address_space() */
-    void *p = VirtualAlloc((void *)(uintptr_t)base, size, MEM_COMMIT, prot);
-    if (!p)
-        p = VirtualAlloc((void *)(uintptr_t)base, size,
-                         MEM_RESERVE | MEM_COMMIT, prot);
-    if (!p)
-        fprintf(stderr, "le: VirtualAlloc(%s @0x%X, %u) failed: %lu\n",
-                what, base, size, GetLastError());
-    return p;
+    /* Commit region by region: a single MEM_COMMIT spanning several of the
+     * early reservation's blocks fails with 487 (see le_commit_range). */
+    if (le_commit_range(base, size, (int)prot, what) != 0)
+        return NULL;
+    return (void *)(uintptr_t)base;
+}
+
+int le_commit_range(uint32_t base, uint32_t size, int prot, const char *what)
+{
+    uint32_t done = 0;
+    uint32_t end = base + size;
+
+    if (size == 0)
+        return 0;
+    while (done < size) {
+        MEMORY_BASIC_INFORMATION q;
+        uint32_t addr = base + done;
+        uint32_t rend, chunk;
+
+        if (!VirtualQuery((void *)(uintptr_t)addr, &q, sizeof q) ||
+            q.RegionSize == 0) {
+            fprintf(stderr, "le: %s: VirtualQuery failed @0x%X (%lu)\n",
+                    what, addr, GetLastError());
+            return -1;
+        }
+        rend = (uint32_t)(uintptr_t)q.BaseAddress + (uint32_t)q.RegionSize;
+
+        if (q.State == MEM_FREE) {
+            /* not reserved here - take a block (64 KiB is the granularity) */
+            uint32_t take = (addr + 0x10000u <= end) ? 0x10000u : (end - addr);
+            if (!VirtualAlloc((void *)(uintptr_t)addr, take,
+                              MEM_RESERVE | MEM_COMMIT, (DWORD)prot)) {
+                fprintf(stderr, "le: %s: cannot reserve @0x%X+%X (%lu)\n",
+                        what, addr, take, GetLastError());
+                return -1;
+            }
+            chunk = take;
+        } else {
+            chunk = (rend < end ? rend : end) - addr;
+            if (chunk == 0) {
+                fprintf(stderr, "le: %s: degenerate region at 0x%X\n", what, addr);
+                return -1;
+            }
+            if (!VirtualAlloc((void *)(uintptr_t)addr, chunk, MEM_COMMIT,
+                              (DWORD)prot)) {
+                fprintf(stderr, "le: %s: cannot commit @0x%X+%X (%lu) "
+                        "state=0x%lX prot=0x%lX\n",
+                        what, addr, chunk, GetLastError(),
+                        (unsigned long)q.State, (unsigned long)q.Protect);
+                return -1;
+            }
+        }
+        done += chunk;
+    }
+    return 0;
 }
 
 /* Game address space: LE objects + VGA frame buffer + a low-memory mirror.
  * Reserved up front so the CRT heap cannot take these addresses. */
-#define FD2_OBJ_REGION_BASE   0x00010000u
-#define FD2_OBJ_REGION_SIZE   0x00060000u   /* 0x10000 .. 0x6FFFF */
-#define FD2_VGA_BASE          0x000A0000u
-#define FD2_VGA_SIZE          0x00020000u   /* 0xA0000 .. 0xBFFFF */
-
 static int g_early_reserved;
+static uint32_t g_early_failed_mask;   /* bit i: 64 KiB block i could not be reserved */
 
 /* Pre-CRT variant: no stdio, only kernel32 calls. Called from the process
- * entry point before the CRT heap exists, so the window cannot be stolen. */
+ * entry point before the CRT heap exists, so the window cannot be stolen.
+ *
+ * Reserve the guest window (0x10000..0x100000) in 64 KiB blocks: one big
+ * request fails as soon as *anything* occupies part of the range, and on a
+ * busy machine the loader sometimes drops a DLL into low memory - which made
+ * booting fail intermittently with a misleading "this image landed at
+ * 0x5Fxxxxxx, which overlaps ..." message. Block granularity keeps the
+ * mandatory part (the object window 0x10000..0x70000) working and records the
+ * rest so a failure that actually matters is reported precisely, later. */
 int le_reserve_address_space_early(void)
 {
-    void *a = VirtualAlloc((void *)(uintptr_t)FD2_OBJ_REGION_BASE,
-                           FD2_OBJ_REGION_SIZE,
-                           MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-    void *b = VirtualAlloc((void *)(uintptr_t)FD2_VGA_BASE,
-                           FD2_VGA_SIZE, MEM_RESERVE | MEM_COMMIT,
-                           PAGE_READWRITE);
-    (void)b;                                 /* VGA is best-effort */
-    if (!a)
+    uint32_t a;
+    int critical_ok = 1;
+
+    for (a = FD2_OBJ_REGION_BASE; a < FD2_LOW_LIMIT; a += 0x10000u) {
+        if (VirtualAlloc((void *)(uintptr_t)a, 0x10000u,
+                         MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE))
+            continue;
+        g_early_failed_mask |= 1u << ((a - FD2_OBJ_REGION_BASE) / 0x10000u);
+        if (a < 0x00070000u)                 /* objects live here: mandatory */
+            critical_ok = 0;
+    }
+    if (!critical_ok)
         return -1;
     g_early_reserved = 1;
     return 0;
@@ -266,8 +387,14 @@ int le_reserve_address_space_early(void)
 
 int le_reserve_address_space(void)
 {
-    if (g_early_reserved)
+    if (g_early_reserved) {
+        if (g_early_failed_mask)
+            fprintf(stderr,
+                    "le: guest window blocks 0x%X not reserved (the loader put "
+                    "something there) - boot continues, but the game fails if "
+                    "it needs those addresses\n", g_early_failed_mask);
         return 0;                       /* already won the race in fd2_entry */
+    }
     if (!le_reserve_address_space_early())
         return 0;
     {
@@ -305,7 +432,20 @@ int le_reserve_address_space(void)
  *     obj2 :  3 pages + 0x4D2 remainder  (0x79014 .. EOF)
  *
  * The start is therefore EOF minus the summed on-disk span, and every page
- * is consumed sequentially. */
+ * is consumed sequentially.
+ *
+ * The one thing that is NOT derivable from the object table is how many bytes
+ * of the final page are stored: the object page table in these DOS/4GW files
+ * is degenerate (entries are just `(page_index+1) << 16`, no file offsets),
+ * so the header field at +0x2C is used instead. That field is "bytes of data
+ * in the last page":
+ *
+ *     FD2  vsize(last)=0x34D2, +0x2C=0x4D2 -> on-disk 0x34D2  start 0x36014
+ *     FDPS vsize(last)=0x0054, +0x2C=0x0035 -> on-disk 0x0035  start 0xF000
+ *
+ * Both match the bytes IDA shows at the entry point (0x43008); using vsize
+ * for FDPS shifts the whole image 0x1F bytes early and the game then executes
+ * a misaligned instruction stream (`mov es,[ebx]` with EBX=0 at 0x4E01A). */
 static size_t compute_image_start(const le_image *le)
 {
     size_t total = 0;
@@ -316,9 +456,12 @@ static size_t compute_image_start(const le_image *le)
         size_t span = (size_t)o->page_count * LE_PAGE_SIZE;
 
         if (i + 1 == le->object_count) {
-            size_t rem = o->vsize % LE_PAGE_SIZE;
-            if (rem == 0) rem = LE_PAGE_SIZE;
-            span = (size_t)(o->page_count - 1) * LE_PAGE_SIZE + rem;
+            size_t tail = le->last_page_bytes;
+            if (tail == 0 || tail > LE_PAGE_SIZE) {
+                tail = o->vsize % LE_PAGE_SIZE;      /* fallback: vsize */
+                if (tail == 0) tail = LE_PAGE_SIZE;
+            }
+            span = (size_t)(o->page_count - 1) * LE_PAGE_SIZE + tail;
         }
         total += span;
     }

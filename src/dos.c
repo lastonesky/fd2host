@@ -28,6 +28,7 @@
 #include "le.h"
 #include <stdio.h>
 #include <string.h>
+#include <io.h>        /* _get_osfhandle: CRT fd -> OS handle */
 
 /* ---------------------------------------------------------------- globals */
 
@@ -164,7 +165,37 @@ static void stack_dump(uint32_t esp)
 
 /* Bump allocator for real-mode addressable memory (below 1 MiB). Starts right
  * after the low-memory window. */
-static uint32_t g_lo_next = DOS_LOWMEM_BASE + DOS_LOWMEM_SIZE;
+static uint32_t g_lo_next;                 /* set by dos_choose_lowmem()   */
+uint32_t dos_lowmem_base = 0x00070000u;    /* FD2 layout; may be moved */
+
+/* Choose where the 64 KiB low-memory mirror goes (see dos.h). Kept above the
+ * game's objects so an LE image that owns 0x70000 (FDPS obj2) does not make
+ * dos_init_lowmem()'s VirtualAlloc fail - which used to return early and left
+ * g_lowmem NULL *and* the file table uninitialised. */
+void dos_choose_lowmem(uint32_t game_end)
+{
+    uint32_t base = 0x00070000u;
+
+    /* VirtualAlloc's allocation granularity is 64 KiB: an address that is not
+     * a multiple of 0x10000 is rounded DOWN, so a mirror at 0x71000 would
+     * collide with an object at 0x70000 and fail with ERROR 487 (that is
+     * exactly how FDPS broke it - its obj2 lives at 0x70000, 0x54 bytes). */
+    if (game_end > base)
+        base = (game_end + 0xFFFFu) & ~0xFFFFu;        /* 64 KiB aligned */
+
+    if (base >= 0x000A0000u && base < 0x000C0000u)
+        base = 0x000C0000u;          /* no room before VGA: use the ROM area */
+    if (base + DOS_LOWMEM_SIZE > 0x00100000u)
+        base = 0x00070000u;          /* last resort: the FD2 location */
+
+    if (base != dos_lowmem_base)
+        printf("dos: low-memory window moved 0x%X -> 0x%X (seg 0x%X) to clear "
+               "the game's objects\n",
+               (unsigned)dos_lowmem_base, (unsigned)base, (unsigned)(base >> 4));
+
+    dos_lowmem_base = base;
+    g_lo_next = base + DOS_LOWMEM_SIZE;  /* real-mode pool starts after it */
+}
 
 static void note_alloc(uint32_t base, uint32_t size, const char *what)
 {
@@ -211,19 +242,27 @@ uint8_t  dos_palette[256 * 3];
 volatile int dos_palette_dirty;
 static int g_dac_index;
 static int g_dac_component;
+static int g_dac_logged;
 
 static void files_init(void)
 {
     int i;
     memset(g_files, 0, sizeof g_files);
-    /* 0=stdin 1=stdout 2=stderr 3=stdaux 4=stdprn */
+    /* 0=stdin 1=stdout 2=stderr 3=stdaux 4=stdprn
+     *
+     * Ask the CRT for the OS handle behind fd 0/1/2 rather than
+     * GetStdHandle(): main() freopen()s stdout/stderr onto host.log, which
+     * re-points fd 1/2 but does NOT update the Win32 STD_*_HANDLE slots - so
+     * GetStdHandle() handed the guest a NULL handle and every game printf was
+     * written nowhere (observed as `dos: write h=1 want=39 n=0`). */
     for (i = 0; i < 5; i++) {
+        intptr_t h = (i < 3) ? _get_osfhandle(i) : -1;
         g_files[i].used = 1;
         g_files[i].is_dev = 1;
-        g_files[i].h = (i == 0) ? GetStdHandle(STD_INPUT_HANDLE) :
-                       (i == 1) ? GetStdHandle(STD_OUTPUT_HANDLE) :
-                       (i == 2) ? GetStdHandle(STD_ERROR_HANDLE) : INVALID_HANDLE_VALUE;
+        g_files[i].h = (h == -1) ? INVALID_HANDLE_VALUE : (HANDLE)h;
     }
+    printf("dos: console handles stdin=%p stdout=%p stderr=%p\n",
+           g_files[0].h, g_files[1].h, g_files[2].h);
 }
 
 static int file_alloc(HANDLE h, const char *name)
@@ -263,16 +302,44 @@ static uint32_t dos_win_error(DWORD e)
 
 /* --------------------------------------------------------- low memory init */
 
+/* Map a range inside the guest window. The whole 0x10000..0xFFFFF window is
+ * already reserved by le_reserve_address_space_early(), so a RESERVE request
+ * there fails with ERROR_INVALID_ADDRESS (487) and only COMMIT works - try
+ * both, like le.c's map_at(). */
+static uint8_t *map_low(uint32_t base, uint32_t size, const char *what)
+{
+    /* Region by region: a single MEM_COMMIT spanning the early reservation's
+     * separate 64 KiB blocks fails with 487 (see le_commit_range). */
+    if (le_commit_range(base, size, PAGE_READWRITE, what) != 0)
+        return NULL;
+    return (uint8_t *)(uintptr_t)base;
+}
+
 void dos_init_lowmem(void)
 {
-    g_lowmem = (uint8_t *)VirtualAlloc((void *)(uintptr_t)DOS_LOWMEM_BASE,
-                                       DOS_LOWMEM_SIZE,
-                                       MEM_RESERVE | MEM_COMMIT,
-                                       PAGE_READWRITE);
+    if (!g_lo_next)
+        g_lo_next = dos_lowmem_base + DOS_LOWMEM_SIZE;   /* no dos_choose_lowmem() call */
+
+    /* Console handles first: if the mirror mapping fails we must still have
+     * stdin/stdout/stderr, otherwise every game printf is silently dropped
+     * (that is exactly what happened when the mirror at 0x80000 was refused). */
+    files_init();
+
+    g_lowmem = map_low(DOS_LOWMEM_BASE, DOS_LOWMEM_SIZE, "low-memory window");
     if (!g_lowmem) {
-        fprintf(stderr, "dos: cannot map low-memory window: %lu\n", GetLastError());
-        return;
+        /* last resort: swap with the other end of the low window */
+        uint32_t alt = (dos_lowmem_base == 0x00070000u) ? 0x000C0000u
+                                                        : 0x00070000u;
+        printf("dos: low-memory window unavailable at 0x%X, trying 0x%X\n",
+               (unsigned)dos_lowmem_base, (unsigned)alt);
+        g_lowmem = map_low(alt, DOS_LOWMEM_SIZE, "low-memory window (alt)");
+        if (g_lowmem) {
+            dos_lowmem_base = alt;
+            g_lo_next = alt + DOS_LOWMEM_SIZE;
+        }
     }
+    if (!g_lowmem)
+        return;
     memset(g_lowmem, 0, DOS_LOWMEM_SIZE);
 
     /* Commit the rest of the real-mode addressable RAM outside the VGA
@@ -281,13 +348,18 @@ void dos_init_lowmem(void)
      * discarded, so the game's blitter may legally walk off the end of the
      * VGA window into it; Windows reports that as an access violation
      * unless the pages are mapped. Committing them here also makes any
-     * `seg << 4` pointer land in writable memory. */
-    if (!VirtualAlloc((void *)(uintptr_t)0x00080000u, 0x00020000u,
-                      MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE))
-        fprintf(stderr, "dos: cannot map 0x80000-0x9FFFF: %lu\n", GetLastError());
-    if (!VirtualAlloc((void *)(uintptr_t)0x000C0000u, 0x00040000u,
-                      MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE))
-        fprintf(stderr, "dos: cannot map 0xC0000-0xFFFFF: %lu\n", GetLastError());
+     * `seg << 4` pointer land in writable memory.  The mirror may itself have
+     * been moved into 0x80000-0x9FFFF (it has to sit on a 64 KiB boundary, see
+     * dos_choose_lowmem), so only commit the part that is still free. */
+    {
+        uint32_t lo = 0x00080000u, hi = 0x000A0000u;
+        uint32_t mend = dos_lowmem_base + DOS_LOWMEM_SIZE;
+        if (dos_lowmem_base < hi && mend > lo)
+            lo = mend;
+        if (lo < hi && !map_low(lo, hi - lo, "real-mode pool"))
+            ;                                   /* map_low already reported */
+    }
+    map_low(0x000C0000u, 0x00040000u, "ROM area 0xC0000-0xFFFFF");
 
     /* BIOS data area: point the keyboard buffer head/tail at each other so the
      * game sees an empty buffer, and report a 80x25 text mode. */
@@ -305,8 +377,6 @@ void dos_init_lowmem(void)
      * that segment point at this window so `seg << 4 + offset` lands inside
      * our low-memory mirror (which then looks like an empty environment). */
     *(uint16_t *)(g_lowmem + 0x2C) = (uint16_t)DOS_LOWMEM_SEG;
-
-    files_init();
 }
 
 /* The BIOS tick counter at 0x40:0x6C is the game's time source (it polls it
@@ -416,6 +486,32 @@ static const char *fault_kind(ULONG_PTR kind)
 }
 
 /* INT 21h - DOS services */
+/* Small transfers are the interesting ones: printf goes to handle 1 and the
+ * CRT reads DISK.NO 13 bytes at a time, while asset loads move kilobytes.
+ * Logging only <=512 byte transfers (capped) keeps the log readable and
+ * answers "did the read return data / did the message actually get written". */
+static int g_rw_logged;
+
+static void log_small_io(const char *rw, int hnd, DWORD want, DWORD n,
+                         const void *buf)
+{
+    const uint8_t *p = (const uint8_t *)buf;
+    char txt[41];
+    DWORD i;
+
+    if (g_rw_logged >= 40 || want > 512)
+        return;
+    g_rw_logged++;
+    for (i = 0; i < 40; i++) {
+        uint8_t ch = (i < n) ? p[i] : 0;
+        if (i >= n)          txt[i] = 0;
+        else if (ch >= 0x20 && ch < 0x7F) txt[i] = (char)ch;
+        else                 txt[i] = '.';
+    }
+    printf("dos: %s h=%d want=%u n=%u  \"%s\"\n",
+           rw, hnd, (unsigned)want, (unsigned)n, txt);
+}
+
 static void int21(CONTEXT *c)
 {
     uint8_t ah = (uint8_t)(c->Eax >> 8);
@@ -539,6 +635,7 @@ static void int21(CONTEXT *c)
             if (!ReadFile(g_files[hnd].h, buf, want, &got, NULL)) {
                 set_cf(c, 1); c->Eax = 5; break;
             }
+            log_small_io("read ", hnd, want, got, buf);
             set_cf(c, 0); c->Eax = got;
         } else {
             set_cf(c, 0); c->Eax = 0;
@@ -581,6 +678,10 @@ static void int21(CONTEXT *c)
                 break;
             }
             WriteFile(g_files[hnd].h, buf, want, &wrote, NULL);
+            if (want && !wrote)
+                printf("dos: write h=%d -> 0 bytes (handle %p, err %lu)\n",
+                       hnd, g_files[hnd].h, GetLastError());
+            log_small_io("write", hnd, want, wrote, buf);
         }
         set_cf(c, 0); c->Eax = wrote;
         break;
@@ -609,6 +710,52 @@ static void int21(CONTEXT *c)
             set_cf(c, 0);
         } else {
             set_cf(c, 1); c->Eax = 6;
+        }
+        break;
+    }
+
+    case 0x43: {                                /* get/set file attributes */
+        /* FD2 never calls this; FDPS does right after startup and treats a
+         * failure as "the data file is missing" -> exit(1) (PROGRESS.md §13.7). */
+        const char *name = (const char *)(uintptr_t)c->Edx;
+        uint8_t al = (uint8_t)(c->Eax & 0xFF);
+
+        if (al == 0x00) {                       /* get attributes -> AL  */
+            DWORD a = GetFileAttributesA(name);
+            uint32_t d;
+            if (a == INVALID_FILE_ATTRIBUTES) {
+                printf("dos: get attributes '%s' -> not found\n", name);
+                set_cf(c, 1);
+                c->Eax = (c->Eax & 0xFFFF0000u) | 2;
+                break;
+            }
+            d = 0x20;                           /* default: archive      */
+            if (a & FILE_ATTRIBUTE_READONLY)  d |= 0x01;
+            if (a & FILE_ATTRIBUTE_HIDDEN)    d |= 0x02;
+            if (a & FILE_ATTRIBUTE_SYSTEM)    d |= 0x04;
+            if (a & FILE_ATTRIBUTE_DIRECTORY) d = (d & ~0x20u) | 0x10;
+            printf("dos: get attributes '%s' -> 0x%X\n", name, (unsigned)d);
+            c->Eax = (c->Eax & 0xFFFFFF00u) | d;
+            set_cf(c, 0);
+        } else if (al == 0x01) {                /* set attributes        */
+            uint8_t cl = (uint8_t)(c->Ecx & 0xFF);
+            DWORD a = FILE_ATTRIBUTE_NORMAL;
+            if (cl & 0x01) a = FILE_ATTRIBUTE_READONLY;
+            if (cl & 0x02) a |= FILE_ATTRIBUTE_HIDDEN;
+            if (cl & 0x04) a |= FILE_ATTRIBUTE_SYSTEM;
+            if (!SetFileAttributesA(name, a)) {
+                printf("dos: set attributes '%s' = 0x%X -> failed (%lu)\n",
+                       name, cl, GetLastError());
+                set_cf(c, 1);
+                c->Eax = (c->Eax & 0xFFFF0000u) | 5;
+                break;
+            }
+            printf("dos: set attributes '%s' = 0x%X\n", name, cl);
+            c->Eax &= 0xFFFFFF00u;              /* AL = 0 on success     */
+            set_cf(c, 0);
+        } else {
+            set_cf(c, 1);
+            c->Eax = (c->Eax & 0xFFFF0000u) | 1; /* invalid function     */
         }
         break;
     }
@@ -931,9 +1078,15 @@ static void int10(CONTEXT *c)
     g_calls[0x10]++;
 
     switch (ah) {
-    case 0x00:
-        printf("dos: INT10 set video mode 0x%02X\n", (unsigned)(c->Eax & 0xFF));
+    case 0x00: {
+        uint8_t mode = (uint8_t)(c->Eax & 0xFF);
+        printf("dos: INT10 set video mode 0x%02X\n", mode);
+        if (mode != 0x13)
+            printf("dos: WARNING: the host presents a 320x200/8bpp frame "
+                   "buffer (0xA0000) - mode 0x%02X is something else, display "
+                   "and/or the VGA window may be wrong\n", mode);
         break;
+    }
     case 0x0F:
         c->Eax = (c->Eax & 0xFFFFFF00u) | 0x13;
         c->Ebx = (c->Ebx & 0xFFFF0000u) | 0x0000;
@@ -1038,11 +1191,28 @@ static void int33(CONTEXT *c)
     }
 }
 
-/* INT 2Fh - multiplex */
+/* INT 2Fh - multiplex.
+ *
+ * The only caller in FDPS is the CD-ROM check: sub_3C3A6 does
+ * `int386(0x2F, {AX=0x1500})` (MSCDEX installation check) and returns 0 when
+ * BX comes back as 0 -> main prints "Fatal error: CDROM is not install!!!"
+ * and exit(1). Everything after that (INT 31h AX=0100 DOS memory, AX=0300
+ * simulate-real-mode-int) is already handled by the host, so reporting a
+ * plausible MSCDEX 2.10 is enough to get past it. */
 static void int2f(CONTEXT *c)
 {
+    uint16_t ax = (uint16_t)c->Eax;
+
     g_calls[0x2F]++;
-    c->Eax = (c->Eax & 0xFFFF0000u) | 0x0000;   /* not supported */
+
+    if (ax == 0x1500) {
+        printf("dos: INT2F AX=1500 (MSCDEX install check) -> present, API 2.10\n");
+        c->Eax = (c->Eax & 0xFFFF0000u) | 0x00FFu;   /* AL = FFh: installed */
+        c->Ebx = (c->Ebx & 0xFFFF0000u) | 0x0210u;   /* BX = API version    */
+        c->Ecx &= 0xFFFF0000u;                       /* CX = 0              */
+        return;
+    }
+    c->Eax &= 0xFFFF0000u;                           /* nobody home */
 }
 
 /* --------------------------------------------------- privileged port I/O */
@@ -1093,6 +1263,14 @@ static int emulate_priv_instr(CONTEXT *c, const uint8_t *p)
         if (p[0] == 0xE6 || p[0] == 0xEE) {          /* out 3C8, al */
             g_dac_index = c->Eax & 0xFF;
             g_dac_component = 0;
+            if (g_dac_logged < 6) {
+                g_dac_logged++;
+                printf("dos: DAC index := %u (op %02X)\n",
+                       (unsigned)g_dac_index, p[0]);
+            }
+        } else if (g_dac_logged < 16) {
+            g_dac_logged++;
+            printf("dos: DAC index write with opcode %02X ignored (port 0x3C8)\n", p[0]);
         }
         break;
     case 0x03C9:
@@ -1111,6 +1289,14 @@ static int emulate_priv_instr(CONTEXT *c, const uint8_t *p)
             if (++g_dac_component == 3) {
                 g_dac_component = 0;
                 g_dac_index = (g_dac_index + 1) & 0xFF;
+                if (g_dac_logged < 12) {
+                    g_dac_logged++;
+                    printf("dos: DAC[%u] = %02X %02X %02X\n",
+                           (unsigned)((g_dac_index + 255) & 0xFF),
+                           dos_palette[((g_dac_index + 255) & 0xFF) * 3 + 0],
+                           dos_palette[((g_dac_index + 255) & 0xFF) * 3 + 1],
+                           dos_palette[((g_dac_index + 255) & 0xFF) * 3 + 2]);
+                }
             }
         }
         break;
@@ -1122,9 +1308,22 @@ static int emulate_priv_instr(CONTEXT *c, const uint8_t *p)
     case 0x03D5:
         /* mode/timing registers are irrelevant with a real frame buffer */
         break;
-    case 0x03DA:            /* input status: return "display enabled" */
-        c->Eax = (c->Eax & 0xFFFFFF00u) | 0x09;
+    case 0x03DA: {          /* input status register C/D */
+        /* Bit 3 = vertical retrace, bit 0 = display disable: these are
+         * *status* bits that change over time. Returning a constant value
+         * deadlocks any code that waits for both edges - which is the standard
+         * "wait for retrace" idiom:
+         *     while ((inp(0x3DA) & 8) == 0) ;   // wait until retrace starts
+         *     while ((inp(0x3DA) & 8) != 0) ;   // wait until it ends  <- hangs
+         * That pair is in FDPS's title loop (sub_2A280) and made it spin
+         * forever with a black screen (PROGRESS.md §13.7). Toggling on every
+         * read lets both waits finish in <=2 reads on every game; the first
+         * read still returns 0x09, matching the old behaviour. */
+        static uint8_t vga_status = 0x00;
+        vga_status ^= 0x09;
+        c->Eax = (c->Eax & 0xFFFFFF00u) | vga_status;
         break;
+    }
     case 0x0040: case 0x0043:   /* PIT */
         break;
     case 0x0020: case 0x0021:   /* PIC */
@@ -1523,6 +1722,24 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
 
     {
         const uint8_t *p = (const uint8_t *)(uintptr_t)c->Eip;
+
+        /* Not one of the exceptions we own. If the faulting instruction is
+         * the guest's, report it as a crash. Otherwise it belongs to the host
+         * runtime and must reach the next handler: MSVC's 0x406D1388 "name
+         * this thread" exception (raised by D3D11 worker threads) and friends
+         * are raised on purpose and caught by their own SEH frame - killing
+         * the process here made merely starting a sokol/D3D11 backend look
+         * like a game crash (PROGRESS.md §13.6 step 2, §8-34).
+         * Guest code lives below 1 MiB or in a block we handed out. */
+        if (c->Eip >= 0x00100000u && !find_alloc((uint32_t)c->Eip)) {
+            if (g_unknown[0xFE] < 8) {
+                printf("host: exception %08lX at 0x%X - not ours, passed to the next handler\n",
+                       (unsigned long)er->ExceptionCode, (unsigned)c->Eip);
+            }
+            g_unknown[0xFE]++;
+            return EXCEPTION_CONTINUE_SEARCH;
+        }
+
         printf("cpu: unhandled exception %08lX at 0x%X\n",
                (unsigned long)er->ExceptionCode, (unsigned)c->Eip);
         printf("     eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X ebp=%08X esp=%08X\n",

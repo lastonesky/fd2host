@@ -17,17 +17,25 @@
 # run, so it never touches the real E:\FD2 saves.
 
 param(
-    [int] $Seconds = 45,
-    [string] $GameDir = "E:\FD2"
+    # 60 s: the continue -> save-load -> FD2.TMP path is timing sensitive and
+    # 45 s was borderline once other processes (Defender, IDA, an editor) share
+    # the machine - it then failed 4 checks although nothing was broken.
+    [int] $Seconds = 60,
+    [string] $GameDir = "E:\FD2",
+    # Which binary to regression-test. build\fd2host.exe is whatever was
+    # built last, so pass -Exe to test the other render backend explicitly:
+    #   pwsh -File regress.ps1 -Exe build\fd2host_sokol.exe
+    [string] $Exe = "E:\FD2\port\build\fd2host.exe"
 )
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
-$exe  = Join-Path $root "build\fd2host.exe"
+# NOTE: $Exe comes from the -Exe parameter; PowerShell variables are
+# case-insensitive, so a second assignment here would clobber it.
 $log  = Join-Path $root "build\host.log"
 $sb   = Join-Path $root "build\sandbox"
 
-if (-not (Test-Path $exe)) { throw "build\fd2host.exe not found - run build.ps1 first" }
+if (-not (Test-Path $Exe)) { throw "$Exe not found - run build.ps1 first" }
 
 # ---- 1. fresh sandbox: data files + FD2.SAV, deliberately NO FD2.TMP -----
 if (Test-Path $sb) { Remove-Item -Recurse -Force $sb }

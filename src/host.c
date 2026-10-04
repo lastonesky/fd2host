@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <io.h>        /* _dup2/_fileno: pin fd 1/2 onto the log */
 #include "le.h"
 #include "dos.h"
 #include "ail.h"
@@ -53,12 +54,14 @@ static volatile int g_frames;
 static const char  *g_screenshot_path;
 static int          g_screenshot_frame = 300;
 static int          g_screenshot_done;
+static const char  *g_wshot_path;      /* --wshot=<bmp>: window capture */
 
 /* AIL replacement layer knobs (see src/ail.c). The game never calls
  * AIL_set_sample_type / _playback_rate, so its samples rely on AIL's defaults:
  * 8-bit unsigned mono at 11025 Hz. These let that assumption be corrected from
  * the command line without a rebuild. */
 static const char  *g_ail_dump_dir;
+static int          g_ail_mode;          /* 0=auto 1=fd2 (force) 2=none */
 static uint32_t     g_ail_rate  = 11025;
 static int          g_ail_bits  = 8;
 static int          g_ail_stereo;
@@ -206,10 +209,10 @@ static void dump_frame_bmp(const char *path)
  * The palette conversion and the --screenshot dump deliberately stay in this
  * shared layer: every render backend receives exactly the same pixels, so
  * two backends can be diffed byte for byte (PROGRESS.md §13.6). */
-void host_frame(void)
+int host_frame(void)
 {
     const uint8_t *fb = vga();
-    int i;
+    int i, shot = 0;
 
     if (dos_palette_dirty) {
         /* nothing cached: we translate every frame (320x200 is cheap) */
@@ -228,12 +231,22 @@ void host_frame(void)
 
     render_present(g_rgb, 320, 200);
 
-    if (g_screenshot_path && !g_screenshot_done &&
-        g_frames >= g_screenshot_frame) {
+    if (!g_screenshot_done && g_frames >= g_screenshot_frame) {
         g_screenshot_done = 1;
-        dump_frame_bmp(g_screenshot_path);
+        shot = 1;
+        if (g_screenshot_path)
+            dump_frame_bmp(g_screenshot_path);
     }
     g_frames++;
+
+    /* the entry layer captures the window right after present() on this very
+     * frame, so --wshot and --screenshot describe the same instant */
+    return shot;
+}
+
+const char *host_window_shot_path(void)
+{
+    return g_wshot_path;
 }
 
 /* ---------------------------------------------------------------- keyboard */
@@ -291,7 +304,7 @@ static int opt_wants_value(const char *a)
 {
     static const char *opts[] = {
         "--exe", "--gamedir", "--exit-after", "--trace", "--screenshot",
-        "--shot-frame", "--ail-dump", "--ail-rate", "--ail-bits",
+        "--wshot", "--shot-frame", "--ail", "--ail-dump", "--ail-rate", "--ail-bits",
         "--midi-rate", "--midi-backend", "--gm-bank", "--autokey",
         "--midi-dump"
     };
@@ -332,6 +345,14 @@ int host_init(int argc, char **argv)
         freopen(errpath, "w", stderr);
     }
     setvbuf(stdout, NULL, _IONBF, 0);
+
+    /* A WINDOWS-subsystem process has no console: fds 0/1/2 start out closed
+     * and freopen() may land on any free fd. The guest writes its own printf()
+     * through DOS handle 1, which the host derives from fd 1
+     * (_get_osfhandle(1) in files_init) - without this remap every game
+     * message went to an invalid handle (WriteFile error 6, 0 bytes written). */
+    _dup2(_fileno(stdout), 1);
+    _dup2(_fileno(stderr), 2);
     printf("FD2 native host - POC\n");
     printf("image base 0x%p\n", (void *)GetModuleHandleA(NULL));
 
@@ -381,8 +402,15 @@ int host_init(int argc, char **argv)
         else if (!strncmp(argv[i], "--screenshot=", 13)) {
             g_screenshot_path = argv[i] + 13;
         }
+        else if (!strncmp(argv[i], "--wshot=", 8)) {
+            g_wshot_path = argv[i] + 8;
+        }
         else if (!strncmp(argv[i], "--shot-frame=", 13)) {
             g_screenshot_frame = atoi(argv[i] + 13);
+        }
+        else if (!strncmp(argv[i], "--ail=", 6)) {
+            const char *m = argv[i] + 6;
+            g_ail_mode = !strcmp(m, "none") ? 2 : (!strcmp(m, "fd2") ? 1 : 0);
         }
         else if (!strncmp(argv[i], "--ail-dump=", 11)) {
             g_ail_dump_dir = argv[i] + 11;
@@ -419,10 +447,11 @@ int host_init(int argc, char **argv)
 
     /* Must be the very first allocation: the CRT heap grows from 0x10000. */
     if (le_reserve_address_space() != 0) {
-        printf("host: fixed address space unavailable - this image landed at "
-               "0x%p, which overlaps 0x10000..0x6FFFF (ASLR). Retry, or "
-               "rebuild with /DYNAMICBASE:NO /BASE:0x10000000.\n",
+        printf("host: fixed address space unavailable - the object window "
+               "0x10000..0x70000 is already taken (this image is at 0x%p). "
+               "Retry; if it persists, rebuild with /BASE:0x60000000.",
                (void *)GetModuleHandleA(NULL));
+        printf("\n");
         return 9;
     }
     printf("host: address space reserved\n");
@@ -435,6 +464,22 @@ int host_init(int argc, char **argv)
         printf("host: working directory = %s\n", gamedir);
 
     if (le_open(&g_le, exe) != 0) { getchar(); return 1; }
+
+    /* Where can the low-memory mirror go? FD2 keeps its objects below 0x70000
+     * so the mirror sits at 0x70000; FDPS parks obj2 exactly there. Decide
+     * from the parsed object table before anything is mapped. */
+    {
+        uint32_t k, end = 0;
+        for (k = 0; k < g_le.object_count; k++) {
+            uint32_t span = g_le.objects[k].page_count * LE_PAGE_SIZE;
+            uint32_t e;
+            if (span < g_le.objects[k].vsize)
+                span = g_le.objects[k].vsize;
+            e = g_le.objects[k].base + span;
+            if (e > end) end = e;
+        }
+        dos_choose_lowmem(end);
+    }
 
     if (g_use_image) {
         if (le_map_flat(&g_le, "E:\\FD2\\port\\build\\objects.bin") != 0)
@@ -459,7 +504,24 @@ int host_init(int argc, char **argv)
     xmidi_set_backend(g_midi_backend);
     synth_set_bank_path(g_gm_bank);
     synth_set_dump_path(g_midi_dump);
-    ail_install((uint8_t *)(uintptr_t)0x00010000u, g_ail_dump_dir);
+    /* The 52 AIL patch addresses are *FD2's* layout (re/RE_MAP.md §3). On any
+     * other build they point into unrelated code and would corrupt it, so the
+     * patch is gated: auto mode only applies it when the target really is
+     * FD2.EXE. --ail=fd2 forces it, --ail=none disables it. */
+    if (g_ail_mode == 2) {
+        printf("ail: patching disabled (--ail=none)\n");
+    } else {
+        const char *bn = strrchr(exe, '\\');
+        int is_fd2;
+        bn = bn ? bn + 1 : exe;
+        is_fd2 = _stricmp(bn, "FD2.EXE") == 0;
+        if (g_ail_mode == 1 || is_fd2)
+            ail_install((uint8_t *)(uintptr_t)g_le.objects[0].base, g_ail_dump_dir);
+        else
+            printf("ail: '%s' is not FD2 - skipping the 52 hard-coded AIL "
+                   "patches (original Miles code runs; --ail=fd2 forces them)\n",
+                   bn);
+    }
 
     return 0;
 }

@@ -42,6 +42,14 @@ typedef struct {
     uint32_t fixup_page_table;   /* offset relative to LE header      */
     uint32_t fixup_record_table; /* offset relative to LE header      */
 
+    /* Bytes of the *final* page actually stored in the file - LE header field
+     * +0x2C. It differs from vsize % 0x1000 when the tail of the last object
+     * is BSS: FD2 stores the whole 0x4D2 tail of its 0x34D2 object, FDPS
+     * stores only 0x35 of a 0x54 object (the other 0x1F bytes are
+     * zero-initialised). Assuming vsize for both shifts FDPS's image 0x1F
+     * bytes early and the game executes a misaligned instruction stream. */
+    uint32_t last_page_bytes;
+
     uint32_t entry_linear;       /* computed absolute entry address   */
     size_t   image_start;        /* file offset of first object page  */
     size_t   image_end;
@@ -69,6 +77,16 @@ int le_map_and_relocate(le_image *le, int *fixups_applied);
 /* Loads an already-relocated flat image instead of parsing the exe
  * (used to cross-check the loader against Ghidra's relocated copy). */
 int  le_map_flat(le_image *le, const char *path);
+
+/* Commit a range inside the guest window *region by region*.
+ *
+ * VirtualAlloc(MEM_COMMIT) validates the request against the ONE region that
+ * contains lpAddress, so a range spanning several reservations fails with
+ * ERROR_INVALID_ADDRESS (487) even when every page is already committed -
+ * which is what happened after the early reservation was split into per-64KiB
+ * blocks. Free sub-blocks (the loader may own a neighbour) are reserved first.
+ * Returns 0 on success. kernel32 only, so it is safe before CRT init. */
+int  le_commit_range(uint32_t base, uint32_t size, int prot, const char *what);
 
 void le_close(le_image *le);
 

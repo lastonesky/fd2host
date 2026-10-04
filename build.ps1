@@ -30,7 +30,7 @@ $targets = @{
     probe3 = @{ srcs = @("probe3.c"); libs = @(); subsystem = "console" }
     probe4 = @{ srcs = @("probe4.c"); libs = @(); subsystem = "console" }
     letest = @{ srcs = @("letest.c", "le.c"); libs = @(); subsystem = "console" }
-    fd2host = @{ srcs = @("host.c", "main_win32.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c");
+    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";
                  # ASLR must stay on (with /DYNAMICBASE:NO Windows reserves the
@@ -43,14 +43,28 @@ $targets = @{
 }
 
 # --- render backend selection (PROGRESS.md §13.1) ---------------------------
-# The kernel (host.c) only sees render.h; the entry layer (main_win32.c) sees
-# it too. Exactly one backend implementation is compiled in.
-$renderSrc = if ($Render -eq "gdi") { "render_gdi.c" } else { "render_sokol.c" }
-if (-not (Test-Path (Join-Path $src $renderSrc))) {
-    throw "render backend '$Render' not implemented yet: src/$renderSrc is missing (step 2)"
+# The kernel (host.c) only sees render.h; exactly one entry layer + one
+# present backend are compiled in. The entry layer differs too because sokol
+# owns the window and drives frames through callbacks instead of a message
+# pump (main_win32.c vs main_sokol.c).
+$renderSrcs = switch ($Render) {
+    "gdi"   { @("main_win32.c", "render_gdi.c") }
+    "sokol" { @("main_sokol.c", "render_sokol.c", "sokol_impl.c") }
+}
+foreach ($f in $renderSrcs) {
+    if (-not (Test-Path (Join-Path $src $f))) {
+        throw "render backend '$Render' not implemented yet: src/$f is missing"
+    }
 }
 if ($targets.ContainsKey("fd2host")) {
-    $targets["fd2host"].srcs = $targets["fd2host"].srcs + @($renderSrc)
+    $targets["fd2host"].srcs = $targets["fd2host"].srcs + $renderSrcs
+    if ($Render -eq "sokol") {
+        # sokol_gfx: D3D11 on Windows (system built-in, no extra DLL); the
+        # HLSL compiler is loaded at runtime by d3dcompiler_47.dll.
+        $targets["fd2host"].libs = $targets["fd2host"].libs +
+            @("d3d11.lib", "dxgi.lib", "shell32.lib", "ole32.lib")
+        $targets["fd2host"].inc  = "/I `"$(Join-Path $root 'vendor\sokol')`""
+    }
     $targets["fd2host"].defs = "/D FD2_RENDER_$($Render.ToUpperInvariant())"
 }
 if ($Target -ne "all") { $targets = @{ $Target = $targets[$Target] } }
