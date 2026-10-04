@@ -51,7 +51,7 @@
      `Entries()` 返回 4 元组；**批量结果写文件**（放 `re/`），不要灌进上下文。
    - 批量导出内存/镜像用 **Ghidra 本地 HTTP 桥** `http://127.0.0.1:8089/read_memory`（写文件、不耗上下文）。
 3. **联网取 GitHub 内容时用代理**：`git clone` 本身可用；但用 **curl / wget / Invoke-WebRequest**
-   之类下载 GitHub（或其它被墙）内容时，**先走本机代理 `http://127.0.0.1:7980`**：
+   之类下载 GitHub（或其它被墙）内容时，**先走本机代理 `http://127.0.0.1:7890`**：
    ```bash
    curl -x http://127.0.0.1:7890 -L -o out.tar.gz https://github.com/...
    # 或全局：export HTTPS_PROXY=http://127.0.0.1:7890  (PowerShell: $env:HTTPS_PROXY=...)
