@@ -26,6 +26,11 @@ Windows MIDI（Miles AIL 的 16 个入口已被宿主实现替换，见 §11）�
   与 `AH=40 CX=0` 的"DOS 截断"语义。fresh install 缺 `FD2.TMP` 时游戏从**必崩**变成正常创建，
   回归脚本 `port/regress.ps1` **8/8 PASS**；同轮还用 ida MCP 静态证明"**游戏不用鼠标**"，
   把 `§7.3` 的 `INT 33h` 项从计划里划掉了。详见 **§12**。
+- **第 13 轮（2026-10-05）：显示/跨平台选型定案 sokol + 第 1 步接口抽取完成**。
+  实测三方：SDL2 = 1.28 MB DLL 且默认 **D3D9**、SDL3 = 2.25 MB DLL 默认 D3D11、
+  **sokol = 0 DLL / exe +146 KB / Win 上直接 D3D11** ⇒ 选定 sokol（需求重定义为"替换 GDI"）。
+  第 1 步已落地：`render.h`+`render_gdi.c`+`host.h`+`main_win32.c` 拆出，GDI 变成第一个后端，
+  `regress.ps1` **8/8 PASS**、帧 900 画面与重构前一致。详见 **§13**。
 
 ⇒ 路线 C 的 POC 目标"**窗口中看到游戏画面**"**已达成**。下一步见 §7。
 逆向侧：IDA Pro 9.5 + ida MCP 环境已建好，测绘结果在 `port/re/RE_MAP.md`（见 §10）。
@@ -71,9 +76,10 @@ Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -Wor
 `--autokey=<延时ms:VK[,VK...];...>`（自动按键，用于回归 continue 等菜单路径，见 §11.5）、
 `--midi-dump=<file.wav>`（把渲染好的音乐导出为 WAV，离线核对速度/音色，见 §11）。
 
-> `--gamedir` / `--exe` 的**空格与等号两种写法都认**（`--gamedir=D:\x` 与 `--gamedir D:\x`）。
-> 早先只认空格形式，写成 `--gamedir=` 会被**静默忽略**并回退到 `E:\FD2` —— 测试就悄无声息地
-> 跑错了目录（第 12 轮第一次对照实验就是这么白跑的，见 §12.2）。
+> **所有参数都支持空格与等号两种写法**（`--gamedir=D:\x` 与 `--gamedir D:\x` 等价，第 13 轮起
+> 由 `host_init()` 开头的 `opt_wants_value()` 统一归一化）。早先**每个参数只认一种写法**，
+> 另一种会被静默忽略并回退到默认值（`E:\FD2`）—— 第 12 轮第一次对照实验就是这么白跑的，
+> 写测试时**先在日志里核对 `host: working directory = …`**（§8-32、§8-33）。
 
 **一键回归**：`pwsh -File E:\FD2\port\regress.ps1`（重建沙箱 → autokey → 断言，见 §12.4）。
 
@@ -502,6 +508,13 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     不会报错，而是悄悄回退到 `E:\FD2` —— 对照实验因此跑错了目录、结论差点反过来。
     宿主现在两种写法都认；写测试脚本时**先在日志里核对 `host: working directory = …`**。
 
+33. **做参数归一化时别把 `argv[0]` 丢了**（第 13 轮，实现双写法时踩到）：把 `--opt value`
+    合并成 `--opt=value` 时，如果新数组 `av[0]` 放的是**第一个选项**，而解析循环仍是
+    `for (i = 1; i < argc; …)`，就会**静默跳过第一个选项**。症状极具迷惑性：
+    `--exit-after 6` 生效（它恰好落在 index 1）、`--gamedir x` 却回退默认目录 —— 看起来像
+    "只修好了一半"。判据依旧是日志 `host: working directory = …`。
+    正确写法：`av[0] = argv[0]; ac = 1;` 再从 `i = 1` 合并（`host_init()` 开头）。
+
 ---
 
 ## 9. 调试手册
@@ -805,4 +818,149 @@ PASS  FD2.TMP non-empty         PASS  clean end (watchdog/exit)
 3. 显示层现代化（§7.1，仍是第一优先）、更深路径（战斗/地图）、源码化第一模块，都还没动。
 4. 静态确认**无调用点**、暂不实现的 AH：`43` 属性、`4D` 返回码、`4E/4F` 查找、`56` 改名 ——
    除非深层路径里出现新的 `UNHANDLED INT21`（`host.log` 会打印前 40 条）。
+
+---
+
+## 13. 显示/跨平台后端决策：**sokol**（0 DLL，各平台原生）（2026-10-05）
+
+**需求重定义**（用户澄清）：要的**不是 D3D11**，只是**替换掉默认的 GDI 渲染**；
+因此选 **sokol**（`sokol_app`+`sokol_gfx`+`sokol_audio`，单头文件、**0 DLL**，
+Win=D3D11 / mac=Metal / Linux=GL）。SDL2/SDL3 的实测降为**备选记录**（§13.2、§13.3）。
+**不用 git 分支分平台**，改用“单代码库 + 后端选择”。备选方案与实测数据见下。
+
+### 13.1 sokol 实测（2026-10-05，`build/sokolprobe.c` + `build/sokol/*.h`）
+
+probe = `sokol_app`（`SOKOL_WIN32_FORCE_MAIN`，建 960×600 窗口）+ `sokol_gfx`（D3D11）
++ `sokol_glue` + `sokol_time`，**32 位**、`/std:c11`，跑 180 帧自退。
+
+| 项 | 实测值 |
+|---|---|
+| 32 位能否编/跑 | ✅ 一次通过（`sokolprobe.exe`） |
+| 实际后端 | **`sg_query_backend() = D3D11`**（sokol_app 内部就是 Win32 窗口） |
+| 帧耗时 | 180 帧 avg **6.174 ms/帧 = 162 fps**，`swap_interval=1`（本机高刷，未被 60 Hz 卡住） |
+| **exe 体积增量** | 基线 `baseline.exe` = 116,736 B → `sokolprobe.exe` = **266,240 B，即 +149,504 B（+146 KB）** |
+| **交付依赖** | `dumpbin /dependents`：**d3d11.dll、USER32、GDI32、SHELL32、KERNEL32** —— **全是系统 DLL ⇒ 交付 0 额外 DLL** |
+| `d3dcompiler_47.dll` | 仅“用 HLSL 源码建 shader”时**运行时按需 LoadLibrary**（不进导入表；Win8+ 系统自带） |
+| vendor 进仓库的头文件 | app 603 KB + gfx 1315 KB + audio 103 KB + time 11 KB + log 12 KB + glue 8 KB ≈ **2.05 MB 源码**（zlib 许可） |
+
+**三方总交付体积对比**：
+
+| 方案 | exe | 额外 DLL | **合计** | 后端 |
+|---|---|---|---|---|
+| **sokol（已选）** | 现 59 KB + ~146 KB ≈ **210 KB**（纹理/shader 未算，估再 +10~30 KB） | **0** | **≈ 0.2 MB** | Win **D3D11** / mac **Metal** / Linux **GL** |
+| SDL2 | ~60 KB | 1.28 MB | ≈ 1.34 MB | 默认 **D3D9**（需 pin） |
+| SDL3 | ~61 KB | 2.25 MB | ≈ 2.31 MB | 默认 **D3D11** |
+
+**sokol 的真实代价（接手前必读）**：
+
+1. **没有默认 shader**：纹理替换 GDI 必须自写一个 textured-quad shader。
+   D3D11 可直接喂 **HLSL 源码**（`sg_shader_desc.attrs[i].hlsl_sem_name/_index` 指定语义，
+   默认 target `vs_4_0`/`ps_4_0`，运行时 D3DCompile）；**GL 后端只能喂 GLSL 源码**
+   ⇒ 跨平台就要 HLSL+GLSL 两份（macOS MSL 再一份），或用 **sokol-shdc**（GLSL 一次 → 各后端 + 生成绑定元数据）。
+   本项目 shader 极简（一个四边形，~15 行/后端）⇒ **先手写 HLSL+GLSL、不引 shdc 工具链**，
+   保持“代码最简”；需要 MSL 或复杂效果时再上 shdc。
+2. **sokol_app 就是入口 + 主循环**：`sokol_main()` 返回 `sapp_desc`，帧由回调驱动 ⇒ `host.c` 的 `main`
+   要拆成 `host_init/host_frame/host_event/host_shutdown` + 两个入口
+   （`main_win32.c`：现有消息泵 + GDI；`main_sokol.c`：sokol 回调）。约 100~200 行，
+   **游戏线程 / watchdog / LE·DOS 层不动** —— 这就是 §13.6 第 1 步。
+3. **键码映射**：`SAPP_KEYCODE_*` → BIOS 扫描码需自建表（~60 行；现在 Win32 用 `MapVirtualKeyA`）。
+4. **音频**：`sokol_audio`（WASAPI/CoreAudio/ALSA·Pulse）回调替换 waveOut ⇒ 顺带实现低延迟流式。
+5. **Linux 构建**：X11 需 `libX11-dev`，Wayland 可选；比 SDL2 的“系统包”稍麻烦。
+6. **API 仍在演进**：本次 probe 用到的已是 `sg_view`/`sg_sampler`/`sg_environment` 新一代 API，
+   **网上大量 sokol 教程已过时** —— 一律以 vendor 进仓库的头文件内文档为准（这也是要 pin 版本的原因）。
+
+### 13.2 SDL2 实测（`build/sdlprobe*.c`，SDL2 2.32.8 **x86**，宿主是 32 位进程）
+
+| 项 | 实测值 |
+|---|---|
+| `SDL2.dll`（x86） | **1,338,880 B ≈ 1.28 MB**（x64 是 1,576,448 B） |
+| Windows 可用渲染后端 | `direct3d`、**`direct3d11`**、`direct3d12`、`opengl`、`opengles2`、`software` |
+| **SDL2 默认加速后端** | **`direct3d` = D3D9，不是 D3D11** ⇒ 必须显式指定，否则“用了 SDL 就没用上 D3D11” |
+| `SDL_SetHint(SDL_HINT_RENDER_DRIVER, "direct3d11")` | ✅ **一行生效**：日志 `renderer in use: direct3d11` |
+| W3 每帧 CPU 成本 | `UpdateTexture(320×200 ARGB)` = 0.136 ms；`+Clear+Copy(→960×600)` = **0.092 ms**；`+Present` = 0.086 ms（3000 次取均值） |
+| 加 `SDL_RENDERER_PRESENTVSYNC` | 6.24 ms/帧（vsync 等待；隐藏窗口下不是满刷新率，仅供量级参考） |
+| 32 位链链 | ✅ `lib/x86/SDL2.lib` 存在，probe 编译/运行均通过（`sdlprobe*.exe`，留在 `build/`） |
+
+⇒ W3 的渲染路径 CPU 成本约 **0.1 ms/帧**，而且 GPU 负责缩放（GDI 是软件缩放）。
+另：帧率卡在 32 fps 是 `SetTimer(20)` 撞上 Windows 默认 15.625 ms 定时器粒度（§12/§7.1），
+改 SDL 事件循环 + `PRESENTVSYNC` 顺带解决。
+
+### 13.3 SDL3 实测对照（2026-10-05，同流程同 probe）
+
+**问题**：SDL3 是否也能像 SDL2 那样“产物只多 1 个 DLL”？→ **是**，但 DLL 更大。
+
+| 项 | SDL2 2.32.8（x86） | **SDL3 3.4.18（x86）** |
+|---|---|---|
+| 交付物 | `SDL2.dll` **1,338,880 B = 1.28 MB** | `SDL3.dll` **2,361,344 B = 2.25 MB**（**+76%**） |
+| DLL 自身依赖 | 仅 Windows 系统 DLL（`dumpbin /dependents`） | **同样仅系统 DLL**（SETUPAPI/WINMM/IMM32/VERSION/KERNEL32/USER32/GDI32/…，一模一样） |
+| exe 增量 | `sdlprobe.exe` = 117,760 B | `sdl3probe.exe` = 118,784 B（**+1 KB**，可忽略） |
+| **默认渲染器** | **`direct3d`（D3D9）** ⚠️ | **`direct3d11`** ✅ 不用 pin |
+| 后端清单 | direct3d、direct3d11、direct3d12、opengl、opengles2、software | direct3d11、direct3d12、direct3d、opengl、opengles2、**vulkan**、**gpu**、software |
+| 显式 pin D3D11 | `SDL_SetHint(SDL_HINT_RENDER_DRIVER,"direct3d11")` ✅ | 同一 hint ✅（或 `SDL_CreateRenderer(win,"direct3d11")`） |
+| 每帧 CPU 成本 | Update 0.136 / +Clear+Copy **0.092** / +Present 0.086 ms | Update 0.108 / +Clear+Texture **0.081** / +Present 0.126 ms —— **同一量级，无差别** |
+| x86 导入库 | ✅ | ✅（另有 x64/arm64） |
+| 需要 SDL2main？ | 需（我们用 `SDL_MAIN_HANDLED` 绕开） | 不需要 |
+| **API 兼容性** | — | **与 SDL2 源码不兼容**：`SDL_RenderCopy`→`SDL_RenderTexture`、`SDL_CreateRenderer(win,name)`、`SDL_CreateWindow(title,w,h,flags)`、`SDL_GetVersion()` 返 int、`SDL_GetTicks()` 返 Uint64、事件改 `SDL_EVENT_*`、**音频旧 API 整个换成 `SDL_OpenAudioDeviceStream` + `SDL_AudioStream`** |
+
+**结论与选择依据**：
+
+- 交付模型**两者相同**：一个自带依赖的 DLL，exe 本身几乎不变（+1 KB）。
+- SDL3 的加分：**默认就是 D3D11**（SDL2 默认 D3D9，必须 pin）、主线维护（SDL2 已进维护模式）、
+  Linux 上 Wayland 一等公民（第 4 步受益）、多出 `vulkan`/`gpu` 后端。
+- SDL3 的代价：DLL **大 0.97 MB**；**音频 API 重写**；Windows 上资料相对少。
+- **已定 sokol（§13.1）**，SDL2/SDL3 降为备选：两者仍保留为“若 sokol 卡壳时的回退路线”，
+  且本两份实测证明了“换库只动 `window/render/audio` 三个文件”（SDL2 probe → SDL3 probe 重写约半小时）。
+
+### 13.4 备选“更小巧”的跨平台库（选型记录）
+
+| 方案 | 交付体积 | 代码量 | 后端 | 判断 |
+|---|---|---|---|---|
+| **SDL2（W3，已选）** | DLL **1.28 MB**（实测） | **最少**：渲染 ~70 行 + 窗口/输入 ~150 行 + 音频 ~80 行 | Win 默认 D3D9，**一行钉到 D3D11**；mac/Linux 走 GL | ✅ 选它 |
+| sokol（app+gfx+audio 单头三件套） | **0 DLL**，exe **+146 KB（实测）** | 中：**每个后端一份 shader**（HLSL/GLSL/MSL）或 sokol-shdc | Win **D3D11 原生**、mac **Metal 原生**、Linux GL | ✅ **已选（§13.1）** |
+| GLFW + OpenGL + miniaudio | 0 DLL，exe +150~300 KB（估） | 中 | 只有 GL（mac 最高 4.1 且已废弃） | 拿不到 D3D11/Metal，放弃 |
+| raylib（静态） | 0 DLL，exe +300~600 KB（估） | 少，但自带一整套游戏框架 | Win/mac/Linux/Web | 对“移植宿主”是多余抽象，体积反而最大 |
+| SDL2 **静态链接** | 0 DLL，**exe 反而 +0.6~0.9 MB** | 同 W3 | 同 W3 | 想要“单文件无 DLL”时的反直觉结果：比带 DLL 更胖 |
+| 纯 Win32 + D3D11（W1） | 0 | 多 ~300–400 行窗口/输入 | 仅 Windows | 体积最小但代码不是最少，与优先级矛盾 |
+
+**两个关键认知**：
+1. **Windows 上 SDL2 默认是 D3D9**，D3D11 必须显式 pin（实测一行即可）；**SDL3 默认就是 D3D11**
+   （见 §13.2）——W3 与“用系统 D3D11”不冲突，选 SDL3 则连 pin 都不必。
+2. **分发体积的痛点只在 Windows**：Linux 上 SDL2 是系统包（装机一行命令），macOS 可静态；
+   为了省 1.28 MB 的 DLL 去换掉整套简单代码不划算。真要 0 DLL，路径是**加 `render_sokol.c`**，
+   而不是开 git 分支。
+
+### 13.5 git 策略与两个 .gitignore 陷阱
+
+- 仓库根 = `E:\FD2\port`（单提交 `aeb744e`，40 文件，工作区干净）。
+- **不用分支分平台**：本项目正处高频修 bug 阶段，分支会把“一个 fix 修 N 遍 + 回归 N 次”
+  放大，并分裂最值钱的逆向文档。约定：`main` 单线，`platform/*` 只做**短命**集成分支（合并即删）；
+  **真正需要长期分支的时机**只有架构级分叉（ARM 走源码化/模拟器、`release/` 冻结）。
+- ⚠️ `.gitignore` 的 `*.dll`、`*.lib`、`x86/`、`x64/` 会**挡住 vendored SDL2**：
+  把 SDL2 放进 `port/vendor/` 时必须加 `!vendor/**` 例外（否则换机器/新克隆编不过）。
+- ⚠️ `build/object*.bin`（Ghidra 参考镜像）被 `*.bin` 忽略 ⇒ 新克隆无法跑 `letest.exe`，
+  需加白名单或按 §2 的 Ghidra HTTP 桥方法重新导出。
+
+### 13.6 实施顺序（每步一提交 + `regress.ps1` 回归）
+
+1. ✅ **抽接口 + 拆入口**（已完成 2026-10-05，纯重构、行为不变）：
+   - 新增 `render.h` + `render_gdi.c`：`blit()` 的**送显部分**逐字节搬入（`StretchDIBits`、
+     `BITMAPINFO`、固定整数缩放全不变）；调色板→BGRA 转换与 `--screenshot` **留在共享层**，
+     保证任何后端都拿到同一份像素（对拍基准不随后端走）。
+   - 新增 `host.h`：`host_init/host_render_desc/host_start/host_frame/host_key/
+     host_wants_frames/host_request_quit/host_shutdown` + 入口层必须提供的 `input_post_vk()`。
+   - 新增 `main_win32.c`：`fd2_entry`、窗口/消息泵/定时器、Win32→BIOS 键盘翻译、
+     `input_post_vk`（`--autokey` 靠它注入按键）。
+   - vendor：sokol 头文件进 `port/vendor/sokol/`（pin commit `2e75443`，含 README：许可、
+     升级步骤、实测体积）。
+   - `build.ps1` 加 `-Render gdi|sokol`；**未实现的后端会明确报错**，不会静默回落。
+   **验收**：`regress.ps1` **8/8 PASS**；日志 `host: render backend = gdi`；45 s **1440 帧 =
+   恰好 32.0 fps**（再次印证 §13.1 的定时器量化结论）；`build/regress.bmp`（帧 900）与重构前画面一致。
+2. **`render_sokol.c`**：sokol_app 窗口/事件 + `sg_make_image`（320×200 RGBA8, `dynamic_update`）
+   每帧 `sg_update_image` + **手写 HLSL textured quad** + `swap_interval=1`（顺带解掉 32 fps）；
+   键码 `SAPP_KEYCODE_*` → BIOS 扫描码表（~60 行）。`--render=sokol` 默认，`gdi` 保底对拍。
+   **验收**：GDI vs sokol 同帧截图逐像素一致。
+3. **`audio_sokol.c`**：sokol_audio 回调流式替换 `waveOut + Sleep(200)`，
+   并修 §12 提到的“音量在 synth 后端不生效 / 渐变未实现”。
+4. **POSIX**：Linux（`libX11-dev` + GL 后端 + `platform_posix.c`：sigaction/mmap/pthread），
+   `int NN`/`in out` 的信号语义用 `probe4.c` 的方法在目标机重测 → 首个非 Windows 产物。
 

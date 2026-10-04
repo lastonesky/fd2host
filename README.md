@@ -38,6 +38,8 @@ Start-Process port\build\fd2host.exe -ArgumentList '--exit-after=30' -WorkingDir
 
 日志写入 `port/build/host.log`（宿主是 WINDOWS 子系统，不弹控制台窗口）。
 可用参数：`--gamedir <目录>`、`--exe <路径>`、`--exit-after <秒>`、`--trace=<n>`、`--headless`、
+**所有带值的参数都同时支持 `--opt value` 与 `--opt=value` 两种写法**（`host_init()` 统一归一化，
+另一种写法不再静默回退到默认值，见 `PROGRESS.md` §8-32/§8-33）、
 `--screenshot=<file.bmp>`、`--shot-frame=<n>`（在第 n 帧导出实际送显的 RGB 缓冲，默认 300）；
 音频：`--ail-dump=<目录>`（导出音效样本与 XMIDI 原始数据）、`--ail-rate=<Hz>`、`--ail-bits=<8|16>`、
 `--ail-stereo`、`--midi-rate=<ticks/s>`（默认 0 = 按序列 tempo 换算）、
@@ -98,6 +100,8 @@ LE 加载 + 7937 条 fixup 应用
 → 键盘：INT 16h（菜单导航）                 ✅ 方向键可用、带导航音效（片头跳过走的是 BDA 轮询）
 → 平台层文件服务：AH=3C 创建 / AH=41 删除 / AH=40 写 0 字节截断  ✅ fresh install 不再崩，regress.ps1 8/8 PASS
 → 游戏退出路径（INT10 mode 3 → AH=4Ch → ail shutdown）           ✅ 菜单主动退出实测（PROGRESS §12.4）
+→ 第 1 步接口抽取：render.h / host.h / main_win32.c + `-Render gdi|sokol`  ✅ GDI 成为第一个后端，regress 8/8
+→ sokol 选型实测：0 DLL、exe +146 KB、Win 上直接 D3D11            ✅ 头文件已 vendor（pin 2e75443）
 ```
 
 ## 当前状态与下一步
@@ -113,8 +117,12 @@ LE 加载 + 7937 条 fixup 应用
 | `fopen("wb")` 打不开新文件 → `fwrite(NULL)` 崩在 0x377B2（读地址 0xC） | 宿主没实现 `INT 21h AH=3C`(CREAT)；且 `AH=40` 写 0 字节不截断 | 补 `AH=3C`/`AH=41` + 显式 `SetFilePointer`+`SetEndOfFile`（PROGRESS §12） |
 
 **下一步（按优先级）**
-1. **显示层现代化**：`0xA0000` 的 8bpp 索引缓冲 + `dos_palette` → D3D11/OpenGL 纹理 + palette shader
-   （现在是 GDI `StretchDIBits` + 每帧 64000 次软件查表，POC 版，且固定 320×200 逻辑分辨率）。
+1. **显示层现代化 = sokol（已定）**：`0xA0000` 的 8bpp 缓冲 + `dos_palette` → **sokol_gfx**
+   （320×200 RGBA8 流式纹理 + GPU 缩放，Windows 上自动走 **D3D11**）；GDI 保留为 `--render=gdi` 对拍基准。
+   **交付 0 DLL**（实测：exe +146 KB，依赖只有 d3d11/USER32/GDI32/SHELL32/KERNEL32 等系统库）；
+   `swap_interval=1` 顺带解掉 32 fps 的定时器限制。
+   选型/实测数据/代价清单（手写 shader、sokol_main 入口改造）见 `PROGRESS.md` §13.1；
+   SDL2/SDL3 实测对比降为备选记录（§13.2/§13.3）。
 2. ~~**AIL 替换层 + 音乐**~~ **已完成**：16 个 `AIL_*` 入口已替换 —— 音效走 WinMM waveOut；
    音乐由 `synth.c` 自带合成器渲染成 PCM 后走同一条 waveOut 通路（**不依赖系统 MIDI**，
    原因见 `PROGRESS.md` §11.1）。可继续打磨：音效循环（`loop_count > 1`）、音量/声像、
@@ -126,6 +134,12 @@ LE 加载 + 7937 条 fixup 应用
    + "存档变小"时的截断对拍。可复现回归：`pwsh -File port\regress.ps1`。
 6. **逐步源码化（路线 C 主体）**：按 `re/RE_MAP.md` 的模块顺序把机器码替换为 C 源码，
    最终形成可编译 x86-64 的引擎。
+7. **跨平台**：单代码库 + 后端选择（**不用 git 分支**）——抽 `render.h`/`platform.h`/`audio.h`
+   并把 `host.c` 的 `main` 拆成 `host_init/host_frame/host_event/host_shutdown` + 两个入口
+   （`main_win32.c` 消息泵 / `main_sokol.c` 回调）；Windows 走 `platform_win32.c`（VEH），
+   非 Windows 走 `platform_posix.c`（sigaction + mmap + pthread），音频走 **sokol_audio**，
+   先出 **Linux x86-64**，ARM 需完成源码化。
+   分层与实施顺序见 `PROGRESS.md` §13.5/§13.6；sokol 实测见 `§13.1`。
 
 ## 调试手法（可复用）
 
