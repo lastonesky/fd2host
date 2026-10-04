@@ -280,10 +280,21 @@ const char *host_window_shot_path(void)
  * input backend would do. */
 void host_key(uint8_t scan, uint8_t ascii)
 {
-    uint8_t *lm = lowmem();
-    uint16_t tail = (uint16_t)(lm[0x41C] | (lm[0x41D] << 8));
-    uint16_t head = (uint16_t)(lm[0x41A] | (lm[0x41B] << 8));
-    uint16_t next = (uint16_t)(tail + 2);
+    uint8_t *lm;
+    uint16_t tail, head, next;
+
+    /* A game that replaced INT 9 owns the key queue: in the original the
+     * BIOS handler that fills the ring at 0x41E is *not* chained to, so
+     * feeding both paths hands the key over twice (FDPS then walks its menu
+     * twice per press and jumps through a table it has not filled -
+     * PROGRESS.md §18). */
+    if (dos_deliver_key(scan))
+        return;
+
+    lm = lowmem();
+    tail = (uint16_t)(lm[0x41C] | (lm[0x41D] << 8));
+    head = (uint16_t)(lm[0x41A] | (lm[0x41B] << 8));
+    next = (uint16_t)(tail + 2);
 
     if (next >= 0x43E) next = 0x41E;
     if (next == head) return;                 /* buffer full */

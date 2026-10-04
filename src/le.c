@@ -229,27 +229,35 @@ static int apply_fixups(le_image *le, int *applied)
 
             if (type == 0x00) { pos += 1; continue; }
 
-            /* Type 0x02: [02][flags][src:2][obj:1] - 5 bytes, the target is
-             * the object base itself, there is no target-offset field.
-             * FD2 never uses it, FDPS does exactly once, and the previous
-             * "unknown type -> bail out of this page" handling silently threw
-             * away the remaining 987 bytes of records on that page (+140
-             * fixups). The first casualty was a pointer left at 0, which the
-             * game then dereferenced: `mov es,[ebx]` with EBX=0 at 0x565AF's
-             * owner. Verified against the raw file: after this record the
-             * following 0x07 records line up again on their 7-byte stride. */
+            /* Type 0x02: [02][flags][src:2][obj:1] - the source operand is
+             * **16 bits** (LE fixup type 2 = selector/segment), the target is
+             * the object itself with no offset field. FD2 never uses it,
+             * FDPS does exactly once: at 0x565AF, the imm16 of
+             * `mov ax, seg dseg03` / `mov ds, eax` inside its INT 9 handler.
+             * Two earlier mistakes are worth remembering:
+             *   - skipping the record left a pointer at 0 and the game died
+             *     dereferencing it (`mov es,[ebx]`, EBX=0);
+             *   - writing the object base as a full 32-bit word (what this
+             *     used to do) overwrote the two bytes behind the operand and
+             *     turned `8E D8` (mov ds,eax) into `07 00` (pop es; add ah,al)
+             *     - the handler then decoded `pusha`, ate 32 bytes it never
+             *     pushed and crashed in `pop ds` (PROGRESS.md §18).
+             * The value is a *selector*, and in a flat process the only
+             * sensible one is our own flat data selector - which is also what
+             * a real DOS/4GW loader would have handed out for that object. */
             if (type == 0x02) {
+                uint16_t sel;
                 if (pos + 5 > end) { unknown++; break; }
                 srcoff = rd16(rt + pos + 2);
                 tobj   = rt[pos + 4];
                 if (tobj == 0 || tobj > le->object_count) { unknown++; break; }
-                if ((uint32_t)srcoff + 4u > LE_PAGE_SIZE) {
+                if ((uint32_t)srcoff + 2u > LE_PAGE_SIZE) {
                     cross_page++;
                     pos += 5;
                     continue;
                 }
-                *(uint32_t *)(uintptr_t)(page_base + srcoff) =
-                    le->objects[tobj - 1].base;
+                __asm { mov sel, ds }
+                *(uint16_t *)(uintptr_t)(page_base + srcoff) = sel;
                 total++;
                 pos += 5;
                 continue;

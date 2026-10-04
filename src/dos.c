@@ -51,6 +51,20 @@ static unsigned  g_unknown[256];
 static HANDLE    g_child;          /* process started by INT 21h AH=4B       */
 static int       g_child_exit;     /* its exit code, returned by AH=4D        */
 
+/* The game's own keyboard ISR (INT 9), installed with INT 21h AH=25h AL=09h.
+ * Windows never raises hardware interrupts in this process, so a game that
+ * hooks INT 9 itself - FDPS does (sub_56560 -> sub_565A7, which reads port
+ * 0x60 and pushes the make code into its own 10-entry queue) - would wait
+ * forever for a key. dos_deliver_key() queues the scan code and the VEH
+ * injects it as a real interrupt on the next guest instruction boundary.
+ * 0 = not hooked (deliver through the BIOS buffer instead, which is what
+ * FD2 uses). */
+static uint32_t  g_guest_int9;
+static uint8_t   g_kbd_last_sc;    /* what `in al,60h` returns next        */
+static uint32_t  g_isr_lo, g_isr_hi;  /* EIP window of the injected handler  */
+static int       g_isr_log_left;   /* exceptions left to log after a key    */
+static DWORD     g_guest_tid;      /* the thread that executes guest code  */
+
 /* Ring of the most recent *unusual* VEH events (privileged instructions, access
  * violations, stray breakpoints). Ordinary int3 trap sites are excluded - there
  * are millions of those. When the flow goes off the rails this shows which
@@ -649,7 +663,21 @@ static void int21(CONTEXT *c)
     case 0x35:                                  /* get interrupt vector */
         if (g_verbose) log_call(ah == 0x25 ? "INT21 set vector" : "INT21 get vector", c);
         if (ah == 0x35) {
+            /* Deliberately still 0:0 even for INT 9. The game saves this as
+             * "the old vector" and writes it back to uninstall (sub_56588),
+             * and 0 then means "nobody's handler - stop delivering". */
             c->Ebx = 0; c->Eax = 0;
+        } else if ((c->Eax & 0xFF) == 0x09) {
+            /* AH=25 AL=09: the handler is DS:DX with a flat DS (base 0), so
+             * the linear address is the *full* EDX - FDPS loads it with
+             * `mov edx, offset sub_565A7`, i.e. 0x565A7, not a 16-bit DX. */
+            uint32_t h = (uint32_t)c->Edx;
+            if (h != g_guest_int9) {
+                printf("dos: INT 9 vector := 0x%X%s\n", h,
+                       h ? " (game ISR - keys will be delivered there)"
+                         : " (restored to BIOS - keys go to the BDA buffer)");
+            }
+            g_guest_int9 = h;
         }
         set_cf(c, 0);
         break;
@@ -1539,8 +1567,17 @@ static int emulate_priv_instr(CONTEXT *c, const uint8_t *p)
         break;
     case 0x0020: case 0x0021:   /* PIC */
         break;
-    case 0x0060: case 0x0064:   /* keyboard controller */
-        if (port == 0x0064 && p[0] == 0xEC) c->Eax = (c->Eax & 0xFFFFFF00u) | 0x14;
+    case 0x0060: case 0x0061: case 0x0064:   /* keyboard controller */
+        /* IN al,60h is how the game's INT 9 handler reads the scan code
+         * (dos_deliver_key() latches it first); IN al,64h is the status
+         * byte. OUT 60h/61h/64h is the acknowledge dance - a no-op here,
+         * but it has to stay quiet: FDPS's ISR does it on every keystroke. */
+        if (p[0] == 0xEC || p[0] == 0xED || p[0] == 0xE4 || p[0] == 0xE5) {
+            if (port == 0x0060)
+                c->Eax = (c->Eax & 0xFFFFFF00u) | g_kbd_last_sc;
+            else if (port == 0x0064 && p[0] == 0xEC)
+                c->Eax = (c->Eax & 0xFFFFFF00u) | 0x14;
+        }
         break;
     default:
         printf("dos: port %s 0x%04X (ignored) al/ax=%02X\n",
@@ -1735,6 +1772,117 @@ static int emulate_lowmem_string(CONTEXT *c, const uint8_t *start)
     return 1;
 }
 
+/* -------------------------------------------------- guest keyboard ISR ---
+ *
+ * A keystroke reaches a game one of two ways:
+ *
+ *   - the BIOS path (host.c writes the BDA ring at 0x41E, and INT 16h reads
+ *     it) - FD2's intro and menus work like this;
+ *   - the game's *own* INT 9 handler, which it installs with AH=25 AL=09.
+ *     Then the BIOS path is dead in the original too (nobody chains to it),
+ *     and only the handler's private queue is fed. FDPS's title menu reads
+ *     exactly that queue, so without this it never sees a key.
+ *
+ * How it is delivered matters. Running the handler from a host thread with a
+ * hand-made `call`/`iret` frame crashed reliably: the PRIV exceptions the
+ * handler raises itself (sti, in/out) are dispatched differently on a thread
+ * that never runs guest code, and 28 bytes of exception frame stayed on the
+ * stack, so its `pop ds` popped garbage (PROGRESS.md §18). So the key is
+ * queued here and *injected as a real interrupt* by the VEH on the thread
+ * that is executing guest code - push EFLAGS/CS/EIP, point EIP at the
+ * handler - which is exactly what the CPU would have done, and the handler's
+ * own `iret` returns to the instruction that was about to run. */
+static unsigned s_key_log;
+static unsigned s_key_drop;
+static int      s_dumped_handler;
+
+#define KBD_RING 16
+static volatile uint8_t g_kbd_ring[KBD_RING];
+static volatile LONG    g_kbd_w, g_kbd_r;      /* monotonic counters */
+
+/* Queue one keystroke for the game's own INT 9 handler (installed with
+ * INT 21h AH=25h AL=09h). Returns 1 when the game owns the key queue, 0 when
+ * nobody hooked INT 9 and the caller should use the BIOS buffer instead. */
+int dos_deliver_key(uint8_t scan)
+{
+    LONG w;
+
+    if (!g_guest_int9)
+        return 0;                               /* nobody hooked INT 9 */
+    w = g_kbd_w;
+    if (w - g_kbd_r >= KBD_RING) {
+        if (s_key_drop++ < 8)
+            printf("dos: key 0x%02X dropped (guest ISR queue full)\n",
+                   (unsigned)scan);
+        return 1;
+    }
+    g_kbd_ring[w & (KBD_RING - 1)] = scan;
+    g_kbd_w = w + 1;
+    if (s_key_log++ < 16)
+        printf("dos: INT 9 queued scan=0x%02X -> handler 0x%X\n",
+               (unsigned)scan, g_guest_int9);
+    return 1;
+}
+
+/* Called from the VEH just before it resumes guest code: turn a queued scan
+ * code into an interrupt frame on the *guest's* stack. */
+static void inject_int9(CONTEXT *c)
+{
+    LONG r = g_kbd_r;
+    uint32_t isr = g_guest_int9, sp;
+    uint8_t scan;
+
+    if (!isr || r == g_kbd_w)
+        return;
+    /* Only on the thread that actually executes the game: a host thread
+     * (AIL timer callbacks, autokey) would get its own stack treatment from
+     * the exception dispatcher and the handler's pops would misalign - that
+     * is the crash this design replaced. Keys stay queued until the game
+     * thread raises its next exception (it does that constantly: int 21h and
+     * port reads are both exceptions here). */
+    if (!g_guest_tid || GetCurrentThreadId() != g_guest_tid)
+        return;
+    /* Never re-enter the handler itself: injecting while it is still running
+     * restarts it from the top (the return address saved is inside the
+     * handler) and the frames stack up - that is what crashed before. The
+     * next key waits until the handler's `iret` has put EIP back in game
+     * code, exactly like the PIC waiting for IF to be set again. */
+    if (g_isr_lo && c->Eip >= g_isr_lo && c->Eip < g_isr_hi)
+        return;
+    if (!guest_readable((const void *)(uintptr_t)(c->Esp - 12), 12) ||
+        !guest_readable((const void *)(uintptr_t)isr, 4)) {
+        if (s_key_drop++ < 8)
+            printf("dos: cannot inject INT 9 (stack 0x%X or handler 0x%X "
+                   "unusable) - key dropped\n", (unsigned)c->Esp, isr);
+        g_kbd_r = r + 1;
+        return;
+    }
+    scan = g_kbd_ring[r & (KBD_RING - 1)];
+    g_kbd_r = r + 1;
+    g_kbd_last_sc = scan;                        /* `in al,60h` in the ISR */
+
+    sp = c->Esp - 12;                            /* iret pops EIP, CS, EFLAGS */
+    printf("dos: INT 9 injected scan=0x%02X (eip 0x%X -> 0x%X, esp 0x%X "
+           "-> 0x%X)\n", (unsigned)scan, (unsigned)c->Eip, isr,
+           (unsigned)c->Esp, (unsigned)sp);
+    *(uint32_t *)(uintptr_t)(sp)     = c->Eip;
+    *(uint32_t *)(uintptr_t)(sp + 4) = c->SegCs;
+    *(uint32_t *)(uintptr_t)(sp + 8) = c->EFlags;
+    c->Esp = sp;
+    c->Eip = isr;
+    g_isr_lo = isr;
+    g_isr_hi = isr + 0x100;
+    g_isr_log_left = 12;                        /* a few faults for the record */
+    if (!s_dumped_handler) {                    /* one-shot: is the code intact? */
+        int k;
+        s_dumped_handler = 1;
+        printf("isr: handler bytes: ");
+        for (k = 0; k < 24; k++)
+            printf("%02X ", ((const uint8_t *)(uintptr_t)isr)[k]);
+        printf("\n");
+    }
+}
+
 /* Minimal decoder for the forms the DOS/4GW startup code uses to reach PSP and
  * BIOS data through register-indirect addressing such as `mov cl,es:[edi-1]`.
  * Those cannot be fixed by rewriting an immediate, so the access is executed
@@ -1802,6 +1950,9 @@ static void dispatch_swint(CONTEXT *c, uint8_t vec, uint32_t len)
 {
     DWORD addr = (DWORD)(uintptr_t)c->Eip;
 
+    if (!g_guest_tid)
+        g_guest_tid = GetCurrentThreadId();   /* the game thread */
+
     g_last_trap_eip = addr;
     g_int_sites++;
     trap_note(vec, addr, c);
@@ -1840,6 +1991,18 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
     EXCEPTION_RECORD *er = ep->ExceptionRecord;
     CONTEXT *c = ep->ContextRecord;
 
+    /* Everything that happens for a while after an INT 9 injection: the
+     * reported EIP is part of the evidence, so do not filter on it. */
+    if (g_isr_log_left > 0) {
+        const uint8_t *q = (const uint8_t *)(uintptr_t)c->Eip;
+        g_isr_log_left--;
+        printf("isr: evt code=%08lX eip=%08X esp=%08X eax=%08X ds=%04X "
+               "bytes=%02X %02X\n",
+               (unsigned long)er->ExceptionCode, (unsigned)c->Eip,
+               (unsigned)c->Esp, (unsigned)c->Eax, (unsigned)c->SegDs,
+               guest_readable(q, 2) ? q[0] : 0, guest_readable(q + 1, 1) ? q[1] : 0);
+    }
+
     /* A software interrupt is a fault whose EIP points *at* the `CD` byte
      * (measured by probe4.c: EXCEPTION_ACCESS_VIOLATION for every vector,
      * EXCEPTION_BREAKPOINT for int 3). Take it before the ring recording and
@@ -1862,6 +2025,7 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
                 }
                 if (g_trace_mode && g_trace_left > 0)
                     c->EFlags |= 0x100u;      /* start single-stepping */
+                inject_int9(c);                /* a key may have arrived */
                 return EXCEPTION_CONTINUE_EXECUTION;
             }
         }
@@ -1878,10 +2042,10 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
     if (er->ExceptionCode == EXCEPTION_SINGLE_STEP) {
         if (g_trace_left > 0) {
             g_trace_left--;
-            printf("t %08X eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X ebp=%08X\n",
-                   (unsigned)c->Eip, (unsigned)c->Eax, (unsigned)c->Ebx,
-                   (unsigned)c->Ecx, (unsigned)c->Edx, (unsigned)c->Esi,
-                   (unsigned)c->Edi, (unsigned)c->Ebp);
+            printf("t %08X esp=%08X eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X ebp=%08X\n",
+                   (unsigned)c->Eip, (unsigned)c->Esp, (unsigned)c->Eax,
+                   (unsigned)c->Ebx, (unsigned)c->Ecx, (unsigned)c->Edx,
+                   (unsigned)c->Esi, (unsigned)c->Edi, (unsigned)c->Ebp);
             c->EFlags |= 0x100u;                /* keep single-stepping */
         } else {
             c->EFlags &= ~0x100u;               /* stop tracing */
@@ -1897,6 +2061,7 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
         int len = emulate_priv_instr(c, p);
         if (len) {
             c->Eip += len;
+            inject_int9(c);                    /* port ops are guest boundaries too */
             return EXCEPTION_CONTINUE_EXECUTION;
         }
         printf("cpu: unimplemented privileged instruction %02X at 0x%X\n",
@@ -1961,6 +2126,9 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
                     if (g_trace_left > 0)
                         printf("dos: seg load reg 0x%04X -> flat 0x%04X at 0x%X\n",
                                (unsigned)(*r & 0xFFFF), flat, (unsigned)c->Eip);
+                    if (g_isr_lo && c->Eip >= g_isr_lo && c->Eip < g_isr_hi)
+                        printf("isr: segsub eip=%08X esp=%08X modrm=%02X\n",
+                               (unsigned)c->Eip, (unsigned)c->Esp, modrm);
                     *r = (*r & 0xFFFF0000u) | flat;
                     return EXCEPTION_CONTINUE_EXECUTION;
                 }
@@ -1996,11 +2164,15 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
                 }
             }
             /* (3) register-indirect access to low memory: emulate the load */
-            if (emulate_lowmem_access(c))
+            if (emulate_lowmem_access(c)) {
+                inject_int9(c);
                 return EXCEPTION_CONTINUE_EXECUTION;
+            }
             /* (4) string instructions over low memory (PSP tail scan, ...) */
-            if (emulate_lowmem_string(c, p))
+            if (emulate_lowmem_string(c, p)) {
+                inject_int9(c);
                 return EXCEPTION_CONTINUE_EXECUTION;
+            }
             printf("cpu: unmatched low-memory access: fault=0x%zX eip=0x%X "
                    "bytes=%02X %02X %02X %02X %02X %02X %02X %02X "
                    "esi=%08X edi=%08X ecx=%08X\n",

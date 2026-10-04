@@ -55,6 +55,18 @@ void dos_set_cmdtail(const char *tail);
 /* Kill a process started by INT 21h AH=4B (watchdog / shutdown path). */
 void dos_terminate_child(void);
 
+/* One keystroke, both delivery paths:
+ *   - always: the BIOS ring buffer at 0x41E (INT 16h / BDA polling games);
+ *   - additionally, when the game installed its own INT 9 handler with
+ *     INT 21h AH=25h AL=09h: queue the scan code; the VEH injects it as a
+ *     real interrupt frame on the guest thread at the next instruction
+ *     boundary, with `in al,60h` returning `scan`. Best effort, like
+ *     hardware: keys are dropped when the queue is full.
+ * Returns 1 when the game's own handler owns the key queue (the BIOS ring
+ * must then be left alone - the original does not chain to the BIOS), 0 when
+ * the caller should fill the BIOS ring instead. */
+int dos_deliver_key(uint8_t scan);
+
 /* VGA DAC palette captured from the game's port writes (0x3C8/0x3C9). */
 extern uint8_t  dos_palette[256 * 3];
 extern volatile int dos_palette_dirty;
