@@ -38,6 +38,13 @@ Windows MIDI（Miles AIL 的 16 个入口已被宿主实现替换，见 §11）�
   标题不再卡第一帧；同轮补齐 FDPS 用到而 FD2 没用到的 4 个样本入口、采样句柄池 4→8。
   FD2 回归 **8/8 PASS**。**下一道关口是 `INT 21h AH=4B`（EXEC，spawn `FD.EXE`）**。详见 **§15**。
 
+- **第 16 轮（2026-10-05）：`INT 21h AH=4B`（EXEC）打通** —— 宿主把 FDPS 标题流程的
+  `spawnlp(0,".\FD.EXE",…)` 实现成“**再拉一个 `fd2host.exe` 并等它退出**”，命令行尾巴按
+  DOS 的 `[len][chars][0x0D]` 读进子进程 PSP:0x80，另补 `AH=4D`（取子进程退出码）、
+  `--log=`（子进程单独日志，否则会截掉父日志）与**低内存串指令模拟**（`rep scasb` 扫尾巴）。
+  实测：子进程跑起 `FD.EXE`、设 13h 模式、尾巴逐字节正确；**FD2 回归 8/8 PASS**。
+  **新卡点：`FD1.Aud`/`FD1.Vid` 在整个 FDCollection 都不存在 ⇒ FD.EXE `exit(8)`**（空文件也不行）。详见 **§16**。
+
 ⇒ 路线 C 的 POC 目标"**窗口中看到游戏画面**"**已达成**。下一步见 §7。
 逆向侧：IDA Pro 9.5 + ida MCP 环境已建好，测绘结果在 `port/re/RE_MAP.md`（见 §10）。
 
@@ -361,13 +368,12 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
 7. ~~**文件写入 / 存档路径**~~ **平台侧已补完**（§12）：`AH=3C/41` + `AH=40 CX=0` 截断，
    `regress.ps1` 回归 8/8 PASS。**剩余**：“新游戏 → 首次存档 → `FD2.SAV` 从无到有”与
    “存档变小后的截断对拍”两条还没实测；`AH=49/4A` 仍是空操作（账本只增不减）。
-8. **FDPS（炎龙外传）跑起来**（§14 首跑、§15 已过 AIL 定时器关）：
-   标题动画时钟已 25 Hz 走起来（实测 `fire #100 at +4000 ms`），画面不再卡第一帧。
-   **下一道关口 = `INT 21h AH=4B`（EXEC）**：标题流程 `spawnlp(0,"<dir>FD.EXE",…)` 要把真游戏
-   `FD.EXE` 拉起来（§15.6，`re/fdps_30CB0_spawn.c`）；未实现时日志打印
-   `UNHANDLED INT21 AH=4B exec .\fd.exe`，游戏落回标题 → spawn 死循环。
-   做法：宿主把 AH=4B 实现为“再拉一个 `fd2host.exe --exe <path> --gamedir <cwd>` 并等待”，
-   命令行尾巴写进 PSP:0x80。换新游戏前先体检：`re/preflight.py`、`re/fixup_scan.py`。
+8. **FDPS（炎龙外传）跑起来**（§14 首跑、§15 过 AIL 定时器关、**§16 过 EXEC 关**）：
+   标题动画 25 Hz 走起来，`AH=4B` 能真开子进程把 `FD.EXE` 拉起来（子进程独立 `host.<pid>.log`）。
+   **当前卡点 = `FD1.Aud` / `FD1.Vid` 两个文件整个 FDCollection 都没有** ⇒ FD.EXE `exit(8)`
+   （空文件也 `exit(8)`，内容有格式）。入口：FDPS 的格式串 `'%s\\%s.Vid'`/`'%s\\%s.Aud'`（`0x61EE0`/`0x61EEC`）。
+   同时 **FD.EXE 还没有自己的 AIL 表**（子进程跑原版 Miles ⇒ 动画时钟会再次卡死），
+   用 §15.2 同一套手法建表；先 `python re/preflight.py <FD.EXE>` 体检。
 
 ---
 
@@ -584,6 +590,29 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     游戏用 `status == 4` 找空闲句柄（`sub_303C0`/`sub_30790`）并判断“播完了”（`sub_304D0`），
     原版写入点 `mov dword [h+4], 1/2/4/8`（`re/fdps_digcore_*.c`：1=播中、2=循环中、4=空闲、8=停止）。
     回 `0` 或其它值会让游戏认为句柄全忙 ⇒ 8 个句柄用完后**再也不播音效**。
+
+45. **DOS 的命令尾巴不是 C 字符串**（第 16 轮）：`INT 21h AH=4B` 参数块里那个指针指向的是
+    **`[len][chars][0x0D]`**（PSP 格式），不是 NUL 结尾的串。按 C 串读会把长度字节和后面的
+    栈垃圾一起带走（实测读到 125 字节垃圾，再原样写进子进程 PSP:0x80）。
+    正确读法：`n = p[0]; if (p[1+n] == 0x0D) tail = p[1..n]`（`guest_cmdtail()`）。
+
+46. **低内存模拟要支持串指令**（第 16 轮）：CRT 解析命令尾巴用 `mov cl,es:[di-1]` + **`rep scasb`**。
+    前者 `emulate_lowmem_access()` 已能单步跳过，后者一个指令要碰几十次低内存，
+    VEH 报 `unmatched low-memory access` 就直接崩（FD.EXE 子进程首发）。新增
+    `emulate_lowmem_string()`：把 `A4..AF`（movs/stos/lods/cmps/scas）整条在宿主侧跑完，
+    按 ZF/ECX/方向位维护语义再跳过指令。**尾巴为空时永远碰不到这段**（FD2 就是），
+    所以“FD2 没事”不代表新游戏没事。
+
+47. **子进程会把父进程的 `host.log` 截掉**（第 16 轮）：`freopen(log,"w",stdout)` 对同一个文件
+    再开一次 = 把父日志清空。所以新增 `--log=<path>`，`AH=4B` 给每个子进程发
+    `host.<pid>.log`；`--log` 必须在**重定向之前**扫描 argv（参数归一化发生在重定向之后，
+    两种写法都得手动认）。
+
+48. **`0x10000` 有可能被进程初始化阶段的映射抢走（偶发）**（第 16 轮，待跟踪）：
+    子进程一次 `le: cannot reserve object region @0x10000: 487` + `0x10000 is COMMIT type=MAPPED
+    prot=0x2 region=0x3000`，重跑就好 ⇒ 是某个 DLL 在 DllMain 阶段建的只读文件映射碰上了
+    低址 ASLR。预留发生在 `fd2_entry`（DllMain 之后、CRT 之前），抢不回来；
+    现在失败路径会用 `K32GetMappedFileNameA` 打出**是谁**，下次复现直接知道。
 
 ---
 
@@ -1236,3 +1265,64 @@ dos: UNHANDLED INT21 AH=4B exec .\fd.exe (al=00 bx=61528)
    SVID/SAUD 参数；父进程退出前要处理好 stdout/host.log —— 子进程会**覆盖**同一个 `host.log`
    （`freopen(...,"w")`），需要改成追加或按 PID 分文件，否则父进程日志被冲掉。
 3. 现成的 AH=4B 诊断日志已经会打印路径与 `al/bx`，够定位参数块布局（下一步先反编译 `__dospawn`）。
+
+---
+
+## 16. 第 16 轮：`INT 21h AH=4B`（EXEC）打通 —— FDPS 真的把 FD.EXE 拉起来了（2026-10-05）
+
+**目标**（= §15.6）：让 FDPS 标题流程的 `spawnlp(0, ".\FD.EXE", …)` 真的开得出进程，
+否则 FDPS.EXE 永远在"标题 → spawn 失败 → 重新 init 音频"里打转，游戏本体 `FD.EXE` 一步都走不了。
+
+### 16.1 约定与实现
+
+| 项 | 做法 |
+|---|---|
+| 子进程是谁 | **再拉一个 `fd2host.exe`**：`--exe=<path> --gamedir=<父的 cwd> --log=<host.<pid>.log> --cmdtail=<尾巴> [--exit-after=<剩余秒>]`。不可能同进程加载第二个 LE（obj0 `0x10000` 已被父进程占用），而"父等子"正是 DOS EXEC 的语义 |
+| 参数块布局 | `__dospawn`（`re/fdps_dospawn.c`）写的是 **offset:selector 成对**（本进程选择子基址为 0 ⇒ offset 即线性地址）：`+0 = env`、`+6 = 命令尾巴`；尾巴是 **`[len][chars][0x0D]`**（§8-45，按 C 串读会拖出 125 字节栈垃圾） |
+| 等待语义 | `AL=0`(P_WAIT) → `WaitForSingleObject` + `GetExitCodeProcess`；`AL=1/3` 不等待 |
+| `AH=4D` | 返回子进程退出码（`__dospawn` 在 exec 后紧接着调它取返回值） |
+| 日志 | 新增 `--log=<path>`，AH=4B 给子进程发 `host.<pid>.log`（否则 `freopen("w")` 会清空父日志，§8-47）；父进程 watchdog 退出前先 `dos_terminate_child()` |
+| PSP:0x80 | 新增 `--cmdtail=` → `dos_set_cmdtail()` 写 `[len][chars][0x0D]`；FD.EXE 靠它拿 `.\FD1.Vid` / `.\FD1.Aud` |
+| 低内存串指令 | 新增 `emulate_lowmem_string()`：`A4..AF`（movs/stos/lods/cmps/scas，含 `rep/repe/repne`）整条在宿主侧跑完再跳过指令（§8-46） |
+| 子进程限时 | `host_exit_after_remaining()` 把父进程 `--exit-after` 的**剩余秒数**传下去，避免父进程被看门狗杀掉留下孤儿 |
+
+### 16.2 实测判据
+
+父进程 `build/host.log`：
+
+```
+dos: INT 21h AH=4B exec al=0 '.\fd.exe' tail='.\FD1.Vid .\FD1.Aud'
+dos:   child: "E:\FD2\port\build\fd2host.exe" --exe="...\fd.exe" --gamedir="E:\Games\FDCollection\Game\FDPS"
+                 --log="...\host.31020.log" --cmdtail=".\FD1.Vid .\FD1.Aud" --exit-after=37
+dos:   child exited with 0
+```
+
+子进程 `build/host.31020.log`：
+
+```
+dos: PSP:0x80 command tail (19 bytes) = '.\FD1.Vid .\FD1.Aud'
+dos: lowmem string rep AE, 18 left (si=70000 di=82) at 0x1244C   ← REPE SCASB 跳过尾巴前导空格
+dos: lowmem string rep A4, 0 left (si=94 di=32C63) at 0x12460    ← movsb 拷出 argv
+...
+ail: 'fd.exe' has no AIL table - skipping the hard-coded patches
+dos: INT10 set video mode 0x13
+dos: open '.\FD1.Aud' -> 00000338 (0)
+dos: INT 21h AH=4Ch terminate, code=8
+```
+
+- 尾巴是 19 字节、内容逐字节正确；两条串指令模拟都是宿主侧一次跑完的。
+- **FD2 未被破坏**：`regress.ps1` **8/8 PASS**（`FD2.TMP = 207360` = 原件同尺寸）。
+- 实验环境：`build/fdps_sbx/`（游戏目录副本，**没动 `E:\Games` 下的原件**）。
+
+### 16.3 当前卡点与下一步
+
+1. **`FD1.Aud` / `FD1.Vid` 这两个文件整个 FDCollection 都不存在**：FD.EXE 读不到 → `exit(8)`；
+   沙箱里给**空文件**照样 `exit(8)` ⇒ 文件内容有格式要求。反查起点：
+   FDPS.EXE 的格式串 `'%s\%s.Vid'` / `'%s\%s.Aud'`（`0x61EE0` / `0x61EEC`），
+   名字来自 `sprintf(v10, "FD%d", v27 + 1)`（`re/fdps_30CB0_spawn.c`）⇒ `FD1` / `FD2`。
+   要么逆向 `FD.EXE` 看它怎么解析，要么找到生成它们的工具（同目录有 `SETSOUND.EXE`）。
+2. **FD.EXE 还没有自己的 AIL 表**：子日志 `ail: 'fd.exe' has no AIL table` ⇒ 它跑的是原版 Miles AIL，
+   FDPS 已经修好的"定时器不走 → 动画卡住"在子进程里会重现。下一步用 §15.2 同一套手法
+   （trace 串 + 全量 `call` 扫描）给 FD.EXE 建表；先 `python re/preflight.py <FD.EXE>` 体检。
+3. **`0x10000` 偶发被抢**（§8-48）：一次子进程启动失败（487，`type=MAPPED region=0x3000`），
+   重跑即好；失败路径现在会用 `K32GetMappedFileNameA` 打出**映射的是哪个文件**，复现即可定位。

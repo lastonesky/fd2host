@@ -46,6 +46,8 @@ Start-Process port\build\fd2host.exe -ArgumentList `
 **所有带值的参数都同时支持 `--opt value` 与 `--opt=value` 两种写法**（`host_init()` 统一归一化，
 另一种写法不再静默回退到默认值，见 `PROGRESS.md` §8-32/§8-33）、
 `--screenshot=<file.bmp>`、`--shot-frame=<n>`（在第 n 帧导出实际送显的 RGB 缓冲，默认 300）；
+`--cmdtail=<尾巴>`（写进 PSP:0x80 的命令行，`INT 21h AH=4B` 拉起子进程时自动传递）、
+`--log=<路径>`（换日志文件；子进程各用各的 `host.<pid>.log`，否则会截掉父日志，见 `PROGRESS.md` §8-47）；
 音频：`--ail-dump=<目录>`（导出音效样本与 XMIDI 原始数据）、`--ail-rate=<Hz>`、`--ail-bits=<8|16>`、
 `--ail-stereo`、`--midi-rate=<ticks/s>`（默认 0 = 按序列 tempo 换算）、
 `--midi-backend=<synth|winmidi>`（默认 `synth` = 自带合成器）、`--midi-test`（播测试音）、
@@ -111,7 +113,9 @@ LE 加载 + 7937 条 fixup 应用
 → 炎龙外传 FDPS 首跑：LE/fixup/低内存自动挪位/启动链/设 13h 模式/调色板/首帧  ✅ 120 s 无崩溃
 → 第 15 轮：FDPS 专属 90 条 AIL 入口表 + 宿主定时器线程  ✅ 动画时钟精确 25 Hz，标题不再卡首帧
    └ 实测 `ail: timer fire #100 at +4000 ms`；帧 700 = 82 色非黑；FD2 回归 8/8 PASS（PROGRESS §15）
-   └ 下一道关口：`INT 21h AH=4B` —— 标题 `spawnlp(0,".\FD.EXE",…)` 把真游戏拉起来，未实现则标题↔spawn 死循环
+→ 第 16 轮：`INT 21h AH=4B`(EXEC)  ✅ 真开子进程拉起 FD.EXE，尾巴 19 字节逐字节正确（PROGRESS §16）
+   └ 新坑：DOS 尾巴是 `[len][chars][0x0D]` 不是 C 串；`rep scasb` 扫低内存需宿主整条模拟
+   └ 当前卡点：`FD1.Aud`/`FD1.Vid` 全集都不存在 ⇒ FD.EXE `exit(8)`（空文件也不行）
 ```
 
 ## 当前状态与下一步
@@ -149,9 +153,10 @@ LE 加载 + 7937 条 fixup 应用
    `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入
    `platform_win32.c`/`platform_posix.c`，在那之前 Win32 调用仍留在 `dos.c`/`ail.c` 原处）。
    先出 **Linux x86-64**，ARM 需完成源码化。顺序见 `PROGRESS.md` §13.5/§13.6；sokol 实测见 `§13.1`。
-8. **FDPS（炎龙外传）跑起来**：`--exe` 能加载它，标题动画时钟已 25 Hz 走起来（`§14.3` 首跑、
-   `§15` 过 AIL 定时器关）。**下一道关口 = `INT 21h AH=4B`（EXEC）**：标题流程要 spawn 真游戏
-   `FD.EXE`，未实现时游戏落回标题形成死循环（日志 `UNHANDLED INT21 AH=4B exec .\fd.exe`，`§15.6`）。
+8. **FDPS（炎龙外传）跑起来**：`--exe` 能加载它；标题动画 25 Hz（`§14.3` 首跑、`§15` AIL 定时器）；
+   **`INT 21h AH=4B` 已实现**（`§16`）—— 父进程真的开子进程把 `FD.EXE` 拉起来、等它退出、取回退出码。
+   **当前卡点**：`FD1.Aud`/`FD1.Vid` 两个配置文件整个合集都不存在 ⇒ FD.EXE `exit(8)`；
+   且 FD.EXE 还没有自己的 AIL 表（子进程会跑原版 Miles ⇒ 动画再次卡死）。
    换新游戏前先体检：`re/preflight.py`（LE/冲突/AIL 特征）、`re/fixup_scan.py`（fixup 语法）；
    FDPS 的 IDA 库已存 `E:\Games\FDCollection\Game\FDPS\FDPS.EXE.i64`（开库即用，不必手动加载）。
 

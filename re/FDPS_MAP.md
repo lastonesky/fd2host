@@ -156,3 +156,25 @@
 | `fdps_ail_AIL_*.c`、`fdps_core_*.c`、`fdps_timer_core_*.c`、`fdps_digcore_*.c` | AIL 包装/核心/ISR/驱动 反编译存档 |
 | `fdps_*.c`（`30CB0_spawn`、`30270`、`30520`、`30540`、`2A280`、`3C3A6`、`spawnlp`…） | 关键游戏函数反编译存档 |
 | `preflight.py` / `fixup_scan.py` | 换游戏前的静态体检（不运行） |
+
+---
+
+## 7. 宿主侧的 EXEC 实现（第 16 轮，`PROGRESS.md` §16）
+
+`sub_30CB0` → `spawnlp` → `__dospawn` → `int 21h AH=4B`。宿主的落地方式：
+
+| 项 | 实现 |
+|---|---|
+| 子进程 | 再拉一个 `fd2host.exe --exe=<FD.EXE> --gamedir=<父 cwd> --log=<host.<pid>.log> --cmdtail=<尾巴> --exit-after=<剩余秒>`，父进程 `WaitForSingleObject`（`AL=0`） |
+| 参数块（`ES:BX` = `0x61528`） | `__dospawn` 写的是 **offset:selector 成对**（选择子基址 0 ⇒ offset 即线性地址）：`+0 env`、`+6 命令尾巴`、`+12/+18 FCB`、`+32 ESP/+36 SS/+38 DS` |
+| 命令尾巴 | 指针指向 **`[len][chars][0x0D]`**（不是 C 串！）→ `guest_cmdtail()`；再由 `dos_set_cmdtail()` 写进子进程 **PSP:0x80** |
+| 低内存访问 | CRT 解析尾巴用 `mov cl,es:[di-1]`（`emulate_lowmem_access`）+ **`rep scasb`**（`emulate_lowmem_string`，`A4..AF` 全支持）；实测日志 `lowmem string rep AE, 18 left` = 跳过前导空格 |
+| `AH=4D` | 回子进程退出码（`__dospawn` 紧接着调它） |
+
+**FD.EXE 的 LE 事实**（实测，`preflight.py` 可复现）：2 对象 24 页，obj0 `0x10000` vsize `0x148A9`、
+obj1 `0x30000` vsize `0x3C50`，入口 `start = 0x12280`，fixup 2458 条 `bad=0`。
+
+**当前卡点**：FD.EXE 起来后 `INT10 set video mode 0x13`，紧接着 `open '.\FD1.Aud'`，
+文件不存在 → `AH=4Ch code=8`；沙箱里放**空文件**同样 `code=8` ⇒ 内容有格式要求。
+`FD1.Vid`/`FD1.Aud` **整个 FDCollection 都没有**（`SETSOUND.EXE` 同目录，怀疑是它生成）。
+另：`ail: 'fd.exe' has no AIL table` ⇒ FD.EXE 还需要自己的一张表（用 §3 的手法）。
