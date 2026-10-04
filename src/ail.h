@@ -19,6 +19,11 @@
  */
 void ail_install(uint8_t *obj0_base, const char *dump_dir);
 
+/* Same, for Ñ×ÁúÍâ´« FDPS.EXE: its own AIL build, 90 entry points at
+ * 0x3D488..0x41FFE (re/fdps_ail_patchset.csv). Picking the wrong table writes
+ * five bytes into unrelated code, so the caller selects by executable name. */
+void ail_install_fdps(uint8_t *obj0_base, const char *dump_dir);
+
 /* Override the sample format used for waveOut. The game never calls
  * AIL_set_sample_type / AIL_set_sample_playback_rate, so AIL's defaults (8-bit
  * mono, 11025 Hz) are assumed; these knobs exist so the assumption can be

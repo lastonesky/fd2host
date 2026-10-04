@@ -504,23 +504,26 @@ int host_init(int argc, char **argv)
     xmidi_set_backend(g_midi_backend);
     synth_set_bank_path(g_gm_bank);
     synth_set_dump_path(g_midi_dump);
-    /* The 52 AIL patch addresses are *FD2's* layout (re/RE_MAP.md §3). On any
-     * other build they point into unrelated code and would corrupt it, so the
-     * patch is gated: auto mode only applies it when the target really is
-     * FD2.EXE. --ail=fd2 forces it, --ail=none disables it. */
+    /* The patch addresses are per-build: FD2's 52 and FDPS's 90 are two
+     * different AIL linkings (re/RE_MAP.md §3 vs re/fdps_ail_patchset.csv).
+     * On an unknown build they would point into unrelated code and corrupt it,
+     * so the patch is gated: auto mode only patches a build we know, --ail=fd2
+     * forces FD2's table, --ail=none disables patching. */
     if (g_ail_mode == 2) {
         printf("ail: patching disabled (--ail=none)\n");
     } else {
         const char *bn = strrchr(exe, '\\');
-        int is_fd2;
         bn = bn ? bn + 1 : exe;
-        is_fd2 = _stricmp(bn, "FD2.EXE") == 0;
-        if (g_ail_mode == 1 || is_fd2)
+        if (g_ail_mode == 1 || _stricmp(bn, "FD2.EXE") == 0)
             ail_install((uint8_t *)(uintptr_t)g_le.objects[0].base, g_ail_dump_dir);
-        else
-            printf("ail: '%s' is not FD2 - skipping the 52 hard-coded AIL "
-                   "patches (original Miles code runs; --ail=fd2 forces them)\n",
-                   bn);
+        else if (_stricmp(bn, "FDPS.EXE") == 0)
+            ail_install_fdps((uint8_t *)(uintptr_t)g_le.objects[0].base,
+                             g_ail_dump_dir);
+        else {
+            printf("ail: '%s' has no AIL table - skipping the hard-coded "
+                   "patches (original Miles code runs; --ail=fd2 forces "
+                   "FD2's table)\n", bn);
+        }
     }
 
     return 0;

@@ -873,6 +873,23 @@ static void int21(CONTEXT *c)
         break;
     }
 
+    case 0x4B: {                               /* exec */
+        /* FDPS reaches this right after its own AIL_shutdown (the title flow
+         * spawning something - FD.EXE / SETSOUND.EXE / itself). Not
+         * implemented: log the path so the next round knows what it wants. */
+        const char *path = (const char *)(uintptr_t)c->Edx;
+        MEMORY_BASIC_INFORMATION mbi;
+        const char *shown = "<unreadable>";
+        if (path && VirtualQuery(path, &mbi, sizeof mbi) == sizeof mbi &&
+            mbi.State == MEM_COMMIT)
+            shown = path;
+        printf("dos: UNHANDLED INT21 AH=4B exec %.80s (al=%02X bx=%X)\n",
+               shown, (unsigned)(c->Eax & 0xFF), (unsigned)c->Ebx);
+        g_unknown[0x21]++;
+        set_cf(c, 1);
+        break;
+    }
+
     default:
         if (g_unknown[0x21] < 40) {
             printf("dos: UNHANDLED INT21 AH=%02X (cx=%X dx=%X si=%X di=%X)\n",

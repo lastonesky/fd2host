@@ -10,7 +10,7 @@
  *
  * How it is replaced
  * ------------------
- * IDA shows the game calls only 16 AIL entry points (port/re/RE_MAP.md §3):
+ * IDA shows the game calls only 16 AIL entry points (port/re/RE_MAP.md ��3):
  *
  *     AIL_startup, AIL_shutdown,
  *     AIL_install_DIG_INI, AIL_install_MDI_INI,
@@ -42,7 +42,8 @@
 #include "xmidi.h"
 
 #define AIL_OBJ0_BASE    0x00010000u
-#define AIL_MAX_SAMPLES  4
+/* FDPS asks for 8 sample handles in one go (sub_30270 loops 8 times), FD2 for 2. */
+#define AIL_MAX_SAMPLES  8
 #define AIL_MAX_SEQS     4
 
 /* ------------------------------------------------------------- state ----- */
@@ -56,6 +57,8 @@ typedef struct {
     int32_t    pan;
     int32_t    type;
     uint32_t   rate;          /* playback rate (AIL default unless changed) */
+    int        channels;      /* from AIL_set_sample_type (FDPS sets it)     */
+    int        bits;
     int32_t    playing;
     int        dumped;        /* sample bytes already written to dump_dir */
     HWAVEOUT   dev;           /* opened lazily on the first play            */
@@ -81,6 +84,301 @@ static int         g_stereo  = 0;
 static char        g_dump_dir[MAX_PATH];
 static int         g_dump_seq;
 static int         g_installed;
+
+/* ------------------------------------------------------------ AIL timers ---
+ *
+ * AIL's timer API is backed by a real-mode ISR that reprograms the PIT and
+ * fires guest callbacks from interrupt context. None of that exists here, so
+ * the whole subsystem is replaced by one host thread that ticks every 1 ms and
+ * invokes the guest callback directly (it is an ordinary near function -
+ * FDPS's is `inc dword_69D64; call rand; ret` - and needs no game registers).
+ *
+ * Semantics copied from FDPS's own AIL (re/fdps_ail_*.c, re/fdps_timer_core_*.c):
+ *
+ *   - 15 slots, the handle *is* the byte offset into the tables (0,4,8,...),
+ *     -1 means "no such timer"; AIL_register_timer returns -1 when full.
+ *   - slot state: 0 free, 1 allocated, 2 running (start: 1->2, stop: 2->1).
+ *   - AIL_set_timer_frequency(hz) is sugar for period = 1000000 / hz.
+ *   - the ISR accumulates elapsed time per running timer and drains the
+ *     pending count with `while (pend) { --pend; cb(user); }`, so a stalled
+ *     host catches up rather than skipping ticks (capped here at
+ *     AIL_TIMER_MAXPEND so a long stall cannot spin the game clock forward).
+ */
+
+#define AIL_MAX_TIMERS     15
+#define AIL_TIMER_MAXPEND  8
+#define AIL_TIMER_TICK_US  1000          /* host thread sleep granularity */
+
+typedef void (*ail_timer_cb)(uint32_t user);
+
+typedef struct {
+    int          used;        /* 0 free / 1 allocated+stopped / 2 running */
+    ail_timer_cb cb;
+    uint32_t     user;
+    uint32_t     period_us;
+    uint32_t     acc_us;
+    uint32_t     pend;
+} ail_timer;
+
+static ail_timer       g_timers[AIL_MAX_TIMERS];
+static CRITICAL_SECTION g_timer_cs;
+static int              g_timer_cs_ready;
+static HANDLE           g_timer_thread;
+static volatile LONG    g_timer_run;
+static volatile LONG    g_timer_fires;
+static DWORD            g_timer_t0;
+static int              g_timer_log;
+static int              g_timer_fired_logged;
+
+static void timer_lock(void)
+{
+    if (!g_timer_cs_ready) {           /* ail_install_* runs before the game */
+        InitializeCriticalSection(&g_timer_cs);
+        g_timer_cs_ready = 1;
+    }
+    EnterCriticalSection(&g_timer_cs);
+}
+
+static void timer_unlock(void)
+{
+    LeaveCriticalSection(&g_timer_cs);
+}
+
+/* Handles are byte offsets, exactly like AIL's; -1 and misaligned handles are
+ * ignored the way the original does (it tests `h != -1` then indexes). */
+static ail_timer *timer_at(int32_t h)
+{
+    if (h < 0 || h >= AIL_MAX_TIMERS * 4 || (h & 3))
+        return NULL;
+    return &g_timers[h >> 2];
+}
+
+static void timer_log(const char *what, int32_t h)
+{
+    if (g_timer_log++ > 24)
+        return;
+    printf("ail: %s(h=%d)\n", what, (int)h);
+}
+
+struct ail_fire {
+    ail_timer_cb cb;
+    uint32_t     user;
+    int          n;
+};
+
+static DWORD WINAPI ail_timer_thread(LPVOID arg)
+{
+    LARGE_INTEGER fq, last, now;
+    struct ail_fire batch[AIL_MAX_TIMERS];
+    (void)arg;
+
+    QueryPerformanceFrequency(&fq);
+    QueryPerformanceCounter(&last);
+    g_timer_t0 = GetTickCount();
+    while (InterlockedCompareExchange(&g_timer_run, 1, 1) == 1) {
+        uint32_t us;
+        int i, nb = 0, j, k;
+
+        Sleep(AIL_TIMER_TICK_US / 1000);
+        QueryPerformanceFrequency(&fq);
+        QueryPerformanceCounter(&now);
+        us = (uint32_t)(((now.QuadPart - last.QuadPart) * 1000000) / fq.QuadPart);
+        last = now;
+        if (us > 250000)                /* clamp a long stall (breakpoint, hitch) */
+            us = 250000;
+
+        timer_lock();
+        for (i = 0; i < AIL_MAX_TIMERS; i++) {
+            ail_timer *t = &g_timers[i];
+            if (t->used != 2 || !t->period_us)
+                continue;
+            t->acc_us += us;
+            while (t->acc_us >= t->period_us) {
+                t->acc_us -= t->period_us;
+                if (t->pend < AIL_TIMER_MAXPEND)
+                    t->pend++;
+                else
+                    t->acc_us = 0;      /* give up catching up */
+            }
+            if (t->pend) {
+                batch[nb].cb = t->cb;
+                batch[nb].user = t->user;
+                batch[nb].n = (int)t->pend;
+                t->pend = 0;
+                nb++;
+            }
+        }
+        timer_unlock();
+
+        /* Callbacks run outside the lock: guest code may call straight back
+         * into AIL (register/stop/release) and must not deadlock. */
+        for (j = 0; j < nb; j++) {
+            LONG n = 0;
+            for (k = 0; k < batch[j].n; k++) {
+                batch[j].cb(batch[j].user);
+                n = InterlockedIncrement(&g_timer_fires);
+                if (n <= 3 || (n % 100) == 0)
+                    printf("ail: timer fire #%ld at +%lu ms (cb=%p)\n",
+                           (long)n, GetTickCount() - g_timer_t0,
+                           (void *)batch[j].cb);
+            }
+            if (!g_timer_fired_logged) {
+                g_timer_fired_logged = 1;
+                printf("ail: timer callback fired (cb=%p, %d pending tick(s))\n",
+                       (void *)batch[j].cb, batch[j].n);
+            }
+        }
+    }
+    return 0;
+}
+
+static void timer_start_thread(void)
+{
+    if (g_timer_thread)
+        return;
+    timer_lock();
+    InterlockedExchange(&g_timer_run, 1);
+    g_timer_thread = CreateThread(NULL, 0, ail_timer_thread, NULL, 0, NULL);
+    timer_unlock();
+    printf("ail: timer thread started (1 ms tick)\n");
+}
+
+static void timer_stop_thread(void)
+{
+    if (!g_timer_thread)
+        return;
+    InterlockedExchange(&g_timer_run, 0);
+    WaitForSingleObject(g_timer_thread, 1000);
+    CloseHandle(g_timer_thread);
+    g_timer_thread = NULL;
+    memset(g_timers, 0, sizeof g_timers);
+    printf("ail: timer thread stopped\n");
+}
+
+/* ------------------------------------------------- AIL timer entry points --- */
+
+static int32_t host_AIL_register_timer(void *callback)
+{
+    int32_t h = -1;
+    int i;
+
+    timer_lock();
+    for (i = 0; i < AIL_MAX_TIMERS; i++) {
+        if (g_timers[i].used)
+            continue;
+        memset(&g_timers[i], 0, sizeof g_timers[i]);
+        g_timers[i].used = 1;
+        g_timers[i].cb = (ail_timer_cb)callback;
+        g_timers[i].period_us = 54925;  /* AIL default: the 18.2 Hz PC timer */
+        h = i * 4;
+        break;
+    }
+    timer_unlock();
+
+    printf("ail: register_timer(cb=%p) -> handle %d%s\n", callback, (int)h,
+           h < 0 ? " (table full)" : "");
+    if (h >= 0)
+        timer_start_thread();
+    return h;
+}
+
+static void host_AIL_set_timer_user(int32_t h, int32_t user)
+{
+    ail_timer *t = timer_at(h);
+    if (t) {
+        timer_lock();
+        t->user = (uint32_t)user;
+        timer_unlock();
+        timer_log("set_timer_user", h);
+    }
+}
+
+static void host_AIL_set_timer_period(int32_t h, int32_t usec)
+{
+    ail_timer *t = timer_at(h);
+    if (t) {
+        timer_lock();
+        t->period_us = usec > 0 ? (uint32_t)usec : 1;
+        t->acc_us = 0;
+        timer_unlock();
+        timer_log("set_timer_period", h);
+    }
+}
+
+static void host_AIL_set_timer_frequency(int32_t h, int32_t hz)
+{
+    ail_timer *t = timer_at(h);
+    if (t) {
+        timer_lock();
+        t->period_us = hz > 0 ? (uint32_t)(1000000 / hz) : 1000000;
+        t->acc_us = 0;
+        timer_unlock();
+        printf("ail: set_timer_frequency(h=%d, %d Hz -> period %u us)\n",
+               (int)h, (int)hz, (unsigned)t->period_us);
+    }
+}
+
+/* AIL_start_all_timers()/AIL_stop_all_timers() share the single-argument
+ * wrappers in FDPS's build (IDA shows both trace strings inside one function),
+ * so -1 selects every timer here as well. */
+static int32_t host_AIL_start_timer(int32_t h)
+{
+    ail_timer *t = timer_at(h);
+    int i;
+
+    timer_lock();
+    if (!t) {
+        for (i = 0; i < AIL_MAX_TIMERS; i++)
+            if (g_timers[i].used == 1)
+                g_timers[i].used = 2;
+    } else if (t->used == 1) {
+        t->used = 2;
+        t->acc_us = 0;
+    }
+    timer_unlock();
+    timer_log("start_timer", h);
+    timer_start_thread();
+    return 1;
+}
+
+static int32_t host_AIL_stop_timer(int32_t h)
+{
+    ail_timer *t = timer_at(h);
+    int i;
+
+    timer_lock();
+    if (!t) {
+        for (i = 0; i < AIL_MAX_TIMERS; i++)
+            if (g_timers[i].used == 2)
+                g_timers[i].used = 1;
+    } else if (t->used == 2) {
+        t->used = 1;
+    }
+    timer_unlock();
+    timer_log("stop_timer", h);
+    return 1;
+}
+
+static int32_t host_AIL_release_timer_handle(int32_t h)
+{
+    ail_timer *t = timer_at(h);
+    if (t) {
+        timer_lock();
+        memset(t, 0, sizeof *t);
+        timer_unlock();
+        timer_log("release_timer_handle", h);
+    }
+    return 1;
+}
+
+static int32_t host_AIL_release_all_timers(void)
+{
+    timer_lock();
+    memset(g_timers, 0, sizeof g_timers);
+    timer_unlock();
+    timer_log("release_all_timers", -1);
+    return 1;
+}
 
 /* ------------------------------------------------------------- helpers --- */
 
@@ -163,16 +461,20 @@ static int sample_open_device(ail_sample *s)
 
     if (s->dev)
         return 1;
+    /* Per-sample format: AIL_set_sample_type / _playback_rate fill it in
+     * (FDPS derives both from the WAV header it is about to play); samples
+     * that never get those calls keep the AIL defaults captured at
+     * allocation time, which is what FD2 relies on. */
     memset(&wf, 0, sizeof wf);
     wf.wFormatTag      = WAVE_FORMAT_PCM;
-    wf.nChannels       = (WORD)(g_stereo ? 2 : 1);
-    wf.nSamplesPerSec  = g_rate;
-    wf.wBitsPerSample  = (WORD)g_bits;
-    wf.nBlockAlign     = (WORD)(wf.nChannels * g_bits / 8);
+    wf.nChannels       = (WORD)(s->channels ? s->channels : (g_stereo ? 2 : 1));
+    wf.nSamplesPerSec  = s->rate ? s->rate : g_rate;
+    wf.wBitsPerSample  = (WORD)(s->bits ? s->bits : g_bits);
+    wf.nBlockAlign     = (WORD)(wf.nChannels * wf.wBitsPerSample / 8);
     wf.nAvgBytesPerSec = wf.nSamplesPerSec * wf.nBlockAlign;
     if (waveOutOpen(&s->dev, WAVE_MAPPER, &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
         printf("ail: waveOutOpen(%u Hz, %d-bit, %d ch) failed\n",
-               (unsigned)g_rate, g_bits, (int)wf.nChannels);
+               (unsigned)wf.nSamplesPerSec, (int)wf.wBitsPerSample, (int)wf.nChannels);
         s->dev = NULL;
         return 0;
     }
@@ -222,14 +524,18 @@ static int32_t host_AIL_startup(void)
 static void host_AIL_shutdown(void)
 {
     int i;
+    timer_stop_thread();
     xmidi_stop();
     for (i = 0; i < AIL_MAX_SAMPLES; i++) {
         if (g_samples[i].used) {
             sample_close_device(&g_samples[i]);
             if (g_samples[i].pcm) free(g_samples[i].pcm);
+            memset(&g_samples[i], 0, sizeof g_samples[i]);  /* FDPS re-inits audio in-process */
         }
     }
-    printf("ail: shutdown\n");
+    for (i = 0; i < AIL_MAX_SEQS; i++)
+        memset(&g_seqs[i], 0, sizeof g_seqs[i]);
+    printf("ail: shutdown (timer callbacks fired %lu)\n", g_timer_fires);
 }
 
 /* The game checks these for non-zero before using any sample/sequence API. */
@@ -256,6 +562,8 @@ static void *host_AIL_allocate_sample_handle(int32_t driver)
             g_samples[i].volume = 127;      /* AIL default */
             g_samples[i].pan = 64;
             g_samples[i].rate = g_rate;
+            g_samples[i].channels = g_stereo ? 2 : 1;
+            g_samples[i].bits = g_bits;
             printf("ail: allocate_sample_handle -> %d\n", i);
             return &g_samples[i];
         }
@@ -328,6 +636,80 @@ static void host_AIL_stop_sample(void *h)
     if (!s)
         return;
     sample_close_device(s);
+    printf("ail: stop_sample\n");
+}
+
+/* AIL_set_sample_type(handle, type, flags) - type encodes channels+bits
+ * (0=mono/8, 1=mono/16, 2=stereo/8, 3=stereo/16). FDPS computes it from the
+ * WAV header it is about to play, so this is what decides the waveOut format
+ * here; FD2 never calls it and keeps the AIL defaults. */
+static int32_t host_AIL_set_sample_type(void *h, int32_t type, int32_t flags)
+{
+    ail_sample *s = sample_of(h);
+    (void)flags;
+    if (!s)
+        return 0;
+    s->type = type;
+    s->channels = (type == 2 || type == 3) ? 2 : 1;
+    s->bits = (type == 1 || type == 3) ? 16 : 8;
+    if (s->playing)
+        sample_close_device(s);        /* format changed: reopen on next play */
+    printf("ail: set_sample_type(%d ch, %d-bit)\n", s->channels, s->bits);
+    return 1;
+}
+
+static int32_t host_AIL_set_sample_playback_rate(void *h, int32_t rate)
+{
+    ail_sample *s = sample_of(h);
+    if (!s)
+        return 0;
+    if (rate >= 4000 && rate <= 192000)
+        s->rate = (uint32_t)rate;
+    if (s->playing)
+        sample_close_device(s);
+    printf("ail: set_sample_playback_rate(%d)\n", (int)rate);
+    return 1;
+}
+
+/* Volume is recorded but not applied yet: waveOut plays at full scale. The
+ * value is printed with every play so the game's own range (0..127?) can be
+ * read off host.log before a mapping is chosen. */
+static int32_t host_AIL_set_sample_volume(void *h, int32_t volume, int32_t ms)
+{
+    ail_sample *s = sample_of(h);
+    (void)ms;
+    if (!s)
+        return 0;
+    s->volume = volume;
+    printf("ail: set_sample_volume(%d)\n", (int)volume);
+    return 1;
+}
+
+/* AIL_sample_status returns the DIG driver's state word at handle+4. The
+ * values observed in FDPS's copy of the driver (re/fdps_digcore_*.c):
+ *
+ *     1 = playing   2 = playing, looping   4 = done/available   8 = stopped
+ *
+ * The game scans its 8 handles for `status == 4` to find a free one
+ * (sub_303C0/sub_30790) and waits on `status == 4` to know a sound ended
+ * (sub_304D0), so 4 has to mean "not busy" in every non-playing state. */
+static int32_t host_AIL_sample_status(void *h)
+{
+    ail_sample *s = sample_of(h);
+
+    if (!s)
+        return 4;
+    if (s->playing && (!s->dev || (s->hdr.dwFlags & WHDR_DONE))) {
+        if (s->loop_count) {
+            sample_play(s);            /* keep a looping sample going */
+        } else {
+            s->playing = 0;
+            printf("ail: sample done\n");
+        }
+    }
+    if (!s->playing)
+        return 4;
+    return s->loop_count ? 2 : 1;
 }
 
 static uint32_t be32(const uint8_t *p)
@@ -525,6 +907,109 @@ static const ail_entry g_entries[] = {
     { 0x3B80F, "AIL_install_timbre",            (void *)host_AIL_unused },
 };
 
+/* FDPS (������ʿ���⴫) has its own build of the same Miles AIL: identical
+ * API, different addresses. The table was rebuilt from its IDA database
+ * (E:\Games\FDCollection\Game\FDPS\FDPS.EXE.i64) by walking the
+ * "AIL_xxx(...)\n" trace strings and every direct `call` into the library
+ * region 0x3D488..0x41FFE - see re/fdps_ail_patchset.csv.
+ *
+ * 47 of the 90 entries are real call targets; the rest are patched so no
+ * original AIL code can be entered indirectly (the same lesson FD2 taught with
+ * AIL_install_timbre). 18 are called by game code itself; everything else is
+ * either dead API surface or AIL calling its own internals. */
+static const ail_entry g_entries_fdps[] = {
+    { 0x3D488, "AIL_startup",                     (void *)host_AIL_startup,      },
+    { 0x3D622, "AIL_shutdown",                    (void *)host_AIL_shutdown,     },
+    { 0x3D6BA, "AIL_set_preference",              (void *)host_AIL_unused,       },
+    { 0x3D7BE, "AIL_get_real_vect",               (void *)host_AIL_unused,       },
+    { 0x3D8A9, "AIL_set_real_vect",               (void *)host_AIL_unused,       },
+    { 0x3D922, "AIL_set_USE16_ISR",               (void *)host_AIL_unused,       },
+    { 0x3D9AC, "AIL_restore_USE16_ISR",           (void *)host_AIL_unused,       },
+    { 0x3DA33, "AIL_call_driver",                 (void *)host_AIL_unused,       },
+    { 0x3DB3B, "AIL_delay",                       (void *)host_AIL_unused,       },
+    { 0x3DBAD, "AIL_API_read_INI",                (void *)host_AIL_unused,       },
+    { 0x3DF06, "AIL_register_timer",              (void *)host_AIL_register_timer, },
+    { 0x3DFF1, "AIL_set_timer_user",              (void *)host_AIL_set_timer_user, },
+    { 0x3E0E4, "AIL_set_timer_period",            (void *)host_AIL_set_timer_period, },
+    { 0x3E15A, "AIL_set_timer_frequency",         (void *)host_AIL_set_timer_frequency, }, /* also AIL_set_timer_divisor */
+    { 0x3E246, "AIL_interrupt_divisor",           (void *)host_AIL_unused,       },
+    { 0x3E323, "AIL_start_timer",                 (void *)host_AIL_start_timer,  }, /* also AIL_start_all_timers */
+    { 0x3E3F2, "AIL_stop_timer",                  (void *)host_AIL_stop_timer,   }, /* also AIL_stop_all_timers */
+    { 0x3E4C1, "AIL_release_timer_handle",        (void *)host_AIL_release_timer_handle, },
+    { 0x3E52E, "AIL_release_all_timers",          (void *)host_AIL_release_all_timers, },
+    { 0x3E590, "AIL_get_IO_environment",          (void *)host_AIL_unused,       },
+    { 0x3E675, "AIL_install_driver",              (void *)host_AIL_unused,       },
+    { 0x3E768, "AIL_uninstall_driver",            (void *)host_AIL_unused,       },
+    { 0x3E7D5, "AIL_install_DIG_INI",             (void *)host_AIL_install_DIG_INI, },
+    { 0x3E8C0, "AIL_install_DIG_driver_file",     (void *)host_AIL_unused,       }, /* also AIL_uninstall_DIG_driver */
+    { 0x3EA1A, "AIL_allocate_sample_handle",      (void *)host_AIL_allocate_sample_handle, },
+    { 0x3EAFF, "AIL_allocate_file_sample",        (void *)host_AIL_unused,       },
+    { 0x3EBFE, "AIL_release_sample_handle",       (void *)host_AIL_unused,       },
+    { 0x3EC6B, "AIL_init_sample",                 (void *)host_AIL_init_sample,  },
+    { 0x3ECD8, "AIL_set_sample_file",             (void *)host_AIL_unused,       },
+    { 0x3EDDE, "AIL_set_sample_address",          (void *)host_AIL_set_sample_address, },
+    { 0x3EE60, "AIL_set_sample_type",             (void *)host_AIL_set_sample_type, },
+    { 0x3EEE2, "AIL_start_sample",                (void *)host_AIL_start_sample, },
+    { 0x3EF4F, "AIL_stop_sample",                 (void *)host_AIL_stop_sample,  }, /* also AIL_resume_sample */
+    { 0x3F029, "AIL_end_sample",                  (void *)host_AIL_unused,       },
+    { 0x3F096, "AIL_set_sample_playback_rate",    (void *)host_AIL_set_sample_playback_rate, },
+    { 0x3F10C, "AIL_set_sample_volume",           (void *)host_AIL_set_sample_volume, },
+    { 0x3F182, "AIL_set_sample_pan",              (void *)host_AIL_unused,       },
+    { 0x3F1F8, "AIL_set_sample_loop_count",       (void *)host_AIL_set_sample_loop_count, },
+    { 0x3F26E, "AIL_sample_status",               (void *)host_AIL_sample_status, },
+    { 0x3F353, "AIL_sample_playback_rate",        (void *)host_AIL_unused,       },
+    { 0x3F444, "AIL_sample_volume",               (void *)host_AIL_unused,       },
+    { 0x3F529, "AIL_sample_pan",                  (void *)host_AIL_unused,       },
+    { 0x3F60E, "AIL_sample_loop_count",           (void *)host_AIL_unused,       },
+    { 0x3F6F3, "AIL_install_DIG_driver_image",    (void *)host_AIL_unused,       },
+    { 0x3F7EC, "AIL_minimum_sample_buffer_size",  (void *)host_AIL_unused,       },
+    { 0x3F8E5, "AIL_sample_buffer_ready",         (void *)host_AIL_unused,       },
+    { 0x3F9CA, "AIL_load_sample_buffer",          (void *)host_AIL_unused,       }, /* also AIL_set_sample_position */
+    { 0x3FACF, "AIL_sample_position",             (void *)host_AIL_unused,       },
+    { 0x3FBB4, "AIL_register_SOB_callback",       (void *)host_AIL_unused,       },
+    { 0x3FCA1, "AIL_register_EOB_callback",       (void *)host_AIL_unused,       },
+    { 0x3FD8E, "AIL_register_EOS_callback",       (void *)host_AIL_unused,       },
+    { 0x3FE7B, "AIL_register_EOF_callback",       (void *)host_AIL_unused,       },
+    { 0x3FF68, "AIL_set_sample_user_data",        (void *)host_AIL_unused,       },
+    { 0x3FFEA, "AIL_sample_user_data",            (void *)host_AIL_unused,       },
+    { 0x400D7, "AIL_active_sample_count",         (void *)host_AIL_unused,       },
+    { 0x401BC, "AIL_install_MDI_INI",             (void *)host_AIL_install_MDI_INI, },
+    { 0x40293, "AIL_install_MDI_driver_file",     (void *)host_AIL_unused,       }, /* also AIL_uninstall_MDI_driver */
+    { 0x403ED, "AIL_allocate_sequence_handle",    (void *)host_AIL_allocate_sequence_handle, }, /* also AIL_release_sequence_handle */
+    { 0x4053F, "AIL_init_sequence",               (void *)host_AIL_init_sequence, }, /* also AIL_start_sequence */
+    { 0x406A5, "AIL_stop_sequence",               (void *)host_AIL_stop_sequence, }, /* also AIL_resume_sequence */
+    { 0x4077F, "AIL_end_sequence",                (void *)host_AIL_unused,       },
+    { 0x407EC, "AIL_set_sequence_tempo",          (void *)host_AIL_unused,       },
+    { 0x4086E, "AIL_set_sequence_volume",         (void *)host_AIL_set_sequence_volume, }, /* also AIL_set_sequence_loop_count */
+    { 0x40966, "AIL_sequence_status",             (void *)host_AIL_unused,       },
+    { 0x40A4B, "AIL_sequence_tempo",              (void *)host_AIL_unused,       },
+    { 0x40B30, "AIL_sequence_volume",             (void *)host_AIL_unused,       },
+    { 0x40C15, "AIL_sequence_loop_count",         (void *)host_AIL_unused,       },
+    { 0x40CFA, "AIL_install_MDI_driver_image",    (void *)host_AIL_unused,       }, /* also AIL_set_GTL_filename_prefix */
+    { 0x40E60, "AIL_timbre_status",               (void *)host_AIL_unused,       },
+    { 0x40F59, "AIL_install_timbre",              (void *)host_AIL_unused,       },
+    { 0x41052, "AIL_protect_timbre",              (void *)host_AIL_unused,       },
+    { 0x410D4, "AIL_unprotect_timbre",            (void *)host_AIL_unused,       },
+    { 0x41156, "AIL_active_sequence_count",       (void *)host_AIL_unused,       },
+    { 0x4123B, "AIL_controller_value",            (void *)host_AIL_unused,       },
+    { 0x41334, "AIL_channel_notes",               (void *)host_AIL_unused,       },
+    { 0x41421, "AIL_sequence_position",           (void *)host_AIL_unused,       },
+    { 0x41529, "AIL_branch_index",                (void *)host_AIL_unused,       },
+    { 0x4159F, "AIL_register_prefix_callback",    (void *)host_AIL_unused,       },
+    { 0x4168C, "AIL_register_trigger_callback",   (void *)host_AIL_unused,       },
+    { 0x41779, "AIL_register_sequence_callback",  (void *)host_AIL_unused,       },
+    { 0x41866, "AIL_register_event_callback",     (void *)host_AIL_unused,       },
+    { 0x41953, "AIL_register_timbre_callback",    (void *)host_AIL_unused,       },
+    { 0x41A40, "AIL_set_sequence_user_data",      (void *)host_AIL_unused,       },
+    { 0x41AC2, "AIL_sequence_user_data",          (void *)host_AIL_unused,       }, /* also AIL_register_ICA_array */
+    { 0x41C25, "AIL_lock_channel",                (void *)host_AIL_unused,       },
+    { 0x41D0A, "AIL_release_channel",             (void *)host_AIL_unused,       },
+    { 0x41D80, "AIL_map_sequence_channel",        (void *)host_AIL_unused,       },
+    { 0x41E02, "AIL_true_sequence_channel",       (void *)host_AIL_unused,       },
+    { 0x41EEF, "AIL_send_channel_voice_message",  (void *)host_AIL_unused,       }, /* also AIL_send_sysex_message */
+    { 0x41FFE, "AIL_create_wave_synthesizer",     (void *)host_AIL_unused,       }, /* also AIL_destroy_wave_synthesizer */
+};
+
 void ail_set_format(uint32_t sample_rate, int bits, int stereo)
 {
     if (sample_rate >= 4000 && sample_rate <= 192000)
@@ -534,7 +1019,8 @@ void ail_set_format(uint32_t sample_rate, int bits, int stereo)
     g_stereo = stereo ? 1 : 0;
 }
 
-void ail_install(uint8_t *obj0_base, const char *dump_dir)
+static void install_table(uint8_t *obj0_base, const char *dump_dir,
+                          const ail_entry *tab, size_t ntab, const char *what)
 {
     size_t i;
 
@@ -544,15 +1030,32 @@ void ail_install(uint8_t *obj0_base, const char *dump_dir)
     if (dump_dir && dump_dir[0])
         strncpy(g_dump_dir, dump_dir, sizeof g_dump_dir - 1);
 
-    for (i = 0; i < sizeof g_entries / sizeof g_entries[0]; i++) {
-        const ail_entry *e = &g_entries[i];
+    for (i = 0; i < ntab; i++) {
+        const ail_entry *e = &tab[i];
         uint8_t *p = obj0_base + (e->addr - AIL_OBJ0_BASE);
         intptr_t rel = (intptr_t)e->impl - (intptr_t)(p + 5);
         p[0] = 0xE9;                        /* jmp rel32 */
         *(int32_t *)(p + 1) = (int32_t)rel;
     }
-    printf("ail: patched %u AIL entry points to host implementations"
+    if (!g_timer_cs_ready) {
+        InitializeCriticalSection(&g_timer_cs);
+        g_timer_cs_ready = 1;
+    }
+    printf("ail: patched %u AIL entry points (%s) to host implementations"
            " (%u Hz, %d-bit, %d ch)\n",
-           (unsigned)(sizeof g_entries / sizeof g_entries[0]),
+           (unsigned)ntab, what,
            (unsigned)g_rate, g_bits, g_stereo ? 2 : 1);
+}
+
+void ail_install(uint8_t *obj0_base, const char *dump_dir)
+{
+    install_table(obj0_base, dump_dir, g_entries,
+                  sizeof g_entries / sizeof g_entries[0], "FD2 layout");
+}
+
+void ail_install_fdps(uint8_t *obj0_base, const char *dump_dir)
+{
+    install_table(obj0_base, dump_dir, g_entries_fdps,
+                  sizeof g_entries_fdps / sizeof g_entries_fdps[0],
+                  "FDPS layout");
 }
