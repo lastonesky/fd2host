@@ -1,0 +1,190 @@
+=== 0x3D074 ===
+int __cdecl open(int a1, int a2, char a3)
+{
+  return sopen(a1, a2, 0, a3);
+}
+
+
+=== 0x3D093 ===
+int __cdecl sopen(_BYTE *a1, __int16 a2, char a3, int a4)
+{
+  int v6; // eax
+  unsigned __int16 v7; // di
+  int v15; // eax
+  int v19; // eax
+  int v20; // ebx
+  int v21; // eax
+  int v22; // [esp+0h] [ebp-Ch]
+  int v23; // [esp+4h] [ebp-8h]
+
+  while ( *a1 == 32 )
+    ++a1;
+  v22 = a2 & 0x83;
+  _EAX = (unsigned __int8)(a3 | a2 & 0x83);
+  v23 = -1;
+  BYTE1(_EAX) = 61;
+  __asm
+  {
+    int     21h; DOS - 2+ - OPEN DISK FILE WITH HANDLE
+    rcl     eax, 1
+  }
+  v6 = __ROR4__(_EAX, 1);
+  v7 = v6;
+  if ( v6 >= 0 )
+    v23 = (unsigned __int16)v6;
+  if ( (a2 & 3) != 0 && v23 != -1 )
+  {
+    _EAX = isatty(v23);
+    if ( _EAX == 0 )
+    {
+      if ( (a2 & 0x400) != 0 )
+      {
+        BYTE1(_EAX) = 62;
+        __asm
+        {
+          int     21h; DOS - 2+ - CLOSE A FILE WITH HANDLE
+          rcl     eax, 1
+        }
+        *(_DWORD *)sub_3DB46(__ROR4__(_EAX, 1), a1, (_WORD)v23) = 7;
+        return -1;
+      }
+      if ( (a2 & 0x40) != 0 )
+      {
+        BYTE1(_EAX) = 64;
+        __asm
+        {
+          int     21h; DOS - 2+ - WRITE TO FILE WITH HANDLE
+          rcl     eax, 1
+        }
+        _EAX = __ROR4__(_EAX, 1);
+        v7 = _EAX;
+        if ( _EAX < 0 )
+        {
+          BYTE1(_EAX) = 62;
+          __asm
+          {
+            int     21h; DOS - 2+ - CLOSE A FILE WITH HANDLE
+            rcl     eax, 1
+          }
+LABEL_13:
+          _EAX = v7;
+          return set_errno(_EAX);
+        }
+      }
+    }
+  }
+  if ( v23 == -1 )
+  {
+    if ( (a2 & 0x20) == 0 || v7 != 2 )
+      goto LABEL_13;
+    v15 = a4;
+    if ( a4 == 0 )
+      v15 = 384;
+    _EAX = dword_537E8 ^ v15;
+    BYTE1(_EAX) = 60;
+    __asm
+    {
+      int     21h; DOS - 2+ - CREATE A FILE WITH HANDLE (CREAT)
+      rcl     eax, 1
+    }
+    _EAX = __ROR4__(_EAX, 1);
+    if ( _EAX < 0 )
+      goto LABEL_20;
+    _EAX = (unsigned __int16)_EAX;
+    BYTE1(_EAX) = 62;
+    __asm
+    {
+      int     21h; DOS - 2+ - CLOSE A FILE WITH HANDLE
+      rcl     eax, 1
+    }
+    _EAX = __ROR4__(_EAX, 1);
+    if ( _EAX < 0 )
+      goto LABEL_20;
+    LOBYTE(_EAX) = a3 | v22;
+    BYTE1(_EAX) = 61;
+    __asm
+    {
+      int     21h; DOS - 2+ - OPEN DISK FILE WITH HANDLE
+      rcl     eax, 1
+    }
+    _EAX = __ROR4__(_EAX, 1);
+    if ( _EAX < 0 )
+    {
+LABEL_20:
+      _EAX = (unsigned __int16)_EAX;
+      return set_errno(_EAX);
+    }
+    v23 = (unsigned __int16)_EAX;
+  }
+  v19 = _IOMode(v23);
+  LOBYTE(v19) = v19 & 0x3C;
+  v20 = v19;
+  if ( isatty(v23) != 0 )
+    BYTE1(v20) |= 0x20u;
+  LOBYTE(v22) = a2 & 3;
+  if ( v22 == 2 )
+    LOBYTE(v20) = v20 | 3;
+  if ( v22 == 0 )
+    LOBYTE(v20) = v20 | 1;
+  if ( v22 == 1 )
+  
+
+=== 0x46DD0 ===
+int __fastcall unlink(int _EAX)
+{
+  int v2; // eax
+
+  BYTE1(_EAX) = 65;
+  __asm
+  {
+    int     21h; DOS - 2+ - DELETE A FILE (UNLINK)
+    rcl     eax, 1
+  }
+  v2 = __ROR4__(_EAX, 1);
+  if ( v2 >= 0 )
+    return 0;
+  else
+    return set_errno((unsigned __int16)v2);
+}
+
+
+=== 0x3DF37 ===
+int __fastcall remove(int a1)
+{
+  return unlink(a1);
+}
+
+
+=== 0x3D253 ===
+int __cdecl _set_binary(int a1)
+{
+  char v1; // bh
+  int v7; // [esp+0h] [ebp-4h]
+
+  _RAX = _IOMode(a1);
+  LOBYTE(_RAX) = _RAX | 0x40;
+  v1 = BYTE1(_RAX);
+  _SetIOMode(a1, _RAX);
+  if ( (v1 & 0x20) == 0 )
+    return 0;
+  __asm
+  {
+    int     21h; DOS - 2+ - IOCTL - GET DEVICE INFORMATION
+    rcl     edx, 1
+  }
+  _EDX = __ROR4__(_EDX, 1);
+  LOWORD(v7) = _EDX;
+  if ( _EDX < 0 )
+    return set_errno((unsigned __int16)v7);
+  LOWORD(_EDX) = (unsigned __int8)_EDX | 0x20;
+  __asm
+  {
+    int     21h; DOS - 2+ - IOCTL - SET DEVICE INFORMATION
+    rcl     edx, 1
+  }
+  v7 = __ROR4__(_EDX, 1);
+  if ( v7 < 0 )
+    return set_errno((unsigned __int16)v7);
+  else
+    return 0;
+}

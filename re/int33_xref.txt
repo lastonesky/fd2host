@@ -1,0 +1,5 @@
+table: CD 30 C3 CD 31 C3 CD 32 C3 CD 33 C3 CD 34 C3 CD 35 C3 CD 36 C3 CD 37 C3
+push 0x33 at 0x20724 func=sub_20707
+push 0x33 at 0x23C5D func=sub_23B5F
+push 0x33 at 0x243AE func=sub_24336
+push 0x33 at 0x34A2A func=sub_34A1E

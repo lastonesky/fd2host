@@ -1,0 +1,141 @@
+# FD2 → Windows 原生移植工程（路线 C：二进制宿主 + 逐步源码化）
+
+目标：让 `E:\FD2\FD2.EXE`（DOS/4GW 32 位保护模式游戏，Borland/Watcom + Miles AIL）
+**在 Windows 上原生运行**——不模拟 DOS、不模拟实模式、不使用 DOSBox。
+图形改为现代 Windows 绘制，声音改为现代音频后端，游戏逻辑暂时保持原始 x86 机器码。
+
+**当前里程碑：POC 达成** —— 游戏原生运行、持续渲染开场动画（30 秒 960 帧无崩溃），画面颜色
+正确，**并且有声音**（数字音效 + XMIDI 音乐）。详见下文"当前状态与下一步"。
+
+## 目录
+
+```
+port/
+├── build.ps1          构建脚本（vcvars32 + cl，32 位目标）
+├── regress.ps1        一键回归：重建沙箱（故意删 FD2.TMP）→ autokey 走 continue → 8 项断言
+├── src/
+│   ├── le.h / le.c    LE(Linear Executable) 加载器：解析对象、页、fixup 重定位
+│   ├── dos.h / dos.c  平台层：VEH 捕获 int/特权指令 + DOS/DPMI/BIOS 服务替换
+│   ├── host.c         宿主主程序：地址空间预留、窗口、显示、键盘、主循环
+│   ├── letest.c       加载器自检（与 Ghidra 导出的重定位镜像逐字节对比）
+│   ├── ail.c          AIL 替换层：16 个 AIL_* 入口 → 宿主实现（数字音效走 WinMM waveOut）
+│   ├── xmidi.c        XMIDI 解析（FDMUS.DAT 的 XDIR/CAT/FORM XMID）→ 事件列表
+│   ├── synth.c        自带软件合成器：事件 → PCM → waveOut（音乐不依赖系统 MIDI）
+│   ├── dls.c          DLS Level 1 解析：读 gm.dls 的原版 GM 采样供合成器使用
+│   ├── probe*.c       可行性探针（地址空间 / ASLR / 映像大小）
+├── re/                逆向工作台产物：RE_MAP.md（测绘与转译地图）、funcmap.csv（1359 函数表）、
+│                      int21_ah_used.txt（INT21 AH 静态覆盖）、int_sites_all.txt（CD xx 裸扫）等
+├── PROGRESS.md        进度存档 / 交接文档（含踩坑清单与调试手册）
+└── build/             输出：fd2host.exe、host.log、object*.bin（Ghidra 参考镜像）、frame*.png（画面证据）
+```
+
+## 构建与运行
+
+```powershell
+pwsh -File port\build.ps1 -Target fd2host     # 生成 port\build\fd2host.exe
+Start-Process port\build\fd2host.exe -ArgumentList '--exit-after=30' -WorkingDirectory 'E:\FD2'
+```
+
+日志写入 `port/build/host.log`（宿主是 WINDOWS 子系统，不弹控制台窗口）。
+可用参数：`--gamedir <目录>`、`--exe <路径>`、`--exit-after <秒>`、`--trace=<n>`、`--headless`、
+`--screenshot=<file.bmp>`、`--shot-frame=<n>`（在第 n 帧导出实际送显的 RGB 缓冲，默认 300）；
+音频：`--ail-dump=<目录>`（导出音效样本与 XMIDI 原始数据）、`--ail-rate=<Hz>`、`--ail-bits=<8|16>`、
+`--ail-stereo`、`--midi-rate=<ticks/s>`（默认 0 = 按序列 tempo 换算）、
+`--midi-backend=<synth|winmidi>`（默认 `synth` = 自带合成器）、`--midi-test`（播测试音）、
+`--gm-bank=<path>`（默认用 Windows 的 `gm.dls` 提供原版 GM 音色）。详见 `PROGRESS.md` §11。
+
+```powershell
+# 抓第 700 帧画面（不依赖窗口/桌面，便于核对调色板与通道顺序）
+Start-Process port\build\fd2host.exe -ArgumentList '--exit-after=30','--screenshot=E:\FD2\port\build\frame.bmp','--shot-frame=700' -WorkingDirectory 'E:\FD2'
+# 日志会打印 "host: frame 700 dumped" 与 "watchdog fired after 30 s (960 frames drawn)"
+```
+
+## 已验证的关键事实（对抗过 Ghidra 镜像逐字节校验）
+
+| 项目 | 结论 |
+|---|---|
+| 容器 | `MZ` + DOS/4GW stub + LE 头 @0x27ACC；3 个对象：0x10000/0x50000/0x60000 |
+| 对象数据 | 页对齐、紧凑存放于文件 0x36014 起（EOF 减去各对象页跨度和） |
+| 入口 | obj0 + 0x2CCB4 = **0x3CCB4** |
+| fixup 记录 | 每页一块，记录 `[07][size][src:2][obj:1][tgt:2+size>>4]`；`[00]` 为 1 字节填充 |
+| 跨页记录 | 源操作数跨页（src≈0xFFFD..0xFFFF）的记录必须**跳过**，否则破坏下一页开头（会直接崩在 0x3E000） |
+| 重定位结果 | obj1/obj2 与 Ghidra 镜像**逐字节一致**；obj0 仅余 11 字节待确认（同意在页边界） |
+| 宿主映像 | 必须 < ~1MB 且保持 ASLR：静态 8MB 数组会让 ASLR 把映像塞进 0x10000，游戏地址空间就抢不到了 |
+| 地址空间 | 32 位进程可精确映射 0x10000..0x6FFFF（RWX）与 0xA0000（RW）；**低 64KB 不可映射** |
+| DOS/4GW 私有选择器 | 启动代码把 0x24 之类当段选择器加载；本进程 GDT 槽 4 是代码段 → 必须替换为宿主平坦选择器 |
+| PSP/环境 | 启动代码用 `ES:[0x2C]` 之类访问 PSP；把 IVT 0x2C 的"实模式段"设为 0x7000 后，`段<<4` 正好落在低内存镜像里 |
+| INT 21h AH=0xFF | 返回 AL=0 会被当成"未知扩展器"（走进空环境指针）；返回非 0 才会读 PSP:0x2C |
+| INT 21h AH=0x48 | 返回**线性地址**（不是段值），调用方直接解引用；且必须读**完整 EBX**（Watcom `_ExpandDGROUP` 传 `0x10000`，只取 BX 会截断成 0）；EBX=0 要按 DOS 返回失败 |
+| INT 21h AH=0x42 | lseek：**入参 CX:DX、出参 DX:AX**。把 CX 当 64 位偏移高半会让文件指针跳到 ~171 GB 且**不报错**，后续 read 返回 0 字节 |
+| INT 31h AX=0x0501 | BX:CX 传入字节数、返回线性地址；以前返回假值会让游戏拿到野指针 |
+| INT 16h | **菜单导航依赖它**（`AH=0x10` 读扩展键，游戏按返回的 `AH` 扫描码判断：0x4B 左/0x4D 右）。只做 BDA 轮询时，片头能跳过但菜单方向键全无反应 |
+| GM 音色库 | 打击乐在 gm.dls 里靠 `ulBank` 的 **bit31** 标识（不是 bank 号）；MIDI 的 `(CC0<<7)\|CC32` 与 DLS 的 `(msb<<8)\|lsb` 需要转换；CC7/CC11 决定各音轨电平 |
+| AIL 入口 | 必须把**全部 52 个**入口（51 个导出 + `AIL_install_timbre` 0x3B80F）都 patch 掉；只封"游戏直接调用的 16 个"会让 continue 路径执行到原始 AIL 代码并跳飞 |
+| 调色板 | VGA DAC 只有 **6 位/通道**：`dos_palette` 统一存 8 位值（捕获时 `(v<<2)\|(v>>4)`）；32bpp `BI_RGB` 内存序是 **BGRA** |
+| 1 MiB 内实模式区 | `0x80000..0x9FFFF` 与 `0xC0000..0xFFFFF` 预先 commit：真机上 0xC0000+ 是 ROM（写入丢弃），游戏会**合法地**越过 VGA 窗口写到那里 |
+| AIL 驱动 | `*.DIG`/`*.MDI` 是 16 位实模式代码，AIL 会跳进去执行 ⇒ 必须整体替换；POC 阶段报"文件不存在"让其以无设备启动 |
+| 文件创建/截断 | `fopen("wb")` 对尚不存在的文件会走 `INT 21h AH=3C`(CREAT)；`O_TRUNC` 靠 `AH=40` **写 0 字节**实现，而 DOS 的"写 0 字节 = 在当前位置截断"在 Windows 上是空操作。两条缺任一条都会崩或静默损坏存档 |
+| 鼠标 | 游戏**不用鼠标**：obj0 无 `int 33h` 调用点（唯一的 `CD 33` 在 DOS/4GW 桩表里）、`int386` 只用 0x10/0x16/0x31、运行期 `int 33` 调用数 0 |
+
+## 当前执行进度（host.log 实证）
+
+```
+LE 加载 + 7937 条 fixup 应用
+→ VEH 安装，112 个 int 站点改写为 int3 并接管
+→ 进入游戏入口 0x3CCB4
+→ DOS/4GW 环境探测 / PSP / 环境解析        ✅
+→ C 运行库初始化（sbrk、AH=2C 计时）        ✅
+→ AIL 探测驱动：SBPRO2.MDI / SB16.DIG      ✅ 已拦截
+→ 打开 DIG.INI / MDI.INI / FDOTHER.DAT / FDTXT.DAT  ✅
+→ INT 10h AH=0 设置视频模式 0x13（320x200x256）     ✅
+→ 调色板端口 I/O（0x3C8/0x3C9）             ✅
+→ 按 DAT 偏移表加载资源、RLE 解压到帧缓冲   ✅（修复 AH=42 lseek / AH=48 EBX 之后）
+→ 开场动画持续渲染                          ✅ 30 s / 960 帧 / port ops 80 万+ / 无崩溃
+→ 画面颜色正确                              ✅ 帧 250 与帧 700 画面不同 = 动画在推进
+→ 声音：16 个 AIL 入口替换为宿主实现         ✅ 音效 waveOut（8 位单声道 11025 Hz）
+→ 声音：XMIDI → 自带合成器 → waveOut        ✅ 2838 事件 / 112 BPM / 317.5 s / polyphony 31
+→ 声音：原版 GM 音色（解析 gm.dls）         ✅ 235 乐器 / 495 采样加载，2781/2781 音符命中采样
+→ 键盘：INT 16h（菜单导航）                 ✅ 方向键可用、带导航音效（片头跳过走的是 BDA 轮询）
+→ 平台层文件服务：AH=3C 创建 / AH=41 删除 / AH=40 写 0 字节截断  ✅ fresh install 不再崩，regress.ps1 8/8 PASS
+→ 游戏退出路径（INT10 mode 3 → AH=4Ch → ail shutdown）           ✅ 菜单主动退出实测（PROGRESS §12.4）
+```
+
+## 当前状态与下一步
+
+**POC 目标"窗口中看到游戏画面"已达成**（2026-10-04）。已解决的问题（细节见 `PROGRESS.md` §6 与 §8 第 15–17 条）：
+
+| 现象 | 根因 | 修复 |
+|---|---|---|
+| RLE 解压写飞，崩在 `0xC0005`（= 段 0xC000×16） | `INT 21h AH=42`(lseek) 把 CX 当成 64 位偏移的高半 → 文件指针跳到 ~171 GB，资源读到 0 字节 | 按 DOS 语义解析 **CX:DX 入参 / DX:AX 出参** |
+| `__ExpandDGROUP` 越界写 `0x48FFFF8` | `INT 21h AH=48` 用 `Ebx & 0xFFFF` 截断 `0x10000` → 只给了 16 字节块 | 读**完整 EBX**；EBX=0 按 DOS 返回失败 |
+| 画面红蓝互换（黄色显示成青蓝） | 32bpp `BI_RGB` 是 **BGRA** 内存序，代码按 RGB 填充 | `(c[0]<<16) \| (c[1]<<8) \| c[2]` |
+| 亮度/饱和度只有约 25% | VGA DAC 是 **6 位/通道**，原始值被当 8 位使用 | 捕获时 `(v<<2) \| (v>>4)` 伸展到 8 位 |
+| `fopen("wb")` 打不开新文件 → `fwrite(NULL)` 崩在 0x377B2（读地址 0xC） | 宿主没实现 `INT 21h AH=3C`(CREAT)；且 `AH=40` 写 0 字节不截断 | 补 `AH=3C`/`AH=41` + 显式 `SetFilePointer`+`SetEndOfFile`（PROGRESS §12） |
+
+**下一步（按优先级）**
+1. **显示层现代化**：`0xA0000` 的 8bpp 索引缓冲 + `dos_palette` → D3D11/OpenGL 纹理 + palette shader
+   （现在是 GDI `StretchDIBits` + 每帧 64000 次软件查表，POC 版，且固定 320×200 逻辑分辨率）。
+2. ~~**AIL 替换层 + 音乐**~~ **已完成**：16 个 `AIL_*` 入口已替换 —— 音效走 WinMM waveOut；
+   音乐由 `synth.c` 自带合成器渲染成 PCM 后走同一条 waveOut 通路（**不依赖系统 MIDI**，
+   原因见 `PROGRESS.md` §11.1）。可继续打磨：音效循环（`loop_count > 1`）、音量/声像、
+   更真实的乐器音色（当前是基频 + 2/3 次谐波的近似音色）。
+3. **输入层**：BIOS 键盘缓冲已可写入（BDA 0x41A/0x41C + 0x41E 环形缓冲）；
+   鼠标 `INT 33h` **已判定不需要**（游戏不用鼠标，证据见 `PROGRESS.md` §12.3）。
+4. **稳定性长跑**：连续运行 5 分钟以上；游戏退出路径已验（`int386(0x10)` mode 3 → `AH=4Ch` → `ail: shutdown`）。
+5. **首次保存实测**：`FD2.SAV` 不存在时的创建路径（机制已通，回归只覆盖了 `FD2.TMP`）
+   + "存档变小"时的截断对拍。可复现回归：`pwsh -File port\regress.ps1`。
+6. **逐步源码化（路线 C 主体）**：按 `re/RE_MAP.md` 的模块顺序把机器码替换为 C 源码，
+   最终形成可编译 x86-64 的引擎。
+
+## 调试手法（可复用）
+
+- `letest.exe`：加载器 vs Ghidra 镜像逐字节对比，是加载正确性的唯一可信判据。
+- `--screenshot=<file.bmp> [--shot-frame=<n>]`：导出**实际送显**的 RGB 缓冲，不依赖窗口/桌面，
+  用于核对调色板与通道顺序；BMP→PNG 可用 `[System.Drawing.Image]::FromFile(...).Save(...)`。
+- 崩溃转储会打印：EIP 前后 48 字节、`RLE w/h (@0x627B4)`、`[ESI]` 源字节、`[ESP]` 返回地址、
+  EBP 帧的前 6 个参数、全部 INT21/INT31 分配块、最后被接管的中断站点。
+  `/MAP:fd2host.map` 可把宿主 RVA 反查成符号。
+- `--trace=<n>` 打开单步跟踪（VEH 里置 TF），用于跟丢执行流时定位。
+- Ghidra 本地 HTTP 桥（`http://127.0.0.1:8089`，`/read_memory`）可**不经上下文**批量导出镜像与内存。
+- IDA Pro 9.5 + ida MCP（用法见 `PROGRESS.md` §10）：逆向与源码转译的主工作台，
+  测绘结果在 `re/RE_MAP.md`、全量函数表 `re/funcmap.csv`。

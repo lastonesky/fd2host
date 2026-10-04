@@ -1,0 +1,5 @@
+int33 at 0x469E1 func=-
+--int386 funcs--
+int386 0x370F0
+int386x 0x3DA76
+__int386x_ 0x46870

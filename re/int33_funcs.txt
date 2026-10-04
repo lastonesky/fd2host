@@ -1,0 +1,183 @@
+================ 0x34894 sub_34894 ================
+int __fastcall sub_34894(__int32 a1, int a2, int a3, int a4, int a5)
+{
+  sub_3702F(a1, a2, a3, a4, 4);
+  return *(_BYTE *)(80 * a5 + dword_53A45 + 5) & 1;
+}
+
+================ 0x1366A sub_1366A ================
+int __fastcall sub_1366A(__int32 a1, int a2, int a3, int a4, int a5)
+{
+  unsigned __int8 *v5; // eax
+  unsigned __int8 *v6; // ebp
+  int v7; // eax
+  int v8; // eax
+  int v9; // edi
+  int m; // esi
+  int v11; // eax
+  int v12; // ebx
+  _BYTE *v13; // eax
+  int v14; // edx
+  _BYTE v16[32]; // [esp+0h] [ebp-6Ch]
+  _BYTE v17[32]; // [esp+20h] [ebp-4Ch]
+  unsigned __int8 i; // [esp+40h] [ebp-2Ch]
+  unsigned __int8 v19; // [esp+44h] [ebp-28h]
+  unsigned __int8 v20; // [esp+48h] [ebp-24h]
+  unsigned __int8 k; // [esp+4Ch] [ebp-20h]
+  unsigned __int8 j; // [esp+50h] [ebp-1Ch]
+  unsigned __int8 v23; // [esp+54h] [ebp-18h]
+  unsigned __int8 v24; // [esp+58h] [ebp-14h]
+  int v25; // [esp+68h] [ebp-4h]
+
+  sub_3702F(a1, a2, a3, a4, 136);
+  v25 = a3;
+  v5 = (unsigned __int8 *)sub_4EB48(a5);
+  v20 = *v5;
+  v24 = 0;
+  v6 = v5 + 1;
+  while ( v24 < (unsigned int)v20 )
+  {
+    v23 = *v6;
+    v19 = v6[1];
+    k = 0;
+    for ( v6 += 2; ; v6 += 2 )
+    {
+      v7 = k;
+      if ( k >= (unsigned int)v19 )
+        break;
+      v17[k] = *v6;
+      v16[v7] = v6[1];
+      ++k;
+    }
+    if ( (v23 & 0x80u) == 0 )
+    {
+      for ( i = 0; i < (unsigned int)v23; ++i )
+      {
+        for ( j = 1; j < 7u; ++j )
+        {
+          sub_32230(v17[0]);
+          for ( k = 0; k < (unsigned int)v19; ++k )
+          {
+            v11 = 80 * (unsigned __int8)v17[k];
+            v12 = dword_53A45;
+            *(_BYTE *)(dword_53A45 + v11 + 3) = v16[k];
+            *(_BYTE *)(v12 + v11 + 4) = j;
+          }
+          if ( dword_53AFB == 0 || dword_53AFB == 64 )
+          {
+            sub_11CAC(0);
+          }
+          else
+          {
+            ++dword_53AFB;
+            sub_11CAC(1);
+            sub_11D40(0, 255, dword_53AFB);
+          }
+          sub_17AA9(1);
+          sub_4E381();
+        }
+        for ( k = 0; k < (unsigned int)v19; ++k )
+        {
+          v13 = (_BYTE *)(dword_53A45 + 80 * (unsigned __int8)v17[k]);
+          v14 = (unsigned __int8)v16[k];
+          if ( v16[k] != 0 )
+          {
+            if ( v14 == 1 )
+            {
+              --*v13;
+            }
+            else if ( v14 == 3 )
+            {
+              ++*v13;
+            }
+            else
+            {
+              --v13[1];
+            }
+          }
+          else
+          {
+            ++v13[1];
+          }
+          v13[4] = 0;
+        }
+      }
+    }
+    else
+    {
+      v23 &= ~0x80u;
+      if ( v23 != 0 )
+      {
+        for ( k = 0; k < (unsigned int)v19; ++k )
+          *(_BYTE *)(dword_53A45 + 80 * (unsigned __int8)v17[k] + 3) = v16[k];
+        for ( k = 0; k < (unsigned int)v23; ++k )
+        {
+          sub_11CAC(0);
+          sub_17AA9(1);
+          sub_4E381();
+        }
+      }
+      else
+      {
+        sub_17AA9(1);
+        v8 = sub_11EEE(dword_53A49 + 32904, 456, 13, 8, dword_53AA9, dword_53AAD);
+        v9 = dword_53A49;
+        for ( m = 0; m < dword_53BEB; ++m )
+        {
+          v8 = 80 * m + dword_53A45;
+          for ( k = 0; k < (unsigned int)v19; ++k )
+          {
+            if ( m == (unsigned __int8)v17[k] )
+            {
+              dword_53A49 = v9 - 5472;
+              *(_BYTE *)(v8 + 3) = v16[k];
+            }
+          }
+          if ( (*(_BYTE *)(v8 + 5) & 1) == 0 )
+            v8 = sub_127E0(m);
+          dword_53A49 = v9;
+        }
+        sub_129EC(v8);
+        sub_11EB0(656644, 320, dword_53A49 + 32904, 456, 312, 192);
+        sub_17AA9(2);
+        sub_11CAC(0);
+        sub_4E381();
+      }
+    }
+    ++v24;
+  }
+  return sub_11CAC(1);
+}
+
+================ 0x344F2 sub_344F2 ================
+int __fastcall sub_344F2(__int32 a1, int a2, int a3, int a4, int a5, int a6, char a7)
+{
+  int result; // eax
+
+  result = sub_3702F(a1, a2, a3, a4, 12);
+  while ( a5 <= a6 )
+  {
+    result = dword_53A45 + 80 * a5;
+    *(_BYTE *)(result + 52) = a7 | *(_BYTE *)(result + 52) & 0xF0;
+    ++a5;
+  }
+  return result;
+}
+
+================ 0x20707 sub_20707 ================
+int __fastcall sub_20707(__int32 a1, int a2, int a3, int a4)
+{
+  int v4; // eax
+  __int64 v5; // rax
+  int v6; // ecx
+  int result; // eax
+  int v8; // edx
+  int v9; // ecx
+
+  v4 = sub_3702F(a1, a2, a3, a4, 8);
+  v5 = sub_205BE(v4);
+  result = sub_34894(v5, SHIDWORD(v5), a3, v6, 50);
+  if ( result != 0 || (result = sub_34894(0, v8, a3, v9, 51)) != 0 )
+    dword_53ECC = 1;
+  return result;
+}

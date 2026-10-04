@@ -1,0 +1,23 @@
+AH=1  count=1  sites=0x46d4d  funcs=sub_46D38
+AH=5  count=1  sites=0x46786  funcs=sbrk
+AH=8  count=1  sites=0x37b86  funcs=sub_37B71
+AH=37  count=4  sites=0x3ed3c 0x3ed91 0x4d67e 0x4d688  funcs=_dos_setvect, sub_3EC7C, sub_3ED6A
+AH=42  count=2  sites=0x470be 0x47110  funcs=__getctime
+AH=44  count=5  sites=0x3dff3 0x3dffd 0x3e00d 0x3e04d 0x470e8  funcs=__delay, __delay_init, __getctime
+AH=48  count=3  sites=0x3cd53 0x49ce4 0x49d43  funcs=start, sub_49C26, sub_49CF5
+AH=53  count=2  sites=0x3ed0f 0x3edc3  funcs=sub_3EC7C, sub_3EDA5
+AH=60  count=1  sites=0x3d189  funcs=sopen
+AH=61  count=2  sites=0x3d0c3 0x3d1c4  funcs=sopen
+AH=62  count=4  sites=0x3d100 0x3d13e 0x3d1ae 0x3d379  funcs=close, sopen
+AH=63  count=3  sites=0x3cff0 0x3d028 0x3dcf2  funcs=__qread, read
+AH=64  count=7  sites=0x3cf03 0x3d12c 0x3d472 0x3d506 0x3d55a 0x3d58d  funcs=__qwrite, sopen, start, sub_3D3E5
+AH=65  count=1  sites=0x46dd8  funcs=unlink
+AH=66  count=3  sites=0x3cf6e 0x3d439 0x46d77  funcs=__qwrite, sub_3CF50, sub_3D3E5
+AH=68  count=3  sites=0x3d281 0x3d2ac 0x3fe6d  funcs=__set_binary, isatty
+AH=72  count=2  sites=0x3d7fa 0x3d80e  funcs=sub_3D79E
+AH=73  count=1  sites=0x3d81f  funcs=sub_3D79E
+AH=74  count=4  sites=0x3cd9e 0x3cdc4 0x46816 0x46829  funcs=__brk, start
+AH=76  count=1  sites=0x3cf0f  funcs=start
+AH=237  count=1  sites=0x467fe  funcs=__brk
+AH=243  count=2  sites=0x46226 0x4634d  funcs=__sys_fini_387_emulator, sub_461B7
+AH=?  count=12  sites=0x3ceee 0x3d8df 0x4621f 0x462a0 0x462c6 0x462d6  funcs=-, __ExpandDGROUP, start, sub_461B7, sub_4629A, sub_462E6, sub_46380, sub_463BA

@@ -1,0 +1,3 @@
+0x20724 sub_20707
+0x23c5d sub_23B5F
+0x34a2a sub_34A1E
