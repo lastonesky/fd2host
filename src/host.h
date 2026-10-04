@@ -59,6 +59,10 @@ void host_request_quit(void);
 /* Logs the frame count and the interrupt statistics. */
 void host_shutdown(void);
 
+/* Seconds left on --exit-after (0 = unlimited). INT 21h AH=4B passes this to
+ * a spawned child host so a bounded run stays bounded process-tree wide. */
+int host_exit_after_remaining(void);
+
 /* ---- entry/input layer (main_win32.c) ---- */
 
 /* Injects a virtual-key keystroke into the window (used by --autokey).

@@ -48,6 +48,13 @@ void dos_install_traps(void);
 
 void dos_init_lowmem(void);
 
+/* PSP:0x80 command tail for the guest (empty by default). Call after
+ * dos_init_lowmem(); INT 21h AH=4B passes the parent's tail to the child. */
+void dos_set_cmdtail(const char *tail);
+
+/* Kill a process started by INT 21h AH=4B (watchdog / shutdown path). */
+void dos_terminate_child(void);
+
 /* VGA DAC palette captured from the game's port writes (0x3C8/0x3C9). */
 extern uint8_t  dos_palette[256 * 3];
 extern volatile int dos_palette_dirty;

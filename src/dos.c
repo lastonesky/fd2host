@@ -26,6 +26,7 @@
 
 #include "dos.h"
 #include "le.h"
+#include "host.h"        /* host_exit_after_remaining: bound a spawned child */
 #include <stdio.h>
 #include <string.h>
 #include <io.h>        /* _get_osfhandle: CRT fd -> OS handle */
@@ -47,6 +48,8 @@ static int       g_trace_mode;         /* single-step tracing enabled */
 /* per-interrupt statistics */
 static unsigned  g_calls[256];
 static unsigned  g_unknown[256];
+static HANDLE    g_child;          /* process started by INT 21h AH=4B       */
+static int       g_child_exit;     /* its exit code, returned by AH=4D        */
 
 /* Ring of the most recent *unusual* VEH events (privileged instructions, access
  * violations, stray breakpoints). Ordinary int3 trap sites are excluded - there
@@ -512,6 +515,112 @@ static void log_small_io(const char *rw, int hnd, DWORD want, DWORD n,
            rw, hnd, (unsigned)want, (unsigned)n, txt);
 }
 
+/* ------------------------------------------------------- guest pointers ---
+ *
+ * Guest code runs natively, so its pointers are ordinary pointers in this
+ * process - but an argument handed to an unimplemented INT 21h service can be
+ * anything, and dereferencing garbage kills the host instead of the game.
+ * Every string we read out of a guest structure therefore goes through a
+ * VirtualQuery check first (PROGRESS.md §8-45). */
+
+static int guest_ptr_ok(const void *p, size_t len)
+{
+    MEMORY_BASIC_INFORMATION mbi;
+    const uint8_t *b = (const uint8_t *)p;
+
+    if (!p || !len)
+        return 0;
+    if (VirtualQuery(b, &mbi, sizeof mbi) != sizeof mbi || mbi.State != MEM_COMMIT)
+        return 0;
+    if (b + len <= (const uint8_t *)mbi.BaseAddress + mbi.RegionSize)
+        return 1;
+    /* crosses a region boundary: the last byte must be committed too */
+    if (VirtualQuery(b + len - 1, &mbi, sizeof mbi) != sizeof mbi)
+        return 0;
+    return mbi.State == MEM_COMMIT;
+}
+
+static void guest_str(char *dst, size_t cap, const void *src)
+{
+    size_t i;
+
+    if (!dst || !cap)
+        return;
+    dst[0] = 0;
+    for (i = 0; i + 1 < cap; i++) {
+        const char *q = (const char *)src + i;
+        if (!guest_ptr_ok(q, 1) || !*q)
+            break;
+        dst[i] = *q;
+        dst[i + 1] = 0;
+    }
+}
+
+/* The DOS command tail handed to INT 21h AH=4B is *not* a C string: Watcom
+ * builds it PSP-style, `[len][chars][0x0D]`, and the pointer in the exec
+ * parameter block points at the length byte. Verified byte for byte against
+ * FDPS's spawn of FD.EXE: `13 2E 5C 46 44 31 2E 56 69 64 ... 0D` =
+ * len 19 + ".\FD1.Vid .\FD1.Aud" + CR. Reading it as a C string pulled in
+ * 106 bytes of stack garbage and put them in the child's PSP. */
+static void guest_cmdtail(char *dst, size_t cap, const void *src)
+{
+    const uint8_t *b = (const uint8_t *)src;
+    size_t n, len;
+
+    if (!dst || !cap)
+        return;
+    dst[0] = 0;
+    if (!guest_ptr_ok(b, 1))
+        return;
+    len = b[0];
+    if (len && len < cap && guest_ptr_ok(b + 1 + len, 1) && b[1 + len] == 0x0D) {
+        memcpy(dst, b + 1, len);
+        dst[len] = 0;
+        return;
+    }
+    for (n = 0; n + 1 < cap && guest_ptr_ok(b + n, 1); n++) {
+        if (b[n] == 0 || b[n] == 0x0D)
+            break;
+        dst[n] = (char)b[n];
+        dst[n + 1] = 0;
+    }
+}
+
+/* PSP:0x80 command tail (the game/CRT reads it to build argv). The mirror is
+ * all zeroes otherwise, i.e. an empty command line - which is right for a
+ * plain run and wrong for a child spawned by AH=4B (FD.EXE is handed two
+ * arguments: video/audio config paths). */
+void dos_set_cmdtail(const char *tail)
+{
+    size_t n = tail ? strlen(tail) : 0;
+
+    if (!g_lowmem)
+        return;
+    if (!n)
+        return;
+    if (n > 126)
+        n = 126;
+    g_lowmem[0x80] = (uint8_t)n;
+    memcpy(g_lowmem + 0x81, tail, n);
+    g_lowmem[0x81 + n] = 0x0D;
+    printf("dos: PSP:0x80 command tail (%u bytes) = '%s'\n",
+           (unsigned)n, tail);
+}
+
+/* Called by the watchdog before ExitProcess: a P_WAIT child is normally
+ * reaped by AH=4B itself, but if the parent dies first the child would keep
+ * running with nobody watching it. */
+void dos_terminate_child(void)
+{
+    if (!g_child)
+        return;
+    printf("dos: terminating child process before shutdown\n");
+    TerminateProcess(g_child, 0);
+    WaitForSingleObject(g_child, 2000);
+    CloseHandle(g_child);
+    g_child = NULL;
+}
+
 static void int21(CONTEXT *c)
 {
     uint8_t ah = (uint8_t)(c->Eax >> 8);
@@ -873,22 +982,107 @@ static void int21(CONTEXT *c)
         break;
     }
 
-    case 0x4B: {                               /* exec */
-        /* FDPS reaches this right after its own AIL_shutdown (the title flow
-         * spawning something - FD.EXE / SETSOUND.EXE / itself). Not
-         * implemented: log the path so the next round knows what it wants. */
-        const char *path = (const char *)(uintptr_t)c->Edx;
-        MEMORY_BASIC_INFORMATION mbi;
-        const char *shown = "<unreadable>";
-        if (path && VirtualQuery(path, &mbi, sizeof mbi) == sizeof mbi &&
-            mbi.State == MEM_COMMIT)
-            shown = path;
-        printf("dos: UNHANDLED INT21 AH=4B exec %.80s (al=%02X bx=%X)\n",
-               shown, (unsigned)(c->Eax & 0xFF), (unsigned)c->Ebx);
-        g_unknown[0x21]++;
-        set_cf(c, 1);
+    case 0x4B: {                               /* exec (load or execute) */
+        /* FDPS's title flow spawns the real game (re/fdps_30CB0_spawn.c:
+         * `spawnlp(0, "<dir>FD.EXE", ...)`, CRT ends up here via
+         * `__dospawn`). There is no way to run a second LE image in this
+         * address space (obj0 is already taken), so the child is *this host*
+         * pointed at the new exe - which is also how a real DOS process tree
+         * behaves: the parent stops, the child runs, the parent resumes.
+         *
+         * The parameter block written by __dospawn (re/fdps_dospawn.c) is
+         * offset:selector pairs, flat selectors with base 0:
+         *   +0 dword env, +4 word seg | +6 dword cmd tail, +10 word seg ...
+         * so the tail's linear address is the dword at ES:BX+6. */
+        uint8_t al = (uint8_t)(c->Eax & 0xFF);
+        char path[MAX_PATH] = "";
+        char tail[128] = "";
+        char self[MAX_PATH] = "", selfdir[MAX_PATH] = "";
+        char cwd[MAX_PATH] = "", child[MAX_PATH] = "", clog[MAX_PATH] = "";
+        char exitarg[40] = "";
+        char cmdline[MAX_PATH * 4 + 640];
+        const uint8_t *blk;
+        STARTUPINFOA si;
+        PROCESS_INFORMATION pi;
+
+        guest_str(path, sizeof path, (const void *)(uintptr_t)c->Edx);
+        blk = (const uint8_t *)(uintptr_t)c->Ebx;
+        if (guest_ptr_ok(blk + 6, 4)) {
+            uint32_t tp = *(const uint32_t *)(blk + 6);
+            guest_cmdtail(tail, sizeof tail, (const void *)(uintptr_t)tp);
+        }
+        if (!path[0]) {
+            printf("dos: UNHANDLED INT21 AH=4B exec (unreadable path at %X)\n",
+                   (unsigned)c->Edx);
+            set_cf(c, 1);
+            c->Eax = (c->Eax & 0xFFFFFF00u) | 2;   /* file not found */
+            break;
+        }
+
+        GetModuleFileNameA(NULL, self, MAX_PATH);
+        GetCurrentDirectoryA(MAX_PATH, cwd);
+        if (!GetFullPathNameA(path, MAX_PATH, child, NULL))
+            strncpy(child, path, sizeof child - 1)[sizeof child - 1] = 0;
+        strncpy(selfdir, self, sizeof selfdir - 1);
+        selfdir[sizeof selfdir - 1] = 0;
+        {
+            char *slash = strrchr(selfdir, '\\');
+            if (slash) *slash = 0;
+        }
+        /* A child that freopen()s host.log would truncate the parent's log
+         * ("w" mode), so every generation gets its own file. */
+        _snprintf(clog, sizeof clog - 1, "%s\\host.%lu.log", selfdir,
+                  (unsigned long)GetCurrentProcessId());
+        clog[sizeof clog - 1] = 0;
+        if (al == 0) {                          /* P_WAIT: bound the child too */
+            int rem = host_exit_after_remaining();
+            if (rem > 0) {
+                _snprintf(exitarg, sizeof exitarg - 1, " --exit-after=%d", rem);
+                exitarg[sizeof exitarg - 1] = 0;
+            }
+        }
+        _snprintf(cmdline, sizeof cmdline - 1,
+                  "\"%s\" --exe=\"%s\" --gamedir=\"%s\" --log=\"%s\" "
+                  "--cmdtail=\"%s\"%s",
+                  self, child, cwd, clog, tail, exitarg);
+        cmdline[sizeof cmdline - 1] = 0;
+
+        printf("dos: INT 21h AH=4B exec al=%u '%s' tail='%s'\n",
+               (unsigned)al, path, tail);
+        printf("dos:   child: %s\n", cmdline);
+
+        ZeroMemory(&si, sizeof si);
+        si.cb = sizeof si;
+        if (!CreateProcessA(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL,
+                            &si, &pi)) {
+            printf("dos:   CreateProcess failed (%lu)\n", GetLastError());
+            set_cf(c, 1);
+            c->Eax = (c->Eax & 0xFFFFFF00u) | 1;
+            break;
+        }
+        CloseHandle(pi.hThread);
+        g_child = pi.hProcess;
+        if (al == 0) {                          /* AL=00: wait for the child */
+            WaitForSingleObject(pi.hProcess, INFINITE);
+            {
+                DWORD code = 0;
+                GetExitCodeProcess(pi.hProcess, &code);
+                g_child_exit = (int)code;
+            }
+            printf("dos:   child exited with %d\n", g_child_exit);
+        }
+        CloseHandle(pi.hProcess);
+        g_child = NULL;
+        set_cf(c, 0);
+        c->Eax = c->Eax & 0xFFFFFF00u;
         break;
     }
+
+    case 0x4D:                                  /* get exit code of subprogram */
+        /* AX = AH:AL, AH = return type (0 = normal), AL = exit code. */
+        c->Eax = (c->Eax & 0xFFFF0000u) | (uint32_t)(g_child_exit & 0xFF);
+        set_cf(c, 0);
+        break;
 
     default:
         if (g_unknown[0x21] < 40) {
@@ -1392,6 +1586,155 @@ static int guest_readable(const void *p, size_t n)
     return ((const char *)p + n) <= end;
 }
 
+/* String instructions (A4..AF: movs/stos/lods/cmps/scas) run a whole
+ * iteration per address and touch memory through [E]SI/[E]DI, so they cannot
+ * be stepped over byte by byte the way `mov cl,es:[edi-1]` can. First one
+ * seen in practice: the Watcom CRT scanning the PSP command tail with
+ * `rep(re/ne) scasb` starting at 0x81 - unreachable while the tail was empty
+ * (FD2), hit as soon as a child host gets --cmdtail= (FD.EXE).
+ * Execute the entire iteration here against the low-memory window. */
+static int emulate_lowmem_string(CONTEXT *c, const uint8_t *start)
+{
+    const uint8_t *p = start;
+    int rep = 0, addr32 = 1, op32 = 1, df, zf;
+    int step, k, guard = 0, any = 0;
+    uint8_t op, b;
+    uint32_t count, si, di, delta, mask;
+    static unsigned s_log;
+
+    for (;;) {
+        b = *p;
+        if      (b == 0xF3) { rep = 1; p++; }
+        else if (b == 0xF2) { rep = 2; p++; }
+        else if (b == 0x66) { op32 = 0; p++; }
+        else if (b == 0x67) { addr32 = 0; p++; }
+        else if (b == 0x26 || b == 0x2E || b == 0x36 || b == 0x3E ||
+                 b == 0x64 || b == 0x65) p++;      /* segment override: flat here */
+        else break;
+    }
+    op = *p;
+    if (op < 0xA4 || op > 0xAF)
+        return 0;
+    p++;
+
+    step = (op & 1) ? (op32 ? 4 : 2) : 1;          /* odd opcodes are word/dword */
+    mask = addr32 ? 0xFFFFFFFFu : 0xFFFFu;
+    df   = (c->EFlags >> 10) & 1;
+    zf   = (c->EFlags >> 6) & 1;
+    delta = df ? (uint32_t)(-(int)step) : (uint32_t)step;
+    count = rep ? (c->Ecx & mask) : 1;
+    si    = c->Esi & mask;
+    di    = c->Edi & mask;
+
+    while (count && guard++ < 0x100000) {
+        uint32_t memv = 0, regv = 0, rhs = 0;
+
+        /* read the source byte(s) - DS:[SI] for movs/lods/cmps */
+        if (op == 0xA4 || op == 0xA5 || op == 0xA6 || op == 0xA7) {
+            for (k = 0; k < step; k++) {
+                uint32_t ea = (si + (uint32_t)k) & mask;
+                uint8_t v;
+                if (ea < 0x10000) { if (!g_lowmem) return 0; v = g_lowmem[ea]; }
+                else {
+                    if (!guest_readable((const void *)(uintptr_t)ea, 1)) return 0;
+                    v = *(const uint8_t *)(uintptr_t)ea;
+                }
+                memv |= (uint32_t)v << (8 * k);
+            }
+        }
+
+        if (op == 0xA4 || op == 0xA5) {            /* movs: [DI] <- [SI] */
+            for (k = 0; k < step; k++) {
+                uint32_t ea = (di + (uint32_t)k) & mask;
+                uint8_t v = (uint8_t)(memv >> (8 * k));
+                if (ea < 0x10000) { if (!g_lowmem) return 0; g_lowmem[ea] = v; }
+                else {
+                    if (!guest_readable((const void *)(uintptr_t)ea, 1)) return 0;
+                    *(uint8_t *)(uintptr_t)ea = v;
+                }
+            }
+        } else if (op == 0xAA || op == 0xAB) {      /* stos: [DI] <- A */
+            regv = op32 ? c->Eax : (c->Eax & 0xFFFF);
+            for (k = 0; k < step; k++) {
+                uint32_t ea = (di + (uint32_t)k) & mask;
+                uint8_t v = (uint8_t)(regv >> (8 * k));
+                if (ea < 0x10000) { if (!g_lowmem) return 0; g_lowmem[ea] = v; }
+                else {
+                    if (!guest_readable((const void *)(uintptr_t)ea, 1)) return 0;
+                    *(uint8_t *)(uintptr_t)ea = v;
+                }
+            }
+        } else if (op == 0xAC || op == 0xAD) {      /* lods: A <- [SI] */
+            regv = memv;
+            if (op32) c->Eax = (c->Eax & 0xFFFFFF00u) | regv;
+            else      c->Eax = (c->Eax & 0xFFFF0000u) | (c->Eax & 0x0000FF00u)
+                                 | (regv & 0xFF);
+        } else {                                    /* cmps / scas */
+            if (op == 0xA6 || op == 0xA7) {         /* cmps compares [SI] with [DI] */
+                for (k = 0; k < step; k++) {
+                    uint32_t ea = (di + (uint32_t)k) & mask;
+                    uint8_t v;
+                    if (ea < 0x10000) { if (!g_lowmem) return 0; v = g_lowmem[ea]; }
+                    else {
+                        if (!guest_readable((const void *)(uintptr_t)ea, 1)) return 0;
+                        v = *(const uint8_t *)(uintptr_t)ea;
+                    }
+                    rhs |= (uint32_t)v << (8 * k);
+                }
+                memv = rhs;
+            } else {
+                memv = 0;                           /* scas reads [DI] */
+                for (k = 0; k < step; k++) {
+                    uint32_t ea = (di + (uint32_t)k) & mask;
+                    uint8_t v;
+                    if (ea < 0x10000) { if (!g_lowmem) return 0; v = g_lowmem[ea]; }
+                    else {
+                        if (!guest_readable((const void *)(uintptr_t)ea, 1)) return 0;
+                        v = *(const uint8_t *)(uintptr_t)ea;
+                    }
+                    memv |= (uint32_t)v << (8 * k);
+                }
+            }
+            regv = op32 ? c->Eax : (c->Eax & 0xFFFF);
+            if (step == 1)      { memv &= 0xFF;   regv &= 0xFF; }
+            else if (step == 2) { memv &= 0xFFFF; regv &= 0xFFFF; }
+            zf = (memv == regv);
+            c->EFlags = zf ? (c->EFlags | (1u << 6)) : (c->EFlags & ~(1u << 6));
+        }
+        any = 1;
+
+        if (op == 0xA6 || op == 0xA7 || op == 0xAE || op == 0xAF)
+            di = (di + delta) & mask;               /* cmps/scas step DI */
+        else if (op == 0xA4 || op == 0xA5)
+            { si = (si + delta) & mask; di = (di + delta) & mask; }
+        else if (op == 0xAC || op == 0xAD)
+            si = (si + delta) & mask;
+
+        count--;
+        if (!rep)
+            break;
+        if (op >= 0xA6) {                           /* F3 = repeat while ZF=1 */
+            if (rep == 1 && !zf) break;
+            if (rep == 2 &&  zf) break;
+        }
+    }
+    if (!any)
+        return 0;
+    if (count && guard >= 0x100000)                /* runaway: refuse */
+        return 0;
+
+    c->Ecx = (c->Ecx & ~mask) | (count & mask);
+    c->Esi = (c->Esi & ~mask) | (si & mask);
+    c->Edi = (c->Edi & ~mask) | (di & mask);
+    c->Eip = (DWORD)(uintptr_t)p;
+    if (s_log++ < 8)
+        printf("dos: lowmem string %s%02X, %u left (si=%X di=%X) at 0x%X\n",
+               rep == 1 ? "rep " : rep == 2 ? "repne " : "",
+               (unsigned)op, (unsigned)count, (unsigned)si, (unsigned)di,
+               (unsigned)(uintptr_t)start);
+    return 1;
+}
+
 /* Minimal decoder for the forms the DOS/4GW startup code uses to reach PSP and
  * BIOS data through register-indirect addressing such as `mov cl,es:[edi-1]`.
  * Those cannot be fixed by rewriting an immediate, so the access is executed
@@ -1654,6 +1997,9 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
             }
             /* (3) register-indirect access to low memory: emulate the load */
             if (emulate_lowmem_access(c))
+                return EXCEPTION_CONTINUE_EXECUTION;
+            /* (4) string instructions over low memory (PSP tail scan, ...) */
+            if (emulate_lowmem_string(c, p))
                 return EXCEPTION_CONTINUE_EXECUTION;
             printf("cpu: unmatched low-memory access: fault=0x%zX eip=0x%X "
                    "bytes=%02X %02X %02X %02X %02X %02X %02X %02X "

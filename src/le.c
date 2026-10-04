@@ -5,6 +5,10 @@
 #include <stdio.h>
 #include <string.h>
 
+/* kernel32 export (Win7+): names a file mapping for the failure report below.
+ * Declared here instead of pulling in psapi.h. */
+BOOL WINAPI K32GetMappedFileNameA(HANDLE, LPVOID, LPSTR, DWORD);
+
 /* Guest window: everything below 1 MiB - the LE objects (including foreign
  * ones such as FDPS's obj2 at 0x70000), the low-memory mirror, the real-mode
  * pool, the VGA window and the "ROM" area. It is reserved as ONE block before
@@ -416,6 +420,24 @@ int le_reserve_address_space(void)
                     (mbi.Type == MEM_MAPPED) ? "MAPPED" :
                     (mbi.Type == MEM_PRIVATE) ? "PRIVATE" : "-",
                     mbi.Protect, mbi.RegionSize);
+            fprintf(stderr, "    allocation base = 0x%p\n", mbi.AllocationBase);
+            /* Who put it there? The reservation runs in fd2_entry, i.e. after
+             * every DLL's DllMain but before our own CRT - so a data mapping
+             * created during process init can win the race for 0x10000 (seen
+             * once in a host spawned by INT 21h AH=4B: 0x3000, MAPPED,
+             * read-only). Naming it turns "cannot reserve" into something
+             * fixable. K32GetMappedFileNameA is a kernel32 export. */
+            {
+                char nm[MAX_PATH];
+                DWORD n = K32GetMappedFileNameA(GetCurrentProcess(),
+                                                mbi.AllocationBase,
+                                                nm, MAX_PATH);
+                if (n)
+                    fprintf(stderr, "    mapping: %s\n", nm);
+                else
+                    fprintf(stderr, "    mapping: <name unavailable, %lu>\n",
+                            GetLastError());
+            }
         }
         return -1;
     }

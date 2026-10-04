@@ -71,6 +71,25 @@ static int          g_midi_backend = 1; /* 1 = built-in synth (default)    */
 static const char  *g_gm_bank;          /* --gm-bank=<path>                */
 static const char  *g_autokey;          /* --autokey=<schedule>            */
 static const char  *g_midi_dump;        /* --midi-dump=<file.wav>          */
+static const char  *g_cmdtail;          /* --cmdtail=<tail> -> PSP:0x80    */
+static int          g_exit_after_secs;  /* --exit-after, for spawned children */
+static DWORD        g_start_tick;       /* when host_init began             */
+
+/* Seconds left on --exit-after (0 = unlimited). INT 21h AH=4B hands this to
+ * the child so a bounded run stays bounded all the way down the process
+ * tree - otherwise the parent's watchdog fires while it waits and leaves an
+ * orphaned game running. */
+int host_exit_after_remaining(void)
+{
+    DWORD elapsed;
+
+    if (g_exit_after_secs <= 0)
+        return 0;
+    elapsed = (GetTickCount() - g_start_tick) / 1000;
+    if ((DWORD)g_exit_after_secs <= elapsed)
+        return 0;
+    return g_exit_after_secs - (int)elapsed;
+}
 
 /* ---------------------------------------------------- automated keystrokes
  *
@@ -149,6 +168,7 @@ static DWORD WINAPI watchdog(LPVOID param)
     int secs = (int)(intptr_t)param;
     Sleep((DWORD)secs * 1000);
     printf("host: watchdog fired after %d s (%d frames drawn)\n", secs, g_frames);
+    dos_terminate_child();        /* a P_WAIT child must not outlive us */
     dos_dump_stats();
     ExitProcess(0);
     return 0;
@@ -306,7 +326,7 @@ static int opt_wants_value(const char *a)
         "--exe", "--gamedir", "--exit-after", "--trace", "--screenshot",
         "--wshot", "--shot-frame", "--ail", "--ail-dump", "--ail-rate", "--ail-bits",
         "--midi-rate", "--midi-backend", "--gm-bank", "--autokey",
-        "--midi-dump"
+        "--midi-dump", "--cmdtail", "--log"
     };
     size_t i;
     for (i = 0; i < sizeof opts / sizeof opts[0]; i++)
@@ -328,6 +348,8 @@ int host_init(int argc, char **argv)
     const char *gamedir = "E:\\FD2";
     char logpath[MAX_PATH];
 
+    g_start_tick = GetTickCount();
+
     /* Diagnostics first: this dumps everything to a file, never to a console
      * window. On failure the process exits silently so the user is not left
      * with a stray window. */
@@ -336,6 +358,20 @@ int host_init(int argc, char **argv)
         char *slash = strrchr(logpath, '\\');
         if (slash) *(slash + 1) = 0; else logpath[0] = 0;
         strcat(logpath, "host.log");
+    }
+    /* --log=<path> has to be honoured *here*, before anything is written:
+     * INT 21h AH=4B starts a child host and points it at its own file, since
+     * freopen("w") on the parent's host.log would erase the parent's log.
+     * The option normalizer runs after the redirect, so both spellings are
+     * recognised manually. */
+    for (i = 1; i < argc; i++) {
+        if (!strncmp(argv[i], "--log=", 6)) {
+            strncpy(logpath, argv[i] + 6, sizeof logpath - 1);
+            logpath[sizeof logpath - 1] = 0;
+        } else if (!strcmp(argv[i], "--log") && i + 1 < argc) {
+            strncpy(logpath, argv[i + 1], sizeof logpath - 1);
+            logpath[sizeof logpath - 1] = 0;
+        }
     }
     freopen(logpath, "w", stdout);
     {
@@ -390,8 +426,13 @@ int host_init(int argc, char **argv)
         else if (!strncmp(argv[i], "--gamedir=", 10)) gamedir = argv[i] + 10;
         else if (!strncmp(argv[i], "--exit-after=", 13)) {
             int secs = atoi(argv[i] + 13);
-            if (secs > 0)
+            if (secs > 0) {
+                g_exit_after_secs = secs;
                 CreateThread(NULL, 0, watchdog, (LPVOID)(intptr_t)secs, 0, NULL);
+            }
+        }
+        else if (!strncmp(argv[i], "--cmdtail=", 10)) {
+            g_cmdtail = argv[i] + 10;
         }
         else if (!strncmp(argv[i], "--trace=", 8)) {
             dos_enable_trace(atoi(argv[i] + 8));
@@ -489,6 +530,10 @@ int host_init(int argc, char **argv)
     }
 
     dos_init_lowmem();
+    /* PSP:0x80 = the command tail. Empty for a plain run; a child spawned by
+     * INT 21h AH=4B gets the arguments its parent was handed (FD.EXE expects
+     * its video/audio config paths there). */
+    dos_set_cmdtail(g_cmdtail);
     dos_set_image(&g_le);
     dos_install_traps();
     dos_patch_interrupts();
