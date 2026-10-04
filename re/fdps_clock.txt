@@ -1,0 +1,3 @@
+STORES to dword_69D64: 0
+
+sample non-store xrefs: cmp     eax, dword_69D64 | inc     dword_69D64 | mov     eax, dword_69D64 | mov     edx, dword_69D64

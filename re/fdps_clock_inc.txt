@@ -1,0 +1,15 @@
+0x3052b sub_30520  inc     dword_69D64
+
+CONTEXT:
+    00030520  push    esi
+    00030521  push    edi
+    00030522  push    ebp
+    00030523  mov     ebp, esp
+    00030525  sub     esp, 0
+    0003052B  inc     dword_69D64
+    00030531  call    rand
+    00030536  pop     ebp
+    00030537  pop     edi
+    00030538  pop     esi
+    00030539  retn
+    0003053A  align 10h

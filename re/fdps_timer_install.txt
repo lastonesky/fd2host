@@ -1,0 +1,21 @@
+xref 0x3054C in sub_30540 : mov     eax, offset sub_30520
+      00030540  push    ebx
+      00030541  push    esi
+      00030542  push    edi
+      00030543  push    ebp
+      00030544  mov     ebp, esp
+      00030546  sub     esp, 0
+      0003054C  mov     eax, offset sub_30520
+      00030551  push    eax
+      00030552  call    sub_3DF06
+      00030557  add     esp, 4
+      0003055A  mov     dword_69D50, eax
+      0003055F  cmp     dword_69D50, 0FFFFFFFFh
+      00030566  jnz     short loc_30576
+      00030568  mov     eax, offset aTimerFail; " Timer fail !!!\n"
+      0003056D  push    eax
+      0003056E  call    printf
+      00030573  add     esp, 4
+      00030576  mov     eax, [ebp+arg_0]
+      00030579  push    eax
+      0003057A  push    dword_69D50

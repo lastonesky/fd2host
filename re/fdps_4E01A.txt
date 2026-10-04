@@ -1,0 +1,31 @@
+func at 0x4E01A: start=0x4E015 end=0x4E062 name=_DoINTR_
+---- decompile ----
+int __usercall __spoils<> DoINTR@<edx>(
+        int a1@<edx>,
+        int a2@<ecx>,
+        int a3@<ebx>,
+        int a4@<ebp>,
+        int a5@<edi>,
+        int a6@<esi>)
+{
+  __int64 v6; // rax
+  __int16 v7; // kr00_2
+
+  v6 = sub_4E062();
+  *(_DWORD *)a1 = v6;
+  v7 = __readeflags();
+  *(_WORD *)(a1 + 36) = v7;
+  *(_DWORD *)(a1 + 8) = a2;
+  *(_DWORD *)(a1 + 12) = HIDWORD(v6);
+  *(_DWORD *)(a1 + 20) = a6;
+  *(_DWORD *)(a1 + 24) = a5;
+  *(_DWORD *)(a1 + 16) = a4;
+  *(_WORD *)(a1 + 28) = __DS__;
+  *(_DWORD *)(a1 + 4) = a3;
+  *(_WORD *)(a1 + 30) = __ES__;
+  *(_WORD *)(a1 + 32) = __FS__;
+  *(_WORD *)(a1 + 34) = __GS__;
+  return HIDWORD(v6);
+}
+
+---- callers ----

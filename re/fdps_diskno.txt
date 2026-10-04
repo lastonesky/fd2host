@@ -1,0 +1,26 @@
+strings matching disk/error:
+  0x615bc  "File not found: 'FACE.CEL'\n"
+  0x615d8  "file not found: 'Misc.vfs'\n"
+  0x6174a  'nnERROR: No Hit Point !!!\n'
+  0x6196c  "file not found: '%s'\n"
+  0x61a1c  '\n\n File not found %s!!! \x07\n'
+  0x61a38  "file not found: '%s'\n"
+  0x61be0  'DISK.NO'
+  0x61be8  "\nCan't found file 'Disk.No' !!!\x07\n"
+  0x61c30  'Disk.no'
+  0x61c3c  'Fatal error: CDROM is not install!!!\x07\n'
+  0x61cae  "d file not found: 'Misc.vfs'\n"
+  0x61d82  "alfile not found: 'field.vfs'\n"
+  0x61df8  "file not found: '%s'\n"
+  0x61e0e  'ilFile not found: %s\n'
+  0x63276  'ouDigital sound hardware not found\n'
+  0x6331e  'reDriver file not found\n'
+  0x63492  'LOXMIDI sound hardware not found\n'
+  0x6351e  'moDriver file not found\n'
+DISK.NO string eas: ['0x61be0', '0x61c30']
+  xref at 0x291FE in main
+    decompiled -> 1452 chars; calls: access, exit, fclose, fopen, fscanf, int386, main, printf, sub_29410, sub_29630, sub_2A280, sub_2A920, sub_2B870, sub_30270, sub_30330, sub_30F80, sub_3C217, sub_3C3A6
+    char v13; // [esp+20h] [ebp-1Ch] BYREF | exit(1); | v15 = fopen(aDiskNo_0, &unk_61C2C); | dword_69D54 = -1; | exit(1); | return printf(aThankYouForPla);
+  xref at 0x2923C in main
+    decompiled -> 1452 chars; calls: access, exit, fclose, fopen, fscanf, int386, main, printf, sub_29410, sub_29630, sub_2A280, sub_2A920, sub_2B870, sub_30270, sub_30330, sub_30F80, sub_3C217, sub_3C3A6
+    char v13; // [esp+20h] [ebp-1Ch] BYREF | exit(1); | v15 = fopen(aDiskNo_0, &unk_61C2C); | dword_69D54 = -1; | exit(1); | return printf(aThankYouForPla);

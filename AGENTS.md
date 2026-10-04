@@ -124,6 +124,8 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 | 抓画面证据 | `--screenshot` + `--shot-frame`，BMP→PNG 用 `[System.Drawing.Image]::FromFile(...).Save(...)` |
 | 无人值守菜单路径 | `--autokey=...`（例：`5000:SPACE;2500:RETURN;2500:RETURN;2500:DOWN,RETURN` 走 continue） |
 | 平台层还缺什么 | ida MCP 对照静态清单 `re/int21_ah_used.txt`、`re/int_sites_all.txt` vs `src/dos.c` 的 `switch (ah)`；日志会打印前 40 条 `UNHANDLED INT21` |
+| **换游戏前先体检（不运行）** | `python re\preflight.py <exe>`（LE/对象表/与预留区冲突/AIL 特征）+ `python re\fixup_scan.py <exe>`（fixup 语法要 `bad=0 leftover=0`）；然后 `--exe <新exe> --gamedir <新目录>` 跑，看日志 `fixups applied / low-memory window moved / INT10 / DAC`（§14） |
+| 游戏自己不报错也没画面 | 看 `dos: write h=1 ... n=` 是否为 0（游戏 printf 被丢，§8-35）；看“端口操作数”是否暴涨到几千万（`0x3DA` 死循环，§8-38）；看是否卡在 `AIL_register_timer`（回调不触发，§14.5） |
 | 手工复现 fresh install | 数据文件拷到任意目录 + **删 `FD2.TMP`** → `--gamedir <该目录> --autokey=...` |
 | 反汇编/反编译游戏函数 | ida MCP（主）；Ghidra HTTP 桥 `/read_memory`、`/list_segments`（批量） |
 
@@ -140,7 +142,7 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 | 文档 | 内容 |
 |---|---|
 | `README.md` | 目标、目录、构建/运行、已验证事实、下一步、调试手法 |
-| `PROGRESS.md` | 交接文档：§2 环境与命令、§3 二进制事实、§4 宿主设计与服务语义、§6 历史卡点、§7 计划、**§8 踩坑清单（必读）**、§9 调试手册、§10 ida 环境、§11 声音、§12 文件服务、§13 显示/跨平台决策 |
+| `PROGRESS.md` | 交接文档：§2 环境与命令、§3 二进制事实、§4 宿主设计与服务语义、§6 历史卡点、§7 计划、**§8 踩坑清单（必读）**、§9 调试手册、§10 ida 环境、§11 声音、§12 文件服务、§13 显示/跨平台决策、**§14 通用化 + FDPS 首跑** |
 | `re/RE_MAP.md` | 逆向测绘地图：函数分区、AIL 边界、核心函数档案、转译路线 |
 | `re/funcmap.csv` | 全量函数表（1359 行） |
 | `re/*.txt` / `re/*.c` | 静态扫描清单与关键函数反编译存档 |

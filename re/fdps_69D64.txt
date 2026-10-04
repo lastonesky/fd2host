@@ -1,0 +1,22 @@
+symbol at 0x69D64 = 'dword_69D64'
+xrefs: 156
+   0x15C1F in sub_15BD0
+   0x15C2B in sub_15BD0
+   0x17111 in sub_170B0
+   0x174F6 in sub_170B0
+   0x1791E in sub_178E0
+   0x1795E in sub_178E0
+   0x17BE5 in sub_17980
+   0x17BED in sub_17980
+   0x18039 in sub_17C90
+   0x18041 in sub_17C90
+   0x18181 in sub_17C90
+   0x18189 in sub_17C90
+   0x182FC in sub_17C90
+   0x18304 in sub_17C90
+   0x19679 in sub_194C0
+   0x19681 in sub_194C0
+   0x1998E in sub_196B0
+   0x19996 in sub_196B0
+   0x19C8C in sub_196B0
+   0x19C94 in sub_196B0

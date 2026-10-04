@@ -1,4 +1,4 @@
-# FD2 → Windows 原生移植工程（路线 C：二进制宿主 + 逐步源码化）
+# FD2(炎龙骑士团2 Flame Dragon 2 黄金城之谜) → Windows 原生移植工程（路线 C：二进制宿主 + 逐步源码化）
 
 目标：让 `E:\FD2\FD2.EXE`（DOS/4GW 32 位保护模式游戏，Borland/Watcom + Miles AIL）
 **在 Windows 上原生运行**——不模拟 DOS、不模拟实模式、不使用 DOSBox。
@@ -34,6 +34,11 @@ port/
 ```powershell
 pwsh -File port\build.ps1 -Target fd2host     # 生成 port\build\fd2host.exe
 Start-Process port\build\fd2host.exe -ArgumentList '--exit-after=30' -WorkingDirectory 'E:\FD2'
+
+# 跑别的 DOS/4GW(LE) 游戏（通用化见 PROGRESS.md §14，先做静态体检）
+python port\re\preflight.py "E:\Games\FDCollection\Game\FDPS\FDPS.EXE"
+Start-Process port\build\fd2host.exe -ArgumentList `
+  '--exe=E:\Games\FDCollection\Game\FDPS\FDPS.EXE', '--gamedir=E:\Games\FDCollection\Game\FDPS', '--exit-after=30'
 ```
 
 日志写入 `port/build/host.log`（宿主是 WINDOWS 子系统，不弹控制台窗口）。
@@ -102,6 +107,9 @@ LE 加载 + 7937 条 fixup 应用
 → 游戏退出路径（INT10 mode 3 → AH=4Ch → ail shutdown）           ✅ 菜单主动退出实测（PROGRESS §12.4）
 → 第 1 步接口抽取：render.h / host.h / main_win32.c + `-Render gdi|sokol`  ✅ GDI 成为第一个后端，regress 8/8
 → sokol 选型实测：0 DLL、exe +146 KB、Win 上直接 D3D11            ✅ 头文件已 vendor（pin 2e75443）
+→ 第 14 轮通用化：`--exe` 可跑任意 LE 游戏（10 处 FD2 专属依赖补齐，见 PROGRESS §14）  ✅ FD2 回归 8/8
+→ 炎龙外传 FDPS 首跑：LE/fixup/低内存自动挪位/启动链/设 13h 模式/调色板/首帧  ✅ 120 s 无崩溃
+   └ 卡点：`AIL_register_timer` 回调不触发（原版 AIL 要硬件定时器）→ 标题动画不推进
 ```
 
 ## 当前状态与下一步
@@ -138,7 +146,10 @@ LE 加载 + 7937 条 fixup 应用
    入口层 `main_win32.c`（第 1 步完成）；`audio.h` 随**第 3 步**（sokol_audio 替换 waveOut）抽，
    `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入
    `platform_win32.c`/`platform_posix.c`，在那之前 Win32 调用仍留在 `dos.c`/`ail.c` 原处）。
-   先出 **Linux x86-64**，ARM 需完成源码化。顺序见 `PROGRESS.md` §13.5/§13.6。
+   先出 **Linux x86-64**，ARM 需完成源码化。顺序见 `PROGRESS.md` §13.5/§13.6；sokol 实测见 `§13.1`。
+8. **FDPS（炎龙外传）跑起来**：`--exe` 已能加载它并跑到“设 13h 模式 + 调色板 + 首帧”（`§14.3`），
+   下一道关口是 **AIL 定时器回调**（`AIL_register_timer` 注册成功但不触发），同一张表顺带接上音效/音乐。
+   换新游戏前先体检：`re/preflight.py`（LE/冲突/AIL 特征）、`re/fixup_scan.py`（fixup 语法）。
 
 ## 调试手法（可复用）
 

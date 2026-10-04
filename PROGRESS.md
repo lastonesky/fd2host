@@ -353,8 +353,13 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
 6. **稳定性长跑**：连续运行 5 分钟以上与反复重启验证（游戏退出路径已验：`INT10 mode 3` →
    `AH=4Ch` → `ail: shutdown`，见 §12.4）。
 7. ~~**文件写入 / 存档路径**~~ **平台侧已补完**（§12）：`AH=3C/41` + `AH=40 CX=0` 截断，
-   `regress.ps1` 回归 8/8 PASS。**剩余**："新游戏 → 首次存档 → `FD2.SAV` 从无到有"与
-   "存档变小后的截断对拍"两条还没实测；`AH=49/4A` 仍是空操作（账本只增不减）。
+   `regress.ps1` 回归 8/8 PASS。**剩余**：“新游戏 → 首次存档 → `FD2.SAV` 从无到有”与
+   “存档变小后的截断对拍”两条还没实测；`AH=49/4A` 仍是空操作（账本只增不减）。
+8. **FDPS（炎龙外传）跑起来**（§14，已到“设模式 + 调色板 + 首帧”）：下一道关口是
+   **AIL 定时器**（`AIL_register_timer` 注册成功但回调不触发 → 动画时钟不动）。
+   做法：用 ida MCP 按 **AIL trace 串**定位 FDPS 的 AIL 入口表（同 FD2 当年的 §10/RE_MAP §3 手法），
+   在 `ail.c` 实现定时器族 + 由宿主线程直接调用 guest 回调；同一张表顺带把 FDPS 的音效/音乐接上。
+   新游戏支持的体检工具：`re/preflight.py`、`re/fixup_scan.py`。
 
 ---
 
@@ -515,6 +520,45 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     "只修好了一半"。判据依旧是日志 `host: working directory = …`。
     正确写法：`av[0] = argv[0]; ac = 1;` 再从 `i = 1` 合并（`host_init()` 开头）。
 
+34. **`VirtualAlloc` 的分配粒度是 64 KiB，基址向下取整**（第 14 轮）：想在 `0x71000` 开窗口，
+    Windows 实际落到 `0x70000`，撞上游戏对象就报 **ERROR 487**。低内存镜像必须 **64 KiB 对齐**
+    （`dos_choose_lowmem()`），段对齐不够。
+
+35. **GUI 子系统没有 fd 0/1/2，`freopen` 又不更新 `STD_*_HANDLE`**（第 14 轮）：宿主把 `stdout`
+    重定向到 `host.log` 后，`GetStdHandle(STD_OUTPUT_HANDLE)` 仍无效 → 游戏经 `AH=40h` 写句柄 1
+    得到 **0 字节 / 错误 6** → **游戏自己的 printf 全部丢失**（日志里只看得到
+    `dos: write h=1 want=39 n=0`）。修法：`_dup2(_fileno(stdout), 1)` 把 fd1/fd2 钉到日志上，
+    `files_init()` 改用 `_get_osfhandle()` 取真实句柄。**看不到游戏文本 ≠ 游戏没报错**。
+
+36. **LE 末对象在磁盘上的字节数 ≠ `vsize`**（尾部 BSS 不落盘）（第 14 轮）：
+    `data_start = EOF − Σ跨度` 对 FD2 成立，对 FDPS 差 **0x1F 字节**（`vsize=0x54` 只落 `0x35`），
+    整个映像**错位 31 字节** → 执行的是错位指令流（`mov es,[ebx]`、`EBX=0`，且 `int` 服务数=0）。
+    正确来源是 LE 头 **`+0x2C` = 末页实际数据字节数**（FD2 `0x4D2`、FDPS `0x35`），两者同时成立。
+    **判据**：拿 IDA 在入口 `0x43008` 处的字节与两种候选起点的文件内容对拍（`re/preflight.py` 思路）。
+
+37. **fixup 类型不止 `0x07`**（第 14 轮）：FDPS 第 71 页用了 **`0x02`（5 字节：`02 00 src:2 obj:1`，
+    无目标偏移字段）**，旧代码遇未知类型就 `break` → **该页剩下 987 字节（140 条 fixup）全丢**。
+    新文件必须先跑 `re/fixup_scan.py`，看到 `bad=0 / leftover=0` 才算解析干净。
+
+38. **VGA 状态口 `0x3DA` 的位必须会变**（第 14 轮）：`bit3`=垂直回扫是**状态位**，恒返回 `0x09` 会让
+    “等回扫开始 → 等回扫结束”这对经典写法**永远退不出**（FDPS 标题循环正是如此）。现象很有辨识度：
+    画面永远停在第一帧 + **端口操作数暴涨到几千万次**（死循环在狂读状态口）。现在每次读翻转 `0x09↔0x00`。
+
+39. **CD 检测 = `INT 2Fh AX=1500h`（MSCDEX），看的是 BX**（第 14 轮）：FDPS `sub_3C3A6` 调
+    `int386(0x2F,{AX=0x1500})` 后只判 `BX==0`，为 0 就打印 `Fatal error: CDROM is not install!!!`
+    并 `exit(1)`。宿主现在回 `AL=FFh, BX=0x0210`（2.10）。
+
+40. **`AH=43h`（取/置文件属性）被 CRT 的 `access()` 用到**（第 14 轮）：FDPS 启动第一件事就是
+    `access("DISK.NO", 0)`，未实现时 `CF=1` → 游戏当“文件不存在”直接 `exit(1)`。
+    FD2 从不用这个功能 —— **“FD2 没用到”不等于“别的游戏也不用”**，新增游戏前先跑 `re/preflight.py`。
+
+41. **`VirtualAlloc(MEM_COMMIT)` 不能跨越多个预留区域**（第 14 轮，自己修自己引入的坑）：
+    把早期预留拆成逐个 64 KiB 块后，每个块是**独立区域**；再对 `0x10000+0x3F000` 做一次性 commit
+    就被拒（**487**），即使每一页都已 COMMIT —— 判据是 `VirtualQuery` 看到 `region_size=0x10000`
+    （而不是合并后的大区域）。修法：**按区域逐段 commit**（`le_commit_range()`，`le.c`/`dos.c` 共用），
+    遇到 FREE 子块先 RESERVE。另注意：早期预留失败的提示只能在 CRT 起来后打印（`fd2_entry` 里不能用
+    stdio），所以 **原因与报错往往不在同一行** —— 早预留的掩码写在 `stderr`（`host.err`）。
+
 ---
 
 ## 9. 调试手册
@@ -529,7 +573,10 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
 | 看谁改了内存 | 崩溃报告会打印 EIP 前后 48 字节 + 分配账本（`note_alloc`） |
 | 反汇编游戏函数 | Ghidra：`decompile_function` / `read_memory`；注意 obj0 是 32 位平坦代码，obj1/obj2 是数据 |
 | 已知的 Ghidra 陷阱 | `_entry`(0x3CCB4) 的反编译里充满 `in_DS/in_ES/swi()` 伪寄存器——那是段寄存器访问与 `int` 指令的建模，代码本身是正常的 32 位代码 |
-| 抓当前帧画面（不依赖窗口/桌面） | `--exit-after=30 --screenshot=E:\FD2\port\build\frame.bmp --shot-frame=700`，日志出现 `host: frame 700 dumped` 后把 BMP 转 PNG 查看（`[System.Drawing.Image]::FromFile`）。帧数见 watchdog 行 `(N frames drawn)` |
+| 抓当前帧画面（不依赖窗口/桌面） | `--exit-after=30 --screenshot=E:\FD2\port\build\frame.bmp --shot-frame=700`，日志出现 `host: frame 700 dumped` 后把 BMP 转 PNG 查看（`[System.Drawing.Image]::FromFile`）。帧数见 watchdog 行 `(N frames drawn)`。帧内容也可用 ASCII 网格打印（不依赖看图工具）：对 `GetPixel` 采样 64×24、按亮度映射成 ` .:-=+*#%@` |
+| **换一个游戏前的静态体检** | `python re\preflight.py <exe>`（LE/对象布局/与宿主预留区冲突/AIL 特征/扩展器）+ `python re\fixup_scan.py <exe>`（fixup 语法，要 `bad=0 leftover=0`）。两个都不运行、零风险，能在开跑前报出必修点（§14.1） |
+| 看不到游戏自己的文本 | 先看日志里 `dos: write h=1 ... n=` 是不是 0（句柄无效 = 游戏 printf 全丢，§8-35）；`AH=3F/40` 对 ≤512 字节的小传输有内容日志（前 40 条） |
+| 游戏停在第一帧 / 端口操作数暴涨 | `0x3DA` 状态位没翻转（等回扫的经典写法死循环，§8-38）；端口操作数是正常量级的百倍/千倍即是此病 |
 | 崩溃现场新增字段 | AV 转储现在含 `RLE w/h (@0x627B4)`、`[ESI]` 源字节、`[ESP]` 返回地址、EBP 帧的 6 个参数 —— 定位"解压写飞"与"分配器越界"两类问题最快 |
 | 文件写入回归（一键） | `pwsh -File port\regress.ps1`：重建 `build\sandbox`（删掉 `FD2.TMP`）→ `--autokey` 走 continue → 对日志+文件系统断言 8 项，`ALL PASS` 为准（§12.4） |
 | 手工复现 fresh install | 把数据文件拷到任意目录、**删掉 `FD2.TMP`**，再 `--gamedir <该目录> --autokey=5000:SPACE;2500:RETURN;2500:RETURN;2500:DOWN,RETURN` |
@@ -828,6 +875,10 @@ PASS  FD2.TMP non-empty         PASS  clean end (watchdog/exit)
 Win=D3D11 / mac=Metal / Linux=GL）。SDL2/SDL3 的实测降为**备选记录**（§13.2、§13.3）。
 **不用 git 分支分平台**，改用“单代码库 + 后端选择”。备选方案与实测数据见下。
 
+> **2026-10-05 清理**：定案 sokol 后，`build/` 下的 SDL2/SDL3 全部产物已删除
+> （`sdlprobe*`/`sdl3probe*` 源码与 exe、`SDL2.dll`/`SDL3.dll`、`SDL3-devel.zip`、`build/sdl3/` 解压目录、
+> 仅服务于 SDL 依赖查看的 `deps.bat`）。§13.2/§13.3 的实测数据**留档**；如需重测按当时流程重写 probe。
+
 ### 13.1 sokol 实测（2026-10-05，`build/sokolprobe.c` + `build/sokol/*.h`）
 
 probe = `sokol_app`（`SOKOL_WIN32_FORCE_MAIN`，建 960×600 窗口）+ `sokol_gfx`（D3D11）
@@ -869,7 +920,7 @@ probe = `sokol_app`（`SOKOL_WIN32_FORCE_MAIN`，建 960×600 窗口）+ `sokol_
 6. **API 仍在演进**：本次 probe 用到的已是 `sg_view`/`sg_sampler`/`sg_environment` 新一代 API，
    **网上大量 sokol 教程已过时** —— 一律以 vendor 进仓库的头文件内文档为准（这也是要 pin 版本的原因）。
 
-### 13.2 SDL2 实测（`build/sdlprobe*.c`，SDL2 2.32.8 **x86**，宿主是 32 位进程）
+### 13.2 SDL2 实测（probe 已删，数据留档；原 `build/sdlprobe*.c`，SDL2 2.32.8 **x86**，宿主是 32 位进程）
 
 | 项 | 实测值 |
 |---|---|
@@ -879,7 +930,7 @@ probe = `sokol_app`（`SOKOL_WIN32_FORCE_MAIN`，建 960×600 窗口）+ `sokol_
 | `SDL_SetHint(SDL_HINT_RENDER_DRIVER, "direct3d11")` | ✅ **一行生效**：日志 `renderer in use: direct3d11` |
 | W3 每帧 CPU 成本 | `UpdateTexture(320×200 ARGB)` = 0.136 ms；`+Clear+Copy(→960×600)` = **0.092 ms**；`+Present` = 0.086 ms（3000 次取均值） |
 | 加 `SDL_RENDERER_PRESENTVSYNC` | 6.24 ms/帧（vsync 等待；隐藏窗口下不是满刷新率，仅供量级参考） |
-| 32 位链链 | ✅ `lib/x86/SDL2.lib` 存在，probe 编译/运行均通过（`sdlprobe*.exe`，留在 `build/`） |
+| 32 位链链 | ✅ `lib/x86/SDL2.lib` 存在，probe 编译/运行均通过（`sdlprobe*.exe`，已随清理删除） |
 
 ⇒ W3 的渲染路径 CPU 成本约 **0.1 ms/帧**，而且 GPU 负责缩放（GDI 是软件缩放）。
 另：帧率卡在 32 fps 是 `SetTimer(20)` 撞上 Windows 默认 15.625 ms 定时器粒度（§12/§7.1），
@@ -965,4 +1016,76 @@ probe = `sokol_app`（`SOKOL_WIN32_FORCE_MAIN`，建 960×600 窗口）+ `sokol_
    `platform_win32.c`（VEH 暂时仍留 `dos.c`，语义转换见下），POSIX 实现进 `platform_posix.c`
    （`sigaction`/`mmap`/`pthread`）；Linux 侧需要 `libX11-dev` + sokol GL 后端。
    `int NN`/`in out` 的信号语义用 `probe4.c` 的方法在目标机重测 → 首个非 Windows 产物。
+
+---
+
+## 14. 第 14 轮：平台通用化（`--exe` 可跑任意 LE 游戏）+ 炎龙外传 FDPS 首跑（2026-10-05）
+
+**目标**：把宿主从“FD2 专用”改成“通用 DOS/4GW(LE) 宿主”，验收 = 能加载并运行同系列的
+《炎龙骑士团外传》`E:\Games\FDCollection\Game\FDPS\FDPS.EXE`（用 `--exe` / `--gamedir` 指定）。
+
+### 14.1 先做静态体检（不运行，零风险）
+
+```powershell
+python E:\FD2\port\re\preflight.py "E:\Games\FDCollection\Game\FDPS\FDPS.EXE"
+```
+输出（摘要）：
+```
+LE header @0x2A50  77 pages  3 objects  entry=0x43008
+obj0 0x10000 (0x479D0)   obj1 0x60000 (0xC3C0)   obj2 0x70000 (0x54)
+CONFLICT obj2 overlaps low-memory mirror (BDA/PSP/IVT)
+AIL: FOUND AIL_startup, AIL_shutdown, AIL_install_DIG_INI, AIL_set_preference
+extender: RATIONAL DOS/4G, WATCOM
+```
+⇒ 开跑前就已知两个必修点：**低内存镜像冲突**、**AIL 52 个地址是 FD2 专属（不能乱打补丁）**。
+
+### 14.2 十个卡点与修复（每条都有日志判据，细节见 §8-34..40）
+
+| # | 卡点 | 日志判据（修复前） | 修复 |
+|---|---|---|---|
+| 1 | AIL 52 个入口地址是 FD2 的 | 静态：FDPS 含 AIL trace 串 → 会被写进错误地址 | `--ail=auto\|fd2\|none`，auto 只对 `FD2.EXE` 打补丁 |
+| 2 | 低内存镜像写死 `0x70000`（FDPS obj2 正好在那里） | `dos: cannot map low-memory window` | `dos_choose_lowmem()` 按对象表挪镜像 |
+| 3 | `VirtualAlloc` 64 KiB 粒度 | ERROR **487** | 镜像 64 KiB 对齐 + 实模式池让位（§8-34） |
+| 4 | 只预留 `0x10000..0x6FFFF` | CRT 抢走 `0x80000`/VGA → 镜像失败 → `files_init()` 没跑 + `host_frame` 读 `0xA1000` 崩 | 改为**一次预留 `0x10000..0x100000`**；因低内存偶发被加载器占用，改成**逐 64 KiB 块预留** + **按区域逐段 commit**（`le_commit_range()`，§8-41） |
+| 5 | GUI 进程无 fd1，游戏 printf 全丢 | `dos: write h=1 want=39 n=0`（错误 6） | `_dup2(_fileno(stdout),1)` + `_get_osfhandle()`（§8-35） |
+| 6 | 映像数据起点算法（末对象 BSS 尾） | 执行错位指令流：`mov es,[ebx]` `EBX=0`、`int` 服务数 = 0 | 用 LE 头 `+0x2C`（§8-36）；IDA 入口字节对拍定起点 |
+| 7 | fixup 类型 `0x02` 未识别 | `bad records=1, leftover=1` → 该页丢 987 字节（140 条） | 实现 `0x02`（5 字节、无目标偏移）（§8-37） |
+| 8 | `INT 21h AH=43h` 未实现 | `UNHANDLED INT21 AH=43` → `access("DISK.NO")` 失败 → `exit(1)` | 实现 get/set attributes（§8-40） |
+| 9 | `INT 2Fh AX=1500h` 未实现 | `Fatal error: CDROM is not install!!!` → `exit(1)` | 回 `AL=FFh, BX=0x0210`（§8-39） |
+| 10 | `0x3DA` 恒返回 `0x09` | 画面停第一帧 + **端口操作 2700 万次**（死循环读状态口） | 状态位每次读翻转 `0x09↔0x00`（§8-38） |
+
+> 新增诊断：`AH=3F/40` 对 **≤512 字节**的小传输打日志（前 40 条，含内容）——
+> “游戏到底读到/写出什么”第一次变得可见；`INT10` 非 `0x13` 模式会告警（宿主仍按 320×200 显示）。
+
+### 14.3 FDPS 现状（实测）
+
+```
+加载   ✓  LE 77 页解析；fixup 6831 / bad=0 / leftover=0（补上 0x02 后恢复 140 条）
+       ✓  低内存镜像自动 0x70000 → 0x80000（seg 0x8000），20 处低内存引用重定向
+       ✓  `int` 服务数 0 → 启动后正常计数
+启动链 ✓  AH=30 版本探测 → AH=4A 调内存 → 低内存模拟读 PSP:0x2C/0x80 → MSCDEX 检测
+       ✓  DIG.INI 打开、SB16.DIG 被 16 位驱动拦截、MISC.VFS 读取
+渲染   ✓  `INT10 set video mode 0x13`、调色板写入（标准 EGA 16 色，DAC 日志可见）
+       ✓  标题帧 blit 到 0xA0000（帧非黑、18 种颜色），连续 45–120 s 无崩溃
+卡点   ✗  `AIL_register_timer`（`sub_3DF06`，靠它自己的 trace 串定位）注册成功但**回调永不触发**
+         → 动画时钟 `dword_69D64`（156 处引用）不走 → 标题循环停在第一帧
+```
+
+### 14.4 FD2 未被破坏
+
+`regress.ps1` **8/8 PASS**（45 s 与 75 s 各一次；中间一次 45 s 失败是**机器负载的时序抖动**
+（Defender/Code/IDA 同时占用），默认已从 45 s 调到 **60 s**）。日志证明 FD2 **不调用** `AH=43`、
+**不调用** `INT 2F/1500`，因此新增逻辑对它零影响；`0x3DA` 翻转只会让等待循环更快结束。
+
+### 14.5 下一轮入口：FDPS 的 AIL 定时器（进而是它的音效/音乐）
+
+1. 用 ida MCP 按 **AIL trace 串**（`"AIL_register_timer(0x%X)\n"` 等）反查 FDPS 的 AIL 入口地址表 ——
+   与 FD2 当年建 52 条表的手法相同（`re/RE_MAP.md` §3、`PROGRESS.md` §10）。
+2. 在 `ail.c` 实现定时器族：`AIL_register_timer`（存回调）、`AIL_set_timer_period/frequency`、
+   `AIL_start/stop_timer`、`AIL_release_timer_handle`；宿主起一个高精度线程按周期**直接调用 guest 回调**
+   （回调是普通近函数 `sub_30520: inc dword_69D64; call rand; ret`，在宿主线程执行即可，
+   不碰游戏线程的寄存器；只需注意 `rand()` 的共享状态并发）。
+3. 同一张表顺带把 FDPS 的**数字音效/音乐**接上（`*.DIG/*.MDI` 已在磁盘上，当前被当 FD2 处理拦截）。
+4. 工具与存档：`re/preflight.py`（静态体检）、`re/fixup_scan.py`（fixup 语法核对）、
+   `re/fdps_*.c`（本次反编译存档：`main`、`sub_2A280` 标题循环、`sub_3C3A6` CD 检测、`sub_3DF06` 等）。
 
