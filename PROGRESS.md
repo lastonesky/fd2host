@@ -2443,3 +2443,57 @@ host: working directory = E:\FD2
 2. 之后整体转译 `sub_15F84`（1380 B 词流解释器）并对拍 VGA：它的依赖里除 `sub_164E8` 外
    （`0x16559/0x16E24/0x16C57`、rle2、gfx、`0x4ED7A`、`sub_111BA`）均已转译或有对拍。
 3. 排期项（不阻塞）：CRT 堆 + 文件层整体替换后，`res.c`、`0x15E71/0x15E9E` 一起接入。
+
+---
+
+## 32. 第 32 轮：角色记录表转译（`0x34894 rec_flag` / `0x12C60 rec_find`）（2026-10-05）
+
+### 32.1 转译：`src/game/rec.c`
+
+两张 **80 字节记录表**住在数据段，由 `sub_10010` 从存档块填充（逐条从反编译钉死）：
+
+| 全局 | 含义 | 来源（`sub_10010`） |
+|---|---|---|
+| `dword_53A45` | 表 1 基址 | `memmove(dword_53A45, blob + 4771, 80 * dword_53BEB)` |
+| `dword_53BEB` | 表 1 记录数 | `blob[12484]`（无符号字节） |
+| `dword_53BF7` | 表 2 基址 | `memmove(dword_53BF7, blob + 2211, 2560)`（= 32 条） |
+| `dword_53BFB` | 表 2 记录数 | `blob[12492]`（无符号字节） |
+| `dword_53C1B` | 最近匹配的记录 | `rec_find` 写入；调用方之后读它取头像 |
+
+观察到的记录字段：`+0/+1` 一个 word（`sub_12C0D` 拿它和 `qword_53AB1` 比）、`+2` 图标索引（来自 `FD.ICON.B24`）、
+`+5` 标志字节、`+7` 对话渲染用的 DATO 资源索引、`+8` 这两个函数检索的 id。
+
+两个语义细节（反汇编钉死，见 `re/rec_functions.txt`）：
+
+- `rec_flag(i)`：`mov eax,edx; shl eax,2; add edx,eax; shl edx,4` —— 即 `i*5 << 4` = **无符号** `80*i`，取 `byte+5 & 1`。
+  C 侧按 `(uint32_t)index * 80` 逐字复现：负索引会回绕成表外地址（两侧都会 fault），能断言的只有回绕本身。
+- `rec_find(want)`：先 `dword_53C1B = 0`；扫表 1，凡 `byte+8 == want`（**无符号字节**比较，所以 `want > 255` 永不命中）
+  就把记录地址记进 `dword_53C1B`，并在该记录 flag bit0 == 0 时立刻返回索引；**表 1 一个都没命中**才扫表 2，
+  而第二段循环**不提前退出** —— `dword_53C1B` 最终停在**最后一条**匹配记录，返回值仍是 `-1`。
+  调用方（`sub_15F84`）只把返回值当"找到未标志记录"用，之后从 `dword_53C1B` 读头像。
+
+写法沿用 §30.1 的 app-level：C 读写与原机器码同一批数据段全局，`repl.c` 无需胶水。
+
+### 32.2 对拍（`src/reccheck.c` + `build.ps1 -Target reccheck`）
+
+表内容是合成 buffer，但**全局是真正的游戏全局**：两侧读同一个数据段，所以这是真对拍而不是算法复述。
+比较返回值 + `rec_find` 留下的 `dword_53C1B`。覆盖：随机表/记录数/want，加上每条路径的构造用例
+（全不命中、只在表 2 命中且有多条、表 1 先命中已标志再命中未标志、表 1 全标志（于是表 2 不被扫）、
+`want > 255`、空表）。按 §22.4，该 console 目标必须 `/link /BASE:0x60000000`，否则 exe 自己会落进 guest 窗口。
+
+### 32.3 实测判据
+
+```
+le: fixups applied=7937, cross-page records skipped=22, pages with leftover data=0, bad records=0
+paths: random=900 none=1 table2=1 flag0=1 flag1_only=1 want>255=1 empty=1
+PASS: 28739 cases, 0 failures
+repl: installed 46 translated function(s) (mask 0x7F)   # 新增 REPL_REC = 0x40
+regress.ps1 ALL PASS 8/8（15.2 s），FD2.TMP = 207360 bytes（与原件同尺寸）
+```
+
+### 32.4 下轮入口
+
+1. `sub_164E8`（113 B，单调用点 = `sub_15F84`）—— 逐字符打字机步进：每 2 个字符贴一次嘴型 DATO 子图、
+   播音效表第 2 项、延 1 tick。依赖 `sub_25A96`（AIL 音效服务）与 `sub_17AA9`（tick 延时），见 §33。
+2. 之后整体转译 `sub_15F84`（1380 B 词流解释器，126 个调用点）并对拍 VGA。
+3. 排期项（不阻塞）：CRT 堆 + 文件层整体替换后，`res.c`、`0x15E71/0x15E9E` 一起接入。
