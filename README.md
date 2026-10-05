@@ -18,6 +18,9 @@ port/
 │   ├── dos.h / dos.c  平台层：VEH 捕获 int/特权指令 + DOS/DPMI/BIOS 服务替换
 │   ├── host.c         宿主主程序：地址空间预留、窗口、显示、键盘、主循环
 │   ├── letest.c       加载器自检（与 Ghidra 导出的重定位镜像逐字节对比）
+│   ├── game/          **源码转译产物**（从逆向还原的 C 源码，带原地址注释）
+│   │   └── rle.h/rle.c   RLE 解码器（原 0x4E98D/0x4E8D3，PROGRESS §19）
+│   ├── rlecheck.c     转译对拍测试：随机 RLE 流 × 原机器码 vs 转译 C，逐字节比对
 │   ├── ail.c          AIL 替换层：16 个 AIL_* 入口 → 宿主实现（数字音效走 WinMM waveOut）
 │   ├── xmidi.c        XMIDI 解析（FDMUS.DAT 的 XDIR/CAT/FORM XMID）→ 事件列表
 │   ├── synth.c        自带软件合成器：事件 → PCM → waveOut（音乐不依赖系统 MIDI）
@@ -34,6 +37,10 @@ port/
 ```powershell
 pwsh -File port\build.ps1 -Target fd2host     # 生成 port\build\fd2host.exe
 Start-Process port\build\fd2host.exe -ArgumentList '--exit-after=30' -WorkingDirectory 'E:\FD2'
+
+# 源码转译对拍（第 19 轮起）：转译 C vs 原始机器码逐字节比对，1900 例全过才算转译正确
+pwsh -File port\build.ps1 -Target rlecheck
+& port\build\rlecheck.exe
 
 # 跑别的 DOS/4GW(LE) 游戏（通用化见 PROGRESS.md §14，先做静态体检）
 python port\re\preflight.py "E:\Games\FDCollection\Game\FDPS\FDPS.EXE"
@@ -119,6 +126,9 @@ LE 加载 + 7937 条 fixup 应用
 → 第 18 轮：游戏自挂 **INT 9** 投递 + 修 `type 0x02` fixup 写宽度  ✅ 标题菜单 → START NEW GAME → 进游戏场景
    └ 判据：`build/fdps_menu2.png`（游戏场景，97 色）vs `fdps_static.png`（标题菜单，82 色）；FD2 回归 8/8（PROGRESS §18）
    └ 当前卡点：场景读完 `FACE.CEL` 后跳到 `EIP=0x1FFFC`（解引用 `0x43B4` < 64 KiB）
+→ 第 19 轮：**源码转译开工** —— RLE 模块 0x4E98D/0x4E8D3 → `src/game/rle.c`，机器码对拍 **1900 例逐字节一致**
+   └ 同轮按用户决定**停止 FDPS 支持**（PROGRESS §7.8 冻结），全力回到“逆向为高级语言代码”（PROGRESS §19）
+→ 第 20 轮：回归提速 —— `--exit-when-file` 完成即退出 + 脚本轮询，**75 s → 15 s**；低地址被加载器占用时自动重试（PROGRESS §20）
 ```
 
 ## 当前状态与下一步
@@ -150,22 +160,24 @@ LE 加载 + 7937 条 fixup 应用
 5. **首次保存实测**：`FD2.SAV` 不存在时的创建路径（机制已通，回归只覆盖了 `FD2.TMP`）
    + "存档变小"时的截断对拍。可复现回归：`pwsh -File port\regress.ps1`。
 6. **逐步源码化（路线 C 主体）**：按 `re/RE_MAP.md` 的模块顺序把机器码替换为 C 源码，
-   最终形成可编译 x86-64 的引擎。
+   最终形成可编译 x86-64 的引擎。**首个模块 RLE 解码已完成**（`src/game/rle.c`，
+   `rlecheck` 1900 例机器码对拍，PROGRESS §19）；下一批：无压缩块族 `0x4EC7C/0x4ECBF`、
+   字形渲染 `0x4ED7A`、资源加载 `sub_111BA`、脚本 VM `sub_15F84`。
 7. **跨平台**：单代码库 + 后端选择（**不用 git 分支**）。已抽出的是 `render.h`/`host.h` +
    入口层 `main_win32.c`（第 1 步完成）；`audio.h` 随**第 3 步**（sokol_audio 替换 waveOut）抽，
    `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入
    `platform_win32.c`/`platform_posix.c`，在那之前 Win32 调用仍留在 `dos.c`/`ail.c` 原处）。
    先出 **Linux x86-64**，ARM 需完成源码化。顺序见 `PROGRESS.md` §13.5/§13.6；sokol 实测见 `§13.1`。
-8. **FDPS（炎龙外传）跑起来**：标题菜单已能**按键进到游戏内场景**（`§14.3`/`§15`/`§16`/`§18`）：
-   25 Hz 动画时钟、`AH=4B` 拉起 FD.EXE、游戏自挂的 INT 9 由宿主在 guest 线程上注入中断帧。
-   **下一道关口（`§18.5`）**：场景里读完 `FACE.CEL` 后跳到 `EIP=0x1FFFC`（解引用 `0x43B4` < 64 KiB）。
-   挂账：`FD1.Vid`/`FD1.Aud` 过场数据全集缺失（跳过 intro，已验证可用）、FD.EXE 尚无自己的 AIL 表。
-   换新游戏前先体检：`re/preflight.py`、`re/fixup_scan.py`；
-   FDPS 与 FD.EXE 的 IDA 库都已存盘（开库即用，不必手动加载）。
+8. ~~**FDPS（炎龙外传）跑起来**~~ **已冻结（2026-10-05 用户决定：不再继续支持 FDPS）** ——
+   已达成的成果存档：25 Hz 动画时钟（§15）、`AH=4B` 拉起 FD.EXE（§16）、游戏自挂 INT 9 注入（§18）、
+   标题菜单 → 游戏内场景（`build/fdps_menu2.png`）；宿主通用能力（`--exe`、FDPS AIL 表、定时器线程）
+   保留在代码里不再主动维护。FDPS 后续卡点（§18.5 `FACE.CEL` 跳飞、`FD1.Vid` 缺失）不再投入。
 
 ## 调试手法（可复用）
 
 - `letest.exe`：加载器 vs Ghidra 镜像逐字节对比，是加载正确性的唯一可信判据。
+- `rlecheck.exe`：源码转译 vs **原始机器码**逐字节对拍（随机流 1900 例 + 全局副作用），
+  是转译正确性的唯一可信判据（方法见 PROGRESS §19.4，可复用于后续每个模块）。
 - `--screenshot=<file.bmp> [--shot-frame=<n>]`：导出**实际送显**的 RGB 缓冲，不依赖窗口/桌面，
   用于核对调色板与通道顺序；BMP→PNG 可用 `[System.Drawing.Image]::FromFile(...).Save(...)`。
 - 崩溃转储会打印：EIP 前后 48 字节、`RLE w/h (@0x627B4)`、`[ESI]` 源字节、`[ESP]` 返回地址、

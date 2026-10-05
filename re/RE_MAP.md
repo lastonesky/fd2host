@@ -4,6 +4,7 @@
 > 所有地址为线性地址（obj0=0x10000 / obj1=0x50000 / obj2=0x60000），已与 Ghidra 实证一致。
 > 结论凡未经运行验证的均标注"待确认"。**第二个游戏《炎龙外传》FDPS.EXE 的地图见 `re/FDPS_MAP.md`**
 > （90 条 AIL 入口表、定时器族、spawn FD.EXE 流程；IDA 库 `…\\FDPS\\FDPS.EXE.i64`）。
+> **FDPS 已冻结（2026-10-05 用户决定，不再支持），该图仅作存档不再更新。**
 
 ---
 
@@ -150,6 +151,10 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | `0x4EBE3` | 随机表滚动 | `ROL16(word_627B8-28652)` | ★ |
 | `0x3702F` | 库公共 thunk？ | 538 lib + 16 game 调用，`_InterlockedExchange` 包装 —— **待确认**（lib 层，不转译） | — |
 
+> **第 19 轮转译进展**：`0x4E98D`（三模式 RLE 解码）与 `0x4E8D3`（LUT 变体）已转译为
+> `src/game/rle.c`，`rlecheck` 以机器码对拍 **1900 例逐字节一致**（PROGRESS §19）；
+> 家族其余成员（`0x4EC7C`/`0x4ECBF` 无压缩块、`0x4ED7A` 字形渲染，注意 usercall 寄存器传参）待转译。
+
 游戏侧高频依赖（`lib_nosym`，需归类确认属于谁）：`0x4E381(15/64)`、`0x4EBE3(28/40)`、`0x4DF4C(56/32)`、`0x4E22A(114/13)`、`0x4E31C(101/15)` —— 0x4D000..0x4F000 段像**游戏自带工具库**（位流、24×24 图元、BIOS 封装），优先归类。
 
 ---
@@ -161,6 +166,7 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | 0 ✅ | IDA 数据库 + 测绘（本文档 + funcmap.csv） | 与 Ghidra 逐项一致 |
 | 1 | 模块归类：把 569 `game` + 0x4D000..0x4F000 段按调用图/字符串聚成模块；提取数据结构（全局 `dword_53xxx` 状态区、obj2 数据） | 交叉引用人工核对 |
 | 2 | **叶子模块先行**：DAT 解码器（BG/SHAP/ANI/RLE，格式已知于 FD2_analysis.md）→ 独立 C + 测试样本对拍 | 与原始解压输出逐字节 diff |
+|   | ✅ **RLE 已完成**（第 19 轮）：`src/game/rle.c` + `rlecheck` 机器码对拍 1900 例（PROGRESS §19） | 对拍判据已建立，可复用于后续模块 |
 | 3 | 图形 blit/调色板（`gfx_A0000` 粗筛集，先精化名单） | fd2host 显示对拍 |
 | 4 | 主状态机 + 脚本 VM | 逐步替换法：机器码 vs 转译 C 逐函数对拍（**待确认**可行性） |
 | 5 | CRT/平台层 → Win32（`dos.c` 已有大半）+ AIL 打桩 | host.log 行为等价 |
@@ -225,7 +231,8 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 2. 提取 `main` 状态机两张函数指针表（`funcs_25E23`/`funcs_25E3A`）的真实地址与项。
 3. 精化 `gfx_A0000` 名单（当前是字节粗筛，含误报）。
 4. 全局状态区 `dword_53A00..0x53F00` 的结构还原（`main` 已见约 20 个成员）。
-5. **下一批源码转译目标**：`sub_111BA`（资源加载）、`sub_4E98D`（RLE 解压，语义已确认）、
-   `sub_15F84`（脚本 VM）—— 建议先用独立 C 实现，再与宿主中的机器码行为对拍验证。
+5. **下一批源码转译目标**：无压缩块族 `0x4EC7C`/`0x4ECBF`（usercall 寄存器传参，对拍需 `__asm`
+   thunk）、字形渲染 `0x4ED7A`、然后 `sub_111BA`（资源加载）、`sub_15F84`（脚本 VM）——
+   继续用第 19 轮的机器码对拍法（独立 C + `rlecheck` 式随机流逐字节比对，PROGRESS §19.4）。
 6. **平台侧遗留**（第 12 轮收尾清单）：`AH=49/4A` 改成真释放；"首次保存"与"存档变小截断"
    两条路径实测；深层路径（战斗/地图）出现新 `UNHANDLED INT21` 时按 §6.1 表补齐。

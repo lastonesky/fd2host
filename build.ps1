@@ -30,6 +30,9 @@ $targets = @{
     probe3 = @{ srcs = @("probe3.c"); libs = @(); subsystem = "console" }
     probe4 = @{ srcs = @("probe4.c"); libs = @(); subsystem = "console" }
     letest = @{ srcs = @("letest.c", "le.c"); libs = @(); subsystem = "console" }
+    # differential test: src/game/rle.c (source translation) vs the original
+    # machine code at 0x4E98D / 0x4E8D3 - see src/rlecheck.c
+    rlecheck = @{ srcs = @("rlecheck.c", "le.c", "game\rle.c"); libs = @(); subsystem = "console" }
     fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";
