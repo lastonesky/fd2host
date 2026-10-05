@@ -2140,3 +2140,65 @@ regress.ps1 ALL PASS 8/8（34 个转译函数在跑）
    全局、调用 `sub_165AC/168B6/16B43/16C57/16559/16E24/164E8/12C60/111BA/4EBFF/4EC31/4ED7A/10620`。
    属多轮工程：先归档全局区与各 callee 契约，再分子块转译+对拍。
 2. 表访问器已完成；CRT 堆/文件层整体替换仍是让 `res.c` 接入的前提。
+
+---
+
+## 28. 第 28 轮：0xC0-RLE blit 族转译（0x4EBFF / 0x4EC31 / 0x4EBAB）（2026-10-05）
+
+### 28.1 第二套 RLE：token 与三个变体
+
+obj0 在画面 RLE（0x4E98D）之外还有一套 **0xC0 界 RLE**，由 `sub_15F84` 文本渲染器用来贴
+FDTXT/DATO 文本行。共享解码器 `0x4EC66`（usercall：AH=剩余计数、AL=当前值、ESI=流指针）：
+
+```
+字节 c <= 0xC0        字面量：像素 = c
+字节 c 在 0xC1..0xFF  游程：下一个字节是像素，重复 (c - 0xC0) 次（1..63）
+```
+
+三个 blit 都是 `[u16 w][u16 h][流]` → strided 面（行内连续、行间 `stride`、流跨行连续）：
+
+| 转译名 | 原地址 | 行为 |
+|---|---|---|
+| `rle2_blit` | `0x4EBFF` | 行内从左到右写 |
+| `rle2_blit_mirror` | `0x4EC31` | 行内**从右到左**写（镜像；第 0 行会写到 `dst` **之前** w-1 字节） |
+| `rle2_blit_trans` | `0x4EBAB` | 行内从左到右，0 字节透明（保留目标像素） |
+
+### 28.2 对拍（`src/game/rle2.c` + `src/rle2check.c`）
+
+每模式 400 例：随机合法流（精确解出 w*h 像素、字面量/游程全覆盖）、随机 stride。
+
+**测试坑**：`rle2_blit_mirror` 第 0 行会写到 `dst` 之前，首版测试把两个 `malloc` 缓冲紧挨着，
+一个的"越前"写入踩坏另一个的尾部 → 假失败（44 字节、出现在缓冲区末尾）。修法：两个
+目标缓冲各留 **128 字节左余量**并把左余量也纳入比较。修好后：
+
+```
+build\rle2check.exe  →  PASS: 1200 cases, 0 failures
+```
+
+### 28.3 接入 + 一个回归脚本修正
+
+3 个 blit 加入 `src/repl.c`（`REPL_RLE` 组）⇒ 接入数 **34 → 37**。
+
+顺带修：`regress.ps1` 的环境重试判据原本只匹配 `host.err` 里的 `guest window blocks`，
+但同源的另一种表现是 `cannot reserve object region @0x10000`（§8-48 签名 B 的变体），
+于是那一次偶发启动失败被当成真失败。判据扩为匹配两者：
+
+```powershell
+$envBad = ... -match "guest window blocks|cannot reserve object region"
+```
+
+### 28.4 实测判据
+
+```
+regress.ps1 (-Replace none / all): ALL PASS 8/8；host.log: repl: installed 37
+rlecheck 1900/0  gfxcheck 1450/0  sprite24check 2100/0  utilcheck 2200/0
+pathcheck 1000/0  rescheck 160/0  tablescheck 4528/0  rle2check 1200/0
+```
+
+### 28.5 下轮入口
+
+1. 继续 `sub_15F84` 的词流解释器：本轮已补齐它依赖的 0xC0-RLE 文本 blit；仍需
+   `sub_16559/16C57/16B43/16E24/164E8/12C60/165AC/10620` 等 callee 与 `0x53xxx` 全局区。
+   `sub_10620` 已确认只是"BIOS 键盘有待按键"检查（`BDA 0x41A != 0x41C`），`0x4ED7A` 的返回值
+   被它忽略（前者不受我们的 void 化影响）。
+2. 同类纯函数：`0x4EB59`（按 a1 纵向/横向展开）、`0x4EBE3`（滚动随机）、`0x4EB48`（dword 表）。

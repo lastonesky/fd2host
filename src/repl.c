@@ -25,6 +25,7 @@
 #include "game/util.h"
 #include "game/path.h"
 #include "game/tables.h"
+#include "game/rle2.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -58,6 +59,11 @@ static const struct repl_entry g_repl[] = {
     /* --- RLE decoder (src/game/rle.c) --------------------------------- */
     { 0x4E98D, "rle_decode",          (void *)rle_decode,          REPL_RLE },
     { 0x4E8D3, "rle_decode_lut",      (void *)rle_decode_lut,      REPL_RLE },
+
+    /* --- 0xC0-range RLE blits (src/game/rle2.c) ----------------------- */
+    { 0x4EBFF, "rle2_blit",           (void *)rle2_blit,           REPL_RLE },
+    { 0x4EC31, "rle2_blit_mirror",    (void *)rle2_blit_mirror,    REPL_RLE },
+    { 0x4EBAB, "rle2_blit_trans",     (void *)rle2_blit_trans,     REPL_RLE },
 
     /* --- graphics blitter helpers (src/game/gfx.c) -------------------- */
     { 0x4EC7C, "gfx_restore_rect",    (void *)gfx_restore_rect,    REPL_GFX },

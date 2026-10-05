@@ -1,0 +1,311 @@
+
+===== 0x4EB48 size 17 =====
+_UNKNOWN **__cdecl sub_4EB48(int a1)
+{
+  return (&off_627D8)[a1];
+}
+
+0004eb48  55               push    ebp
+0004eb49  8b ec            mov     ebp, esp
+0004eb4b  8b 45 08         mov     eax, [ebp+arg_0]
+0004eb4e  c1 e0 02         shl     eax, 2
+0004eb51  8b 80 d8 27 06 00 mov     eax, ds:off_627D8[eax]
+0004eb57  5d               pop     ebp
+0004eb58  c3               retn
+
+===== 0x4EB59 size 82 =====
+void __cdecl __spoils<> sub_4EB59(int a1, int a2, int a3)
+{
+  _BYTE *v3; // esi
+  _BYTE *v4; // edi
+  int v5; // ebp
+  int v6; // ecx
+  char v7; // ah
+  char v8; // dh
+  char v9; // dl
+  _BYTE *v10; // [esp-24h] [ebp-24h]
+
+  v3 = (_BYTE *)(a3 + 1284);
+  v4 = (_BYTE *)(a2 + 1284);
+  HIWORD(v5) = 0;
+  HIWORD(v6) = 0;
+  v7 = -64;
+  v8 = a1;
+  do
+  {
+    v10 = v3;
+    LOWORD(v6) = 312;
+    v9 = a1;
+    do
+    {
+      *v4++ = *v3;
+      if ( --v9 == 0 )
+      {
+        v9 = a1;
+        v3 += a1;
+      }
+      --v6;
+    }
+    while ( v6 != 0 );
+    v3 = v10;
+    v4 += 8;
+    if ( --v8 == 0 )
+    {
+      v8 = a1;
+      LOWORD(v5) = 320 * a1;
+      v3 = &v10[v5];
+    }
+    --v7;
+  }
+  while ( v7 != 0 );
+}
+
+0004eb59  55               push    ebp
+0004eb5a  8b ec            mov     ebp, esp
+0004eb5c  60               pusha
+0004eb5d  8b 5d 08         mov     ebx, [ebp+arg_0]
+0004eb60  8b 7d 0c         mov     edi, [ebp+arg_4]
+0004eb63  8b 75 10         mov     esi, [ebp+arg_8]
+0004eb66  81 c6 04 05 00 00 add     esi, 504h
+0004eb6c  81 c7 04 05 00 00 add     edi, 504h
+0004eb72  33 ed            xor     ebp, ebp
+0004eb74  66 b8 40 01      mov     ax, 140h
+0004eb78  66 f7 e3         mul     bx
+0004eb7b  66 8b e8         mov     bp, ax
+0004eb7e  33 c9            xor     ecx, ecx
+0004eb80  b4 c0            mov     ah, 0C0h
+0004eb82  8a f3            mov     dh, bl
+0004eb84  56               push    esi
+0004eb85  66 b9 38 01      mov     cx, 138h
+0004eb89  8a d3            mov     dl, bl
+0004eb8b  8a 06            mov     al, [esi]
+0004eb8d  aa               stosb
+0004eb8e  fe ca            dec     dl
+0004eb90  75 04            jnz     short loc_4EB96
+0004eb92  8a d3            mov     dl, bl
+0004eb94  03 f3            add     esi, ebx
+0004eb96  e2 f3            loop    loc_4EB8B
+0004eb98  5e               pop     esi
+0004eb99  83 c7 08         add     edi, 8
+0004eb9c  fe ce            dec     dh
+0004eb9e  75 04            jnz     short loc_4EBA4
+0004eba0  8a f3            mov     dh, bl
+0004eba2  03 f5            add     esi, ebp
+0004eba4  fe cc            dec     ah
+0004eba6  75 dc            jnz     short loc_4EB84
+0004eba8  61               popa
+0004eba9  5d               pop     ebp
+0004ebaa  c3               retn
+
+===== 0x4EBAB size 56 =====
+void __cdecl __spoils<> sub_4EBAB(_BYTE *a1, __int16 *a2, int a3)
+{
+  __int16 v4; // bp
+  __int16 v5; // dx
+  int v6; // ecx
+  __int16 v7; // ax
+  int v8; // ecx
+  _BYTE *v9; // [esp-24h] [ebp-24h]
+
+  v4 = *a2;
+  v5 = a2[1];
+  HIWORD(v6) = 0;
+  v7 = 0;
+  do
+  {
+    v9 = a1;
+    LOWORD(v6) = v4;
+    do
+    {
+      v7 = sub_4EC66(v7, v5, a3, v6);
+      if ( (_BYTE)v7 != 0 )
+        *a1 = v7;
+      ++a1;
+      v6 = v8 - 1;
+    }
+    while ( v6 != 0 );
+    a1 = &v9[a3];
+    --v5;
+  }
+  while ( v5 != 0 );
+}
+
+0004ebab  55               push    ebp
+0004ebac  8b ec            mov     ebp, esp
+0004ebae  60               pusha
+0004ebaf  8b 7d 08         mov     edi, [ebp+arg_0]
+0004ebb2  8b 75 0c         mov     esi, [ebp+arg_4]
+0004ebb5  8b 5d 10         mov     ebx, [ebp+arg_8]
+0004ebb8  66 ad            lodsw
+0004ebba  66 8b e8         mov     bp, ax
+0004ebbd  66 ad            lodsw
+0004ebbf  66 8b d0         mov     dx, ax
+0004ebc2  33 c9            xor     ecx, ecx
+0004ebc4  66 33 c0         xor     ax, ax
+0004ebc7  57               push    edi
+0004ebc8  66 8b cd         mov     cx, bp
+0004ebcb  e8 96 00 00 00   call    sub_4EC66
+0004ebd0  0a c0            or      al, al
+0004ebd2  74 02            jz      short loc_4EBD6
+0004ebd4  88 07            mov     [edi], al
+0004ebd6  47               inc     edi
+0004ebd7  e2 f2            loop    loc_4EBCB
+0004ebd9  5f               pop     edi
+0004ebda  03 fb            add     edi, ebx
+0004ebdc  66 4a            dec     dx
+0004ebde  75 e7            jnz     short loc_4EBC7
+0004ebe0  61               popa
+0004ebe1  5d               pop     ebp
+0004ebe2  c3               retn
+
+===== 0x4EBE3 size 28 =====
+__int16 sub_4EBE3()
+{
+  __int16 result; // ax
+
+  result = __ROL2__(__ROL2__(__ROL2__(word_627B8 - 28652, 1), 1), 1);
+  word_627B8 = result;
+  return result;
+}
+
+0004ebe3  33 c0            xor     eax, eax
+0004ebe5  66 a1 b8 27 06 00 mov     ax, ds:word_627B8
+0004ebeb  66 05 14 90      add     ax, 9014h
+0004ebef  66 d1 c0         rol     ax, 1
+0004ebf2  66 d1 c0         rol     ax, 1
+0004ebf5  66 d1 c0         rol     ax, 1
+0004ebf8  66 a3 b8 27 06 00 mov     ds:word_627B8, ax
+0004ebfe  c3               retn
+
+===== 0x4EBFF size 50 =====
+void __cdecl __spoils<> sub_4EBFF(_BYTE *a1, __int16 *a2, int a3)
+{
+  __int16 v4; // bp
+  __int16 v5; // dx
+  int v6; // ecx
+  __int16 v7; // ax
+  int v8; // ecx
+  _BYTE *v9; // [esp-24h] [ebp-24h]
+
+  v4 = *a2;
+  v5 = a2[1];
+  HIWORD(v6) = 0;
+  v7 = 0;
+  do
+  {
+    v9 = a1;
+    LOWORD(v6) = v4;
+    do
+    {
+      v7 = sub_4EC66(v7, v5, a3, v6);
+      *a1++ = v7;
+      v6 = v8 - 1;
+    }
+    while ( v6 != 0 );
+    a1 = &v9[a3];
+    --v5;
+  }
+  while ( v5 != 0 );
+}
+
+0004ebff  55               push    ebp
+0004ec00  8b ec            mov     ebp, esp
+0004ec02  60               pusha
+0004ec03  8b 7d 08         mov     edi, [ebp+arg_0]
+0004ec06  8b 75 0c         mov     esi, [ebp+arg_4]
+0004ec09  8b 5d 10         mov     ebx, [ebp+arg_8]
+0004ec0c  66 ad            lodsw
+0004ec0e  66 8b e8         mov     bp, ax
+0004ec11  66 ad            lodsw
+0004ec13  66 8b d0         mov     dx, ax
+0004ec16  33 c9            xor     ecx, ecx
+0004ec18  66 33 c0         xor     ax, ax
+0004ec1b  57               push    edi
+0004ec1c  66 8b cd         mov     cx, bp
+0004ec1f  e8 42 00 00 00   call    sub_4EC66
+0004ec24  aa               stosb
+0004ec25  e2 f8            loop    loc_4EC1F
+0004ec27  5f               pop     edi
+0004ec28  03 fb            add     edi, ebx
+0004ec2a  66 4a            dec     dx
+0004ec2c  75 ed            jnz     short loc_4EC1B
+0004ec2e  61               popa
+0004ec2f  5d               pop     ebp
+0004ec30  c3               retn
+
+===== 0x4EC31 size 52 =====
+void __cdecl __spoils<> sub_4EC31(_BYTE *a1, __int16 *a2, int a3)
+{
+  __int16 v4; // bp
+  __int16 v5; // dx
+  int v6; // ecx
+  __int16 v7; // ax
+  int v8; // ecx
+  _BYTE *v9; // [esp-24h] [ebp-24h]
+
+  v4 = *a2;
+  v5 = a2[1];
+  HIWORD(v6) = 0;
+  v7 = 0;
+  do
+  {
+    v9 = a1;
+    LOWORD(v6) = v4;
+    do
+    {
+      v7 = sub_4EC66(v7, v5, a3, v6);
+      *a1-- = v7;
+      v6 = v8 - 1;
+    }
+    while ( v6 != 0 );
+    a1 = &v9[a3];
+    --v5;
+  }
+  while ( v5 != 0 );
+}
+
+0004ec31  55               push    ebp
+0004ec32  8b ec            mov     ebp, esp
+0004ec34  60               pusha
+0004ec35  8b 7d 08         mov     edi, [ebp+arg_0]
+0004ec38  8b 75 0c         mov     esi, [ebp+arg_4]
+0004ec3b  8b 5d 10         mov     ebx, [ebp+arg_8]
+0004ec3e  66 ad            lodsw
+0004ec40  66 8b e8         mov     bp, ax
+0004ec43  66 ad            lodsw
+0004ec45  66 8b d0         mov     dx, ax
+0004ec48  33 c9            xor     ecx, ecx
+0004ec4a  66 33 c0         xor     ax, ax
+0004ec4d  57               push    edi
+0004ec4e  66 8b cd         mov     cx, bp
+0004ec51  e8 10 00 00 00   call    sub_4EC66
+0004ec56  88 07            mov     [edi], al
+0004ec58  4f               dec     edi
+0004ec59  e2 f6            loop    loc_4EC51
+0004ec5b  5f               pop     edi
+0004ec5c  03 fb            add     edi, ebx
+0004ec5e  66 4a            dec     dx
+0004ec60  75 eb            jnz     short loc_4EC4D
+0004ec62  61               popa
+0004ec63  5d               pop     ebp
+0004ec64  c3               retn
+
+===== 0x4EC66 size 22 =====
+void __spoils<> sub_4EC66()
+{
+  ;
+}
+
+0004ec66  0a e4            or      ah, ah
+0004ec68  74 03            jz      short loc_4EC6D
+0004ec6a  fe cc            dec     ah
+0004ec6c  c3               retn
+0004ec6d  ac               lodsb
+0004ec6e  3c c0            cmp     al, 0C0h
+0004ec70  77 03            ja      short loc_4EC75
+0004ec72  32 e4            xor     ah, ah
+0004ec74  c3               retn
+0004ec75  8a e0            mov     ah, al
+0004ec77  80 ec c1         sub     ah, 0C1h
+0004ec7a  ac               lodsb
+0004ec7b  c3               retn

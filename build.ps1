@@ -50,7 +50,9 @@ $targets = @{
     rescheck = @{ srcs = @("rescheck.c", "le.c", "game\res.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/tables.c (table accessors) vs 0x4E7DD..0x4E8BC
     tablescheck = @{ srcs = @("tablescheck.c", "le.c", "game\tables.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
-    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c");
+    # differential test: src/game/rle2.c (0xC0-range RLE blits) vs 0x4EBFF/0x4EC31/0x4EBAB
+    rle2check = @{ srcs = @("rle2check.c", "le.c", "game\rle2.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";
                  # ASLR must stay on (with /DYNAMICBASE:NO Windows reserves the

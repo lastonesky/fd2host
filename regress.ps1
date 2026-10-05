@@ -19,10 +19,10 @@
 # ~15 s instead of the old 60 s watchdog + 15 s blind sleep. $Seconds stays
 # the hard cap for slow machines and for "path never completed" runs.
 #
-# Retries: if a run fails AND build\host.err shows "guest window blocks",
-# the Windows loader happened to occupy the low memory window (0x90000..)
-# before fd2_entry could reserve it - an environment flake with a known
-# signature (PROGRESS.md §8-48), so the run is repeated with a fresh
+# Retries: if a run fails AND build\host.err shows "guest window blocks"
+# or "cannot reserve object region" (both mean the Windows loader occupied
+# the low memory window before fd2_entry could reserve it), the run is
+# repeated with a fresh
 # process/ASLR layout. Genuine regressions have no such signature and fail
 # on the first attempt.
 #
@@ -132,7 +132,7 @@ for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
     # Environment signature: the loader occupied the low window before
     # fd2_entry - rerunning gets a fresh layout. Anything else is a real
     # failure and must not be retried away.
-    $envBad = (Test-Path $err) -and ((Get-Content $err -Raw) -match "guest window blocks")
+    $envBad = (Test-Path $err) -and ((Get-Content $err -Raw) -match "guest window blocks|cannot reserve object region")
     if (-not $envBad) { break }
     if ($attempt -lt $maxAttempts) {
         Write-Host "  retry: low memory window occupied by the loader - rerunning"

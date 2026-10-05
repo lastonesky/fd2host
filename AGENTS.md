@@ -91,6 +91,7 @@ pwsh -File E:\FD2\port\build.ps1 -Target utilcheck; & E:\FD2\port\build\utilchec
 pwsh -File E:\FD2\port\build.ps1 -Target pathcheck; & E:\FD2\port\build\pathcheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target rescheck; & E:\FD2\port\build\rescheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target tablescheck; & E:\FD2\port\build\tablescheck.exe
+pwsh -File E:\FD2\port\build.ps1 -Target rle2check; & E:\FD2\port\build\rle2check.exe
 
 # 一键回归（重建沙箱、删 FD2.TMP、autokey 走 continue、8 项断言）
 pwsh -File E:\FD2\port\regress.ps1
