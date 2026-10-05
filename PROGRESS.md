@@ -1840,3 +1840,55 @@ regress.ps1             →  ALL PASS 8/8（fd2host 未改，15 s）
    **疑似战场移动范围/寻路**，价值高但有全局状态，转译前先归档数据布局。
 3. ★★★ 未动：资源加载器 `sub_111BA`（LMI 容器；内部走 Watcom CRT 的 `fopen/fread`，
    独立对拍需先接宿主 `dos.c` 的文件服务，或改成对目录解析的纯函数）、文本/脚本渲染器 `sub_15F84`。
+
+---
+
+## 23. 第 23 轮：obj0 字节/调色板工具函数转译（2026-10-05）
+
+### 23.1 转译：`src/game/util.c`
+
+第 22 轮把 0x4DED4..0x4E8C0 工具库地形图勾出来了（RE_MAP §4），本轮清掉其中**纯函数**一批：
+
+| 转译名 | 原地址 | 语义 |
+|---|---|---|
+| `util_rec3` | `0x4DED4` | `base + 3*index`（原版硬编码 base=0x60181；C 版把 base 参数化以便成为数据） |
+| `util_translate` | `0x4DEEC` | 就地查表翻译：`buf[i] = table[buf[i]]` |
+| `util_sum_tail4` | `0x4DF09` | 求和 `buf[0..n-5]`（原版真地忽略末尾 4 字节，`sub ecx,4`） |
+| `util_deobfuscate` | `0x4DF28` | 就地滚动异或：`state=0xA5; state=rol16(state+0x9014,3); buf[i]^=state&0xFF` |
+| `util_fix_records` | `0x4DF4C` | 头 `[u8 a][..][u8 b]`，count=a*b；每 4 字节记录：`+3=0xFF, +2&=0x1F, +1&=0x03` |
+| `util_mask_recolor` | `0x4E795` | 头 `[u16 w][u16 h][w*h 掩码]`：掩码非 0 时 `dst = pal[dst]`，行步进 stride |
+
+原版循环都是 x86 `loop`/`dec+jnz`（底测 do-while，0 计数会回绕 2³²/2¹⁶ 次），
+C 版保留 do-while 形式；游戏数据不会出现 0 计数。`0x4E795` 写 `word_6017B`（C 版镜像为
+`util_mask_w`）供对拍断言。
+
+### 23.2 实测坑（都很典型）
+
+1. **`0x4DF09` 改 EBX 却不保存**（其余五个都 `push ebx`）。查调用点：callers 只读 EAX 返回值、
+   不依赖 EBX ⇒ EBX 是"死"寄存器，C 版无需复刻；但**对拍时**把它当普通 cdecl 调会让编译器
+   的 EBX 状态被踩，`sum` 结果变垃圾。修法：utilcheck 用 `__asm { push ebx; ...; pop ebx }`
+   包住原函数调用（`call_sum_orig`）。**将来把转译函数接回宿主时**，这种"原版不守 ABI"的
+   函数要留意（我们的 C 版会正常保存 EBX，是安全的超集）。
+2. **`0x4E795` 的返回值是"最后一个掩码字节"**（跳过时=0），不是"最后一次调色板值"。
+   反汇编里 `xor eax,eax` 后 `lodsb` 每像素写 AL，掩码为 0 时 AL=0。首版误当"最后调色板值"，
+   对拍精确抓出（缓冲一致、仅返回值差）。
+
+### 23.3 实测判据
+
+```
+build\utilcheck.exe     →  PASS: 2200 cases, 0 failures
+build\rlecheck.exe      →  PASS: 1900 cases, 0 failures（回归）
+build\gfxcheck.exe      →  PASS: 1450 cases, 0 failures（回归）
+build\sprite24check.exe →  PASS: 2100 cases, 0 failures（回归）
+regress.ps1             →  ALL PASS 8/8
+```
+
+> 注：对拍 exe 仍偶发 `reserve failed`（某个系统 DLL 被 ASLR 放进 guest 窗口，§8-48 签名 B），
+> 重跑即过；`/BASE:0x60000000`（§22.4）解决的是"exe 自己"那一种，进程级重试仍是通用兜底。
+
+### 23.4 下轮入口
+
+1. `0x4E390..0x4E751` 连通性/BFS 簇（`byte_60068/69` 网格、四方向递归、写回 `dword_60073`）——
+   **优先归档全局数据布局**再转译，疑似战场移动范围/寻路。
+2. 表访问器 `0x4E7DD..0x4E8BC`（`&unk_XXXX + 步长*i`，无逻辑，可在需要时批量转成 `base+stride*i`）。
+3. ★★★ `sub_111BA`（资源加载，内部走 Watcom CRT 文件服务）、`sub_15F84`（文本/脚本渲染，usercall）。

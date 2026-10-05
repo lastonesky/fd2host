@@ -22,9 +22,11 @@ port/
 │   │   ├── rle.h/rle.c   RLE 解码器（原 0x4E98D/0x4E8D3，PROGRESS §19）
 │   │   ├── gfx.h/gfx.c   图形 blit 工具族（save/restore rect、block/透明 blit、16×16 字形、scanline 重排，PROGRESS §21）
 │   │   └── sprite24.h/.c 24×24 精灵 RLE 族（7 种颜色模式，PROGRESS §22）
+│   │   └── util.h/util.c 字节/调色板工具（查表翻译/校验和/反混淆/掩码重着色，PROGRESS §23）
 │   ├── rlecheck.c     转译对拍测试：随机 RLE 流 × 原机器码 vs 转译 C，逐字节比对
 │   ├── gfxcheck.c     转译对拍测试：图形 blit 工具族 × 原机器码 vs 转译 C，逐字节比对
 │   ├── sprite24check.c 转译对拍测试：24×24 精灵 RLE 族 × 原机器码 vs 转译 C，逐字节比对
+│   ├── utilcheck.c    转译对拍测试：字节/调色板工具 × 原机器码 vs 转译 C，逐字节比对
 │   ├── ail.c          AIL 替换层：16 个 AIL_* 入口 → 宿主实现（数字音效走 WinMM waveOut）
 │   ├── xmidi.c        XMIDI 解析（FDMUS.DAT 的 XDIR/CAT/FORM XMID）→ 事件列表
 │   ├── synth.c        自带软件合成器：事件 → PCM → waveOut（音乐不依赖系统 MIDI）
@@ -46,6 +48,7 @@ Start-Process port\build\fd2host.exe -ArgumentList '--exit-after=30' -WorkingDir
 pwsh -File port\build.ps1 -Target rlecheck ; & port\build\rlecheck.exe   # 1900 例
 pwsh -File port\build.ps1 -Target gfxcheck ; & port\build\gfxcheck.exe   # 1450 例
 pwsh -File port\build.ps1 -Target sprite24check ; & port\build\sprite24check.exe  # 2100 例
+pwsh -File port\build.ps1 -Target utilcheck ; & port\build\utilcheck.exe      # 2200 例
 
 # 跑别的 DOS/4GW(LE) 游戏（通用化见 PROGRESS.md §14，先做静态体检）
 python port\re\preflight.py "E:\Games\FDCollection\Game\FDPS\FDPS.EXE"
@@ -138,6 +141,7 @@ LE 加载 + 7937 条 fixup 应用
 → 第 20 轮：回归提速 —— `--exit-when-file` 完成即退出 + 脚本轮询，**75 s → 15 s**；低地址被加载器占用时自动重试（PROGRESS §20）
 → 第 21 轮：**图形 blit 工具族转译** —— 0x4ECBF/0x4EC7C/0x4ED0B/0x4ED34/0x4ED7A/0x4EEE0 → `src/game/gfx.c`，机器码对拍 **1450 例逐字节一致**；同轮评估官方逆向知识库 `docs/`（发现其 FD2.EXE 是另一 build，见 §21.1）
 → 第 22 轮：**24×24 精灵 RLE 族转译** —— 7 个颜色模式变体 → `src/game/sprite24.c`，对拍 **2100 例逐字节一致**；`docs/` 清理到 9 MB/274 文件（`docs/KEEP.md`）；修复对拍 exe 自己被 ASLR 放进 guest 窗口的问题（加 `/BASE:0x60000000`）
+→ 第 23 轮：**字节/调色板工具转译** —— 6 函数 → `src/game/util.c`，对拍 **2200 例逐字节一致**；发现 `0x4DF09` 不守 ABI（改 EBX 不保存）与 `0x4E795` 返回值语义两个坑
 ```
 
 ## 当前状态与下一步
@@ -169,10 +173,10 @@ LE 加载 + 7937 条 fixup 应用
 5. **首次保存实测**：`FD2.SAV` 不存在时的创建路径（机制已通，回归只覆盖了 `FD2.TMP`）
    + "存档变小"时的截断对拍。可复现回归：`pwsh -File port\regress.ps1`。
 6. **逐步源码化（路线 C 主体）**：按 `re/RE_MAP.md` 的模块顺序把机器码替换为 C 源码，
-   最终形成可编译 x86-64 的引擎。**已完成**：RLE 解码（`src/game/rle.c`，1900 例）、
-   图形 blit 工具族（`src/game/gfx.c`，1450 例）、24×24 精灵 RLE 族（`src/game/sprite24.c`，2100 例）；
-   下一批：obj0 工具库剩余纯函数、连通性/BFS 簇 `0x4E390..0x4E751`，然后资源加载 `sub_111BA`、
-   文本/脚本渲染 `sub_15F84`。
+   最终形成可编译 x86-64 的引擎。**已完成**：RLE 解码（`rle.c`，1900 例）、图形 blit 工具族
+   （`gfx.c`，1450 例）、24×24 精灵 RLE 族（`sprite24.c`，2100 例）、字节/调色板工具
+   （`util.c`，2200 例）；下一批：连通性/BFS 簇 `0x4E390..0x4E751`（疑似移动范围/寻路），
+   然后资源加载 `sub_111BA`、文本/脚本渲染 `sub_15F84`。
 7. **跨平台**：单代码库 + 后端选择（**不用 git 分支**）。已抽出的是 `render.h`/`host.h` +
    入口层 `main_win32.c`（第 1 步完成）；`audio.h` 随**第 3 步**（sokol_audio 替换 waveOut）抽，
    `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入
@@ -192,6 +196,8 @@ LE 加载 + 7937 条 fixup 应用
   覆盖 save↔restore、block/透明 blit、16×16 字形、scanline 重排（PROGRESS §21.3）。
 - `sprite24check.exe`：24×24 精灵 RLE 族 7 变体的对拍（2100 例），验证颜色映射与 type 11
   特殊 token（跳过/重着色/填 0x49）（PROGRESS §22.3）。
+- `utilcheck.exe`：字节/调色板 6 函数的对拍（2200 例，含返回值与 `word_6017B` 断言）；
+  `0x4DF09` 不守 ABI，测试用 asm 保存/恢复 EBX（PROGRESS §23.2）。
 - 所有走 `le.c` 的 console 对拍 exe 都链 `/BASE:0x60000000`：否则 exe 自己的映像会被
   ASLR 放进 guest 窗口 `0x10000..0x6FFFF` 导致预留失败（PROGRESS §22.4）。
 - `--screenshot=<file.bmp> [--shot-frame=<n>]`：导出**实际送显**的 RGB 缓冲，不依赖窗口/桌面，

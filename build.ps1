@@ -39,6 +39,9 @@ $targets = @{
     # differential test: src/game/sprite24.c (24x24 sprite RLE family) vs the
     # original machine code at 0x4DF84/0x4E016/0x4E0A2/0x4E127/0x4E1A6/0x4E22A/0x4E29C
     sprite24check = @{ srcs = @("sprite24check.c", "le.c", "game\sprite24.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    # differential test: src/game/util.c (byte/palette utilities) vs the
+    # original machine code at 0x4DED4/0x4DEEC/0x4DF09/0x4DF28/0x4DF4C/0x4E795
+    utilcheck = @{ srcs = @("utilcheck.c", "le.c", "game\util.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";
