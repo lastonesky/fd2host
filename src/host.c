@@ -67,6 +67,14 @@ static int          g_ail_mode;          /* 0=auto 1=fd2 (force) 2=none */
 static uint32_t     g_ail_rate  = 11025;
 static int          g_ail_bits  = 8;
 static int          g_ail_stereo;
+/* Output volume, --volume=0..100 (default 10: quiet enough to work next to,
+ * still non-zero so the whole audio pipeline stays exercised). */
+static int          g_volume = 10;
+/* --no-user-input: the real keyboard is ignored; only --autokey delivers
+ * keystrokes. Tests run next to a person using the same machine, and a stray
+ * key press in the focused game window goes straight into the BDA ring - that
+ * desynchronised the autokey schedule (PROGRESS.md §31.5). */
+static int          g_no_user_input;
 static int          g_midi_rate;       /* XMIDI ticks/s; 0 = follow tempo */
 static int          g_midi_test;       /* --midi-test: play a test tone   */
 static int          g_midi_backend = 1; /* 1 = built-in synth (default)    */
@@ -79,6 +87,14 @@ static char         g_exit_when_path[MAX_PATH]; /* --exit-when-file=path:minbyte
 static uint32_t     g_exit_when_size;   /* required size of that file      */
 static volatile int g_autokey_done = 1; /* 0 while a --autokey schedule runs */
 static DWORD        g_start_tick;       /* when host_init began             */
+
+/* 1 when the real keyboard must be ignored (see the flag above). The entry
+ * layers ask this on every key event; --autokey never does - its keystrokes
+ * are delivered through the same accessors the entry layer owns. */
+int host_no_user_input(void)
+{
+    return g_no_user_input;
+}
 
 /* Seconds left on --exit-after (0 = unlimited). INT 21h AH=4B hands this to
  * the child so a bounded run stays bounded all the way down the process
@@ -410,7 +426,8 @@ static int opt_wants_value(const char *a)
         "--exe", "--gamedir", "--exit-after", "--trace", "--screenshot",
         "--wshot", "--shot-frame", "--ail", "--ail-dump", "--ail-rate", "--ail-bits",
         "--midi-rate", "--midi-backend", "--gm-bank", "--autokey",
-        "--midi-dump", "--cmdtail", "--log", "--exit-when-file", "--replace"
+        "--midi-dump", "--cmdtail", "--log", "--exit-when-file", "--replace",
+        "--volume"
     };
     size_t i;
     for (i = 0; i < sizeof opts / sizeof opts[0]; i++)
@@ -595,6 +612,15 @@ int host_init(int argc, char **argv)
         else if (!strncmp(argv[i], "--midi-dump=", 12)) {
             g_midi_dump = argv[i] + 12;
         }
+        else if (!strcmp(argv[i], "--volume") && i + 1 < argc) {
+            g_volume = atoi(argv[++i]);
+        }
+        else if (!strncmp(argv[i], "--volume=", 9)) {
+            g_volume = atoi(argv[i] + 9);
+        }
+        else if (!strcmp(argv[i], "--no-user-input")) {
+            g_no_user_input = 1;
+        }
     }
 
     /* Must be the very first allocation: the CRT heap grows from 0x10000. */
@@ -661,6 +687,7 @@ int host_init(int argc, char **argv)
      * implementations before the game thread starts (the real AIL would try to
      * execute 16-bit real-mode drivers). */
     ail_set_format(g_ail_rate, g_ail_bits, g_ail_stereo);
+    ail_set_master_volume(g_volume);   /* prints "ail: master output volume" */
     xmidi_set_tick_rate(g_midi_rate);
     xmidi_set_test(g_midi_test);
     xmidi_set_backend(g_midi_backend);

@@ -85,6 +85,10 @@ for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         "--exit-after=$Seconds",
         "--exit-when-file=${sb}\FD2.TMP:207360",
         "--autokey=$schedule",
+        # The test machine is in use while this runs: without this flag a key
+        # pressed in the focused game window lands in the BDA ring and shifts
+        # the schedule (the "stuck at the load menu" flake, PROGRESS §31.5).
+        "--no-user-input",
         "--screenshot=$shot",
         "--shot-frame=900"
     )

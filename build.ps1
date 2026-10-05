@@ -57,6 +57,10 @@ $targets = @{
     # differential test: src/game/dlg.c box animation vs 0x165AC/0x16B43/0x168B6/0x1685C,
     # with the CRT heap / delay / BDA / portrait-glide services hooked to event-recording stubs
     boxcheck = @{ srcs = @("boxcheck.c", "le.c", "game\dlg.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    # differential test: dlg_wait_key vs 0x16C57 - low-memory mirror + BDA
+    # operand redirect (like the host), palette hook drives a deterministic
+    # tick, int386 hook scripts the key
+    keycheck = @{ srcs = @("keycheck.c", "le.c", "game\dlg.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";

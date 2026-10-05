@@ -1,0 +1,28 @@
+0x15D93  add     esp, 10h
+0x15D96  mov     edi, eax
+0x15D98  mov     eax, edi
+0x15D9A  add     esp, 10h
+0x15D9D  pop     ebp
+0x15D9E  pop     edi
+0x15D9F  pop     esi
+0x15DA0  pop     ebx
+0x15DA1  retn
+0x15DA2  push    14h
+0x15DA7  call    sub_3702F
+0x15DAC  push    ebx
+0x15DAD  push    esi
+0x15DAE  push    edi
+0x15DAF  push    ebp
+---- callers of sub_16C57: what follows the call (return value use?) ----
+0x100FD sub_10010: call    sub_16C57 | add     esp, 4 | call    sub_196CB | call    sub_1F882
+0x16034 sub_15F84: call    sub_16C57 | add     esp, 4 | mov     [esp+34h+arg_20], 1
+0x1615C sub_15F84: call    sub_16C57 | add     esp, 4 | push    [esp+34h+var_20] | push    [esp+38h+var_1C]
+0x16246 sub_15F84: call    sub_16C57 | add     esp, 4 | push    [esp+34h+var_20] | push    [esp+38h+var_1C]
+0x1637F sub_15F84: call    sub_16C57 | add     esp, 4 | push    [esp+34h+var_20] | push    [esp+38h+var_1C]
+0x163FB sub_15F84: call    sub_16C57 | add     esp, 4 | push    [esp+34h+var_20] | push    [esp+38h+var_1C]
+0x164BF sub_15F84: call    sub_16C57 | add     esp, 4 | push    [esp+34h+var_20] | push    [esp+38h+var_1C]
+0x17B06 sub_17AED: call    sub_16C57 | add     esp, 4 | push    0 | push    [esp+8+arg_0]
+0x17CE6 sub_17AED: call    sub_16C57 | add     esp, 4 | xor     ebx, ebx | jmp     short loc_17D0E | push    dword_53C5F
+0x1925B sub_190AC: call    sub_16C57 | add     esp, 4 | call    sub_196CB | call    sub_12263
+0x1927E sub_190AC: call    sub_16C57 | add     esp, 4 | call    sub_196CB | push    64h ; 'd'
+0x193B6 sub_190AC: call    sub_16C57 | jmp     loc_19561 | push    64h ; 'd' | call    j___delay

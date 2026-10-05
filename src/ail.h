@@ -19,7 +19,7 @@
  */
 void ail_install(uint8_t *obj0_base, const char *dump_dir);
 
-/* Same, for Ñ×ÁúÍâ´« FDPS.EXE: its own AIL build, 90 entry points at
+/* Same, for ï¿½ï¿½ï¿½ï¿½ï¿½â´« FDPS.EXE: its own AIL build, 90 entry points at
  * 0x3D488..0x41FFE (re/fdps_ail_patchset.csv). Picking the wrong table writes
  * five bytes into unrelated code, so the caller selects by executable name. */
 void ail_install_fdps(uint8_t *obj0_base, const char *dump_dir);
@@ -29,5 +29,13 @@ void ail_install_fdps(uint8_t *obj0_base, const char *dump_dir);
  * mono, 11025 Hz) are assumed; these knobs exist so the assumption can be
  * corrected from the command line without a rebuild. */
 void ail_set_format(uint32_t sample_rate, int bits, int stereo);
+
+/* Master output volume, 0..100 percent (host CLI --volume, default 10).
+ * Applied at the waveOut boundary only: the digital samples are scaled in
+ * their host-side copy and the music is scaled after rendering (the --midi-dump
+ * WAV and the synth log stats keep full scale), so the whole pipeline -
+ * synthesis, AIL volume ramps, waveOut submission - still runs exactly as
+ * before, just quieter. Forwards the same value to the music renderer. */
+void ail_set_master_volume(int percent);
 
 #endif /* FD2_AIL_H */

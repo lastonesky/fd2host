@@ -1,0 +1,169 @@
+==== sub_4EBE3 @0x4EBE3 .. 0x4EBFF (size 28) ====
+  0x4EBE3  xor     eax, eax
+  0x4EBE5  mov     ax, ds:word_627B8
+  0x4EBEB  add     ax, 9014h
+  0x4EBEF  rol     ax, 1
+  0x4EBF2  rol     ax, 1
+  0x4EBF5  rol     ax, 1
+  0x4EBF8  mov     ds:word_627B8, ax
+  0x4EBFE  retn
+==== sub_10620 @0x10620 .. 0x10652 (size 50) ====
+  0x10620  push    8
+  0x10625  call    sub_3702F
+  0x1062A  sub     esp, 4
+  0x1062D  xor     edx, edx
+  0x1062F  mov     eax, 41Ah
+  0x10634  movsx   eax, word ptr [eax]
+  0x10637  mov     [esp+4+var_4], eax
+  0x1063A  mov     eax, 41Ch
+  0x1063F  movsx   eax, word ptr [eax]
+  0x10642  cmp     eax, [esp+4+var_4]
+  0x10645  jz      short loc_1064C
+  0x10647  mov     edx, 1
+  0x1064C  mov     eax, edx
+  0x1064E  add     esp, 4
+  0x10651  retn
+==== sub_4E31C @0x4E31C .. 0x4E381 (size 101) ====
+  0x4E31C  push    ebp
+  0x4E31D  pusha
+  0x4E31E  call    sub_4E310
+  0x4E323  sub     ax, ds:word_60000
+  0x4E32A  cmp     ax, 2
+  0x4E32E  jb      short loc_4E37E
+  0x4E330  inc     ds:byte_60002
+  0x4E336  cmp     ds:byte_60002, 10h
+  0x4E33D  jnz     short loc_4E346
+  0x4E33F  mov     ds:byte_60002, 0
+  0x4E346  xor     eax, eax
+  0x4E348  mov     al, ds:byte_60002
+  0x4E34D  mov     ah, 3
+  0x4E34F  mul     ah
+  0x4E351  lea     esi, unk_60003
+  0x4E357  add     esi, eax
+  0x4E359  mov     ecx, 10h
+  0x4E35E  mov     ah, 0E0h
+  0x4E360  mov     dx, 3C8h
+  0x4E364  mov     al, ah
+  0x4E366  out     dx, al
+  0x4E367  inc     dx
+  0x4E369  lodsb
+  0x4E36A  out     dx, al
+  0x4E36B  lodsb
+  0x4E36C  out     dx, al
+  0x4E36D  lodsb
+  0x4E36E  out     dx, al
+  0x4E36F  inc     ah
+  0x4E371  loop    loc_4E360
+  0x4E373  call    sub_4E310
+  0x4E378  mov     ds:word_60000, ax
+  0x4E37E  popa
+  0x4E37F  pop     ebp
+  0x4E380  retn
+==== sub_4E310 @0x4E310 .. 0x4E31C (size 12) ====
+  0x4E310  push    esi
+  0x4E311  xor     eax, eax
+  0x4E313  mov     esi, 46Ch
+  0x4E318  lodsw
+  0x4E31A  pop     esi
+  0x4E31B  retn
+==== sub_16559 @0x16559 .. 0x165AC (size 83) ====
+  0x16559  push    14h
+  0x1655E  call    sub_3702F
+  0x16563  push    ebx
+  0x16564  mov     ebx, 0A0000h
+  0x16569  add     ebx, dword_53C67
+  0x1656F  mov     eax, [esp+4+arg_0]
+  0x16573  mov     edx, dword_53A85
+  0x16579  mov     eax, [edx+eax*4]
+  0x1657C  add     eax, edx
+  0x1657E  cmp     dword_53C67, 9017h
+  0x16588  jz      short loc_1659B
+  0x1658A  push    140h
+  0x1658F  push    eax
+  0x16590  push    ebx
+  0x16591  call    sub_4EBFF
+  0x16596  add     esp, 0Ch
+  0x16599  pop     ebx
+  0x1659A  retn
+  0x1659B  push    140h
+  0x165A0  push    eax
+  0x165A1  push    ebx
+  0x165A2  call    sub_4EC31
+  0x165A7  add     esp, 0Ch
+  0x165AA  pop     ebx
+  0x165AB  retn
+==== sub_164E8 @0x164E8 .. 0x16559 (size 113) ====
+  0x164E8  push    10h
+  0x164ED  call    sub_3702F
+  0x164F2  inc     dword_53A14
+  0x164F8  cmp     dword_53A14, 2
+  0x164FF  jnz     short loc_1653C
+  0x16501  inc     dword_53A10
+  0x16507  cmp     dword_53A10, 4
+  0x1650E  jnz     short loc_1651A
+  0x16510  mov     dword_53A10, 0
+  0x1651A  mov     eax, dword_53A10
+  0x1651F  cmp     eax, 3
+  0x16522  jnz     short loc_16529
+  0x16524  mov     eax, 1
+  0x16529  push    eax
+  0x1652A  call    sub_16559
+  0x1652F  add     esp, 4
+  0x16532  mov     dword_53A14, 0
+  0x1653C  push    1
+  0x1653E  push    2
+  0x16540  push    dword_53EEC
+  0x16546  call    sub_25A96
+  0x1654B  add     esp, 0Ch
+  0x1654E  push    1
+  0x16550  call    sub_17AA9
+  0x16555  add     esp, 4
+  0x16558  retn
+==== sub_12C60 @0x12C60 .. 0x12CEA (size 138) ====
+  0x12C60  push    14h
+  0x12C65  call    sub_3702F
+  0x12C6A  push    ebx
+  0x12C6B  push    esi
+  0x12C6C  push    edi
+  0x12C6D  mov     edi, [esp+0Ch+arg_0]
+  0x12C71  mov     ebx, dword_53A45
+  0x12C77  mov     dword_53C1B, 0
+  0x12C81  xor     esi, esi
+  0x12C83  jmp     short loc_12C89
+  0x12C85  add     ebx, 50h ; 'P'
+  0x12C88  inc     esi
+  0x12C89  cmp     esi, dword_53BEB
+  0x12C8F  jge     short loc_12CB2
+  0x12C91  movzx   eax, byte ptr [ebx+8]
+  0x12C95  cmp     eax, edi
+  0x12C97  jnz     short loc_12C85
+  0x12C99  mov     dword_53C1B, ebx
+  0x12C9F  push    esi
+  0x12CA0  call    sub_34894
+  0x12CA5  add     esp, 4
+  0x12CA8  test    eax, eax
+  0x12CAA  jnz     short loc_12C85
+  0x12CAC  mov     eax, esi
+  0x12CAE  pop     edi
+  0x12CAF  pop     esi
+  0x12CB0  pop     ebx
+  0x12CB1  retn
+  0x12CB2  cmp     dword_53C1B, 0
+  0x12CB9  jnz     short loc_12CE1
+  0x12CBB  mov     ebx, dword_53BF7
+  0x12CC1  xor     esi, esi
+  0x12CC3  jmp     short loc_12CC9
+  0x12CC5  add     ebx, 50h ; 'P'
+  0x12CC8  inc     esi
+  0x12CC9  cmp     esi, dword_53BFB
+  0x12CCF  jge     short loc_12CE1
+  0x12CD1  movzx   eax, byte ptr [ebx+8]
+  0x12CD5  cmp     eax, edi
+  0x12CD7  jnz     short loc_12CC5
+  0x12CD9  mov     dword_53C1B, ebx
+  0x12CDF  jmp     short loc_12CC5
+  0x12CE1  mov     eax, 0FFFFFFFFh
+  0x12CE6  pop     edi
+  0x12CE7  pop     esi
+  0x12CE8  pop     ebx
+  0x12CE9  retn

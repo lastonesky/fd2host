@@ -74,6 +74,14 @@ void input_post_vk(int vk)
     LPARAM lp = (LPARAM)((sc << 16) | 1);
 
     printf("host: autokey vk=%02X (scan %02X)\n", vk, (unsigned)sc);
+    if (host_no_user_input()) {
+        /* The window path below is muted (PROGRESS.md §31.5), so deliver
+         * exactly what it would have: the make code, then the break code
+         * that the posted WM_KEYUP produced. */
+        host_key((uint8_t)sc, kbd_ascii_for((WPARAM)vk, lp));
+        host_key((uint8_t)(sc | 0x80), kbd_ascii_for((WPARAM)vk, lp));
+        return;
+    }
     PostMessageA(g_hwnd, WM_KEYDOWN, (WPARAM)vk, lp);
     PostMessageA(g_hwnd, WM_KEYUP, (WPARAM)vk, lp | 0xC0000000);
 }
@@ -101,18 +109,24 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l)
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN: {
         uint8_t scan = (uint8_t)MapVirtualKeyA((UINT)w, MAPVK_VK_TO_VSC);
-        host_key(scan, kbd_ascii_for(w, l));
         if (w == VK_ESCAPE && (GetKeyState(VK_CONTROL) & 0x8000)) {
             host_request_quit();
             PostQuitMessage(0);
+            return 0;
         }
+        /* --no-user-input: somebody is using this machine; the focused game
+         * window must not swallow their keystrokes (autokey delivers its own
+         * directly in input_post_vk). */
+        if (!host_no_user_input())
+            host_key(scan, kbd_ascii_for(w, l));
         return 0;
     }
 
     case WM_KEYUP:
     case WM_SYSKEYUP: {
         uint8_t scan = (uint8_t)MapVirtualKeyA((UINT)w, MAPVK_VK_TO_VSC);
-        host_key((uint8_t)(scan | 0x80), kbd_ascii_for(w, l));
+        if (!host_no_user_input())
+            host_key((uint8_t)(scan | 0x80), kbd_ascii_for(w, l));
         return 0;
     }
 

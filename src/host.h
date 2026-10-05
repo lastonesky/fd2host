@@ -56,6 +56,11 @@ void host_key(uint8_t scan, uint8_t ascii);
 /* The game asked to stop (window close / Ctrl+Esc). */
 void host_request_quit(void);
 
+/* 1 = ignore the real keyboard (only --autokey delivers keystrokes). Tests
+ * run on a machine somebody is also typing at; a focused game window eats
+ * those keys. See PROGRESS.md S31.6. */
+int  host_no_user_input(void);
+
 /* Logs the frame count and the interrupt statistics. */
 void host_shutdown(void);
 

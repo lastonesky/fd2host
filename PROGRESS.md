@@ -69,6 +69,11 @@ Windows MIDI（Miles AIL 的 16 个入口已被宿主实现替换，见 §11）�
   退出前抓最后一帧作证据），`regress.ps1` 改为**轮询进程退出**并加入环境性崩溃**自动重试**。
   实测连续两次 **15 s / ALL PASS 8/8**。详见 **§20**。
 
+- **第 21–31 轮（2026-10-05）：源码转译主体推进** —— 叶子工具层已全部转译完（`gfx`/`sprite24`/
+  `util`/`path`/`tables`/`rle2`/`res`/`dlg` 辅助 + 开收框动画 + `dlg_wait_key`），**44 个函数经
+  `src/repl.c` 接入运行中的游戏**（逐字节对拍 + `regress` 8/8）。第 31 轮补上 `--volume`（音量此前在
+  synth 后端不生效）与 `--no-user-input`（测试机被使用时按键进 BDA 环导致 autokey 失步），见 **§31**。
+
 ⇒ 路线 C 的 POC 目标"**窗口中看到游戏画面**"**已达成**。下一步见 §7。
 逆向侧：IDA Pro 9.5 + ida MCP 环境已建好，测绘结果在 `port/re/RE_MAP.md`（见 §10）。
 
@@ -2360,4 +2365,81 @@ framediff: frame1500 none↔all 0/64000（基线 none↔none 76/64000）、frame
    注键），(b) 全部钩桩并记录事件（本轮手法的延伸，键/时序由桩注入保证两次一致）。
 2. 之后整体转译 `sub_15F84`（词流解释器）并对拍 VGA —— 它的其余依赖（`0x16559/0x16E24/0x164E8`、
    rle2、gfx、`0x4ED7A`、`sub_111BA`）均已转译或已有对拍。
+3. 排期项（不阻塞）：CRT 堆 + 文件层整体替换后，`res.c`、`0x15E71/0x15E9E` 一起接入。
+
+---
+
+## 31. 第 31 轮：`dlg_wait_key`（0x16C57）转译 + 低内存镜像对拍（2026-10-05）
+
+### 31.1 转译：`src/game/dlg.c` 的 `dlg_wait_key`
+
+`sub_16C57`（461 B，`re/dlg16C57.txt`）是对话框"等键 + 嘴型"例程，被 `sub_15F84` 的 6 个调用点
+和 `sub_10010`/`sub_190AC`/`sub_17AED` 共用。语义（逐条从反汇编钉死）：
+
+- 文本区基址 `var_1C = 0x47A0`，`dword_53A51 == 0` 时为 `0x4770`；文本区起点
+  `var_20 = 0xA0B4F`（上框，`dword_53C67 == 0x728`）否则 `0xA951F`（下框）。
+- `speaker == 1` 时先贴人像瓦片 18（`sub_1685C(area+base+0x640, 320, dword_53A81, 18)`）。
+- 等待循环：每轮先 `sub_4E31C`（调色板动画，写 DAC 端口），若 **BDA 0x46C 与上一次读数之差 ≥ 2**：
+  - `speaker == 1` 且计数器到 3 → 瓦片在 18/19 之间翻转（19 之后回 18）；
+  - 嘴型状态机：已开口 → 贴 DATO 子图 0 并重新掷 `rand % 30 + 2` 作为下一次保持时间；
+    未开口 → 保持数递减到 0 时贴 DATO 子图 3 并置"已开口"；
+  - 刷新 tick 基准。
+- 退出循环（`sub_10620`：BDA `0x41A != 0x41C`，即键盘环形缓冲有键）后，`speaker == 1` 贴瓦片 13（闭嘴）。
+- 最后 `word_53A8D` 高字节置 `10h` → `int386(0x16)`（BIOS 读键，不回显），扫描码归一化
+  `E0h/52h → 1Ch`、`53h → 01h`，**返回值就是归一化后的扫描码**（`jmp 0x15D9A` 复用 `sub_15DA2` 的
+  函数尾，`eax` 直接返回，见 `re/dlg16C57_tail.txt`）。
+- **坑**：tick 比较是 16 位的（`mov ax,[46Ch]` 后 `cwde`、`movsx`），C 侧必须用 `int16_t` 再符号扩展，
+  否则 tick 回绕时差值符号会翻。
+
+### 31.2 对拍（`src/keycheck.c` + `build.ps1 -Target keycheck`）：低内存镜像 + 确定性时钟
+
+这个函数在普通对拍里跑不了：它的循环条件读 **BDA 0x41A/0x41C**、计时读 **BDA 0x46C**，
+都在低 64 KiB（Windows 不可映射），而且"跑两次"本身不确定。所以 harness 做两件事：
+
+1. **低内存镜像 + 操作数重定向**（与宿主 `dos.c` 同一算法）：把 `mov/push reg, imm32` 中
+   `imm ∈ [0x400,0x500)` 改写成 `mirror + imm`（FD2 build 实测 **65 处**），于是**原始机器码**
+   读的是 `0x70000` 处的镜像 —— 两侧读同一块内存。
+2. **两个钩桩把世界变确定并可观测**：
+   - `0x4E31C`（调色板步进）→ `tick++`、记事件、抓一帧 VGA，第 N 次调用时让"有键"成立
+     （`tail = head + 2`）；
+   - `0x370F0`（`int386`）→ 按脚本返回 AH（记 `intno` + 传入的 AH）。
+
+   两侧看到完全相同的 tick 序列、同一个键、同一串服务调用，所以比较覆盖的是**循环结构本身**：
+   最终 VGA + 每次调色板步进的整帧快照 + 事件序列 + 最终 tick + `word_53A8D` + `word_627B8`（rand 状态）。
+   随机种子按用例挑选，使首次嘴型保持落在 2..4 tick（上限 12..16 步），保证**开口和闭口两条路径都跑到**。
+
+### 31.3 实测判据
+
+```
+keycheck: redirected 65 low-memory references to 0x70000
+PASS: 100 cases, 0 failures
+repl: installed 44 translated function(s) (mask 0x3F)   # 0x16C57 已接入
+regress.ps1 ALL PASS 8/8（15.2 s）
+host: working directory = E:\FD2
+```
+
+### 31.4 `--volume`：音量此前在 synth 后端不生效（补完）
+
+`§12` 收尾清单里的"音量在 synth 后端不生效"已修：新增 `--volume=0..100`（默认 10），
+只在 **waveOut 边界**衰减 —— 数字样本衰减的是宿主侧的 PCM 副本（8 位无符号 / 16 位有符号两条路径），
+音乐在渲染完成后衰减播放缓冲。`--midi-dump` 的 WAV 和 `synth: rendered ...` 的统计仍按满量程输出，
+所以离线音乐核对的证据不变、管线（合成、AIL 音量渐变、waveOut 提交）行为与之前完全一致。
+`AIL_set_sample_volume` 此前"记录但不应用"，现在按 `master × (game volume/127)` 应用。
+
+判据：`--volume=50` 跑 12 s → `ail: master output volume = 50% (music + SFX scaled at waveOut)`，
+同轮 `synth: rendered 2256 notes ... peak 32258/32767`（满量程统计仍在）。
+
+### 31.5 实测坑：测试机被别人按键干扰 → `--no-user-input`
+
+`regress.ps1` 的"卡在载入菜单"偶发失败根因：测试期间本机有人在用，**焦点在游戏窗口时按下的键
+直接进 BDA 环形缓冲**，autokey 的按键计划因此失步（计划注入的键和实际读到的键对不上）。
+宿主新增 `--no-user-input`：真实键盘忽略，只有 `--autokey` 通过入口层自己的投递口送键。
+`regress.ps1` 已带上该参数；`--autokey` 路径不受影响。
+
+### 31.6 下轮入口
+
+1. `sub_164E8`（113 B，已反编译 `re/dlg_deps.txt`）—— 依赖 `sub_25A96` 与 `sub_17AA9`，
+   这两个是文本绘制/光标侧的函数，需要先定边界。
+2. 之后整体转译 `sub_15F84`（1380 B 词流解释器）并对拍 VGA：它的依赖里除 `sub_164E8` 外
+   （`0x16559/0x16E24/0x16C57`、rle2、gfx、`0x4ED7A`、`sub_111BA`）均已转译或有对拍。
 3. 排期项（不阻塞）：CRT 堆 + 文件层整体替换后，`res.c`、`0x15E71/0x15E9E` 一起接入。

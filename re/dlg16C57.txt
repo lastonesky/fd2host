@@ -1,0 +1,137 @@
+==== sub_16C57 @0x16C57 .. 0x16E24 ====
+  0x16C57  push    34h ; '4'
+  0x16C5C  call    sub_3702F
+  0x16C61  push    ebx
+  0x16C62  push    esi
+  0x16C63  push    edi
+  0x16C64  push    ebp
+  0x16C65  sub     esp, 10h
+  0x16C68  mov     [esp+20h+var_14], 0
+  0x16C6D  mov     esi, 12h
+  0x16C72  xor     edi, edi
+  0x16C74  mov     [esp+20h+var_1C], 47A0h
+  0x16C7C  cmp     dword_53A51, 0
+  0x16C83  jnz     short loc_16C8D
+  0x16C85  mov     [esp+20h+var_1C], 4770h
+  0x16C8D  mov     eax, 46Ch
+  0x16C92  mov     ax, [eax]
+  0x16C95  mov     [esp+20h+var_18], eax
+  0x16C99  call    sub_4EBE3
+  0x16C9E  mov     edx, eax
+  0x16CA0  mov     ebp, 1Eh
+  0x16CA5  sar     edx, 1Fh
+  0x16CA8  idiv    ebp
+  0x16CAA  lea     ebp, [edx+2]
+  0x16CAD  cmp     dword_53C67, 728h
+  0x16CB7  jnz     short loc_16CC2
+  0x16CB9  mov     [esp+20h+var_20], 0A0B4Fh
+  0x16CC0  jmp     short loc_16CC9
+  0x16CC2  mov     [esp+20h+var_20], 0A951Fh
+  0x16CC9  cmp     [esp+20h+arg_0], 1
+  0x16CCE  jnz     short loc_16CF3
+  0x16CD0  push    12h
+  0x16CD2  push    dword_53A81
+  0x16CD8  push    140h
+  0x16CDD  mov     eax, [esp+2Ch+var_20]
+  0x16CE1  add     eax, [esp+2Ch+var_1C]
+  0x16CE5  add     eax, 640h
+  0x16CEA  push    eax
+  0x16CEB  call    sub_1685C
+  0x16CF0  add     esp, 10h
+  0x16CF3  call    sub_10620
+  0x16CF8  test    eax, eax
+  0x16CFA  jnz     loc_16DAB
+  0x16D00  call    sub_4E31C
+  0x16D05  mov     edx, 46Ch
+  0x16D0A  mov     ax, [edx]
+  0x16D0D  cwde
+  0x16D0E  movsx   edx, word ptr [esp+20h+var_18]
+  0x16D13  sub     eax, edx
+  0x16D15  cmp     eax, 2
+  0x16D18  jl      short loc_16CF3
+  0x16D1A  cmp     [esp+20h+arg_0], 1
+  0x16D1F  jnz     short loc_16D56
+  0x16D21  inc     edi
+  0x16D22  cmp     edi, 3
+  0x16D25  jnz     short loc_16D56
+  0x16D27  xor     edi, edi
+  0x16D29  inc     esi
+  0x16D2A  cmp     esi, 14h
+  0x16D2D  jnz     short loc_16D34
+  0x16D2F  mov     esi, 12h
+  0x16D34  push    esi
+  0x16D35  push    dword_53A81
+  0x16D3B  push    140h
+  0x16D40  mov     eax, [esp+2Ch+var_20]
+  0x16D44  add     eax, [esp+2Ch+var_1C]
+  0x16D48  add     eax, 640h
+  0x16D4D  push    eax
+  0x16D4E  call    sub_1685C
+  0x16D53  add     esp, 10h
+  0x16D56  movzx   eax, [esp+20h+var_14]
+  0x16D5B  test    eax, eax
+  0x16D5D  jz      short loc_16D84
+  0x16D5F  push    0
+  0x16D61  call    sub_16559
+  0x16D66  add     esp, 4
+  0x16D69  call    sub_4EBE3
+  0x16D6E  mov     edx, eax
+  0x16D70  mov     ebp, 1Eh
+  0x16D75  sar     edx, 1Fh
+  0x16D78  idiv    ebp
+  0x16D7A  lea     ebp, [edx+2]
+  0x16D7D  mov     [esp+20h+var_14], 0
+  0x16D82  jmp     short loc_16D9A
+  0x16D84  mov     eax, ebp
+  0x16D86  dec     ebp
+  0x16D87  test    eax, eax
+  0x16D89  jnz     short loc_16D9A
+  0x16D8B  push    3
+  0x16D8D  call    sub_16559
+  0x16D92  add     esp, 4
+  0x16D95  mov     [esp+20h+var_14], 1
+  0x16D9A  mov     edx, 46Ch
+  0x16D9F  mov     ax, [edx]
+  0x16DA2  mov     [esp+20h+var_18], eax
+  0x16DA6  jmp     loc_16CF3
+  0x16DAB  cmp     [esp+20h+arg_0], 1
+  0x16DB0  jnz     short loc_16DD0
+  0x16DB2  push    0Dh
+  0x16DB4  push    dword_53A81
+  0x16DBA  push    140h
+  0x16DBF  mov     eax, [esp+2Ch+var_20]
+  0x16DC3  add     eax, [esp+2Ch+var_1C]
+  0x16DC7  push    eax
+  0x16DC8  call    sub_1685C
+  0x16DCD  add     esp, 10h
+  0x16DD0  mov     byte ptr word_53A8D+1, 10h
+  0x16DD7  push    offset word_53A8D
+  0x16DDC  push    offset word_53A8D
+  0x16DE1  push    16h
+  0x16DE3  call    int386
+  0x16DE8  add     esp, 0Ch
+  0x16DEB  movzx   eax, byte ptr word_53A8D+1
+  0x16DF2  cmp     eax, 0E0h
+  0x16DF7  jz      short loc_16DFE
+  0x16DF9  cmp     eax, 52h ; 'R'
+  0x16DFC  jnz     short loc_16E05
+  0x16DFE  mov     byte ptr word_53A8D+1, 1Ch
+  0x16E05  movzx   eax, byte ptr word_53A8D+1
+  0x16E0C  cmp     eax, 53h ; 'S'
+  0x16E0F  jnz     short loc_16E18
+  0x16E11  mov     byte ptr word_53A8D+1, 1
+  0x16E18  movzx   eax, byte ptr word_53A8D+1
+  0x16E1F  jmp     loc_15D9A
+---- caller 0x100FD in sub_10010
+    0x100D9  push    0A9F23h
+    0x100DE  push    1B4h
+    0x100E3  push    dword_53A7D
+    0x100E9  call    sub_15F84
+    0x100EE  add     esp, 24h
+    0x100F1  push    0
+    0x100F3  call    sub_16559
+    0x100F8  add     esp, 4
+    0x100FB  push    0
+    0x100FD  call    sub_16C57
+    0x10102  add     esp, 4
+    0x10105  call    sub_196CB

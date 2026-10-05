@@ -139,6 +139,7 @@ static const struct repl_entry g_repl[] = {
     { 0x16B43, "dlg_close_box",       (void *)dlg_close_box,        REPL_DLG },
     { 0x168B6, "dlg_box_stage",       (void *)dlg_box_stage,        REPL_DLG },
     { 0x1685C, "dlg_frame_tile",      (void *)dlg_frame_tile,       REPL_DLG },
+    { 0x16C57, "dlg_wait_key",        (void *)dlg_wait_key,         REPL_DLG },
 };
 
 unsigned repl_parse(const char *spec)

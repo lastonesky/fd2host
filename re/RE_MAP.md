@@ -151,12 +151,13 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | `0x4EBE3` | 随机表滚动 | `ROL16(word_627B8-28652)` | ★ |
 | `0x3702F` | 库公共 thunk？ | 538 lib + 16 game 调用，`_InterlockedExchange` 包装 —— **待确认**（lib 层，不转译） | — |
 
-> **转译进展（截至第 29 轮）**：`0x4E98D`+`0x4E8D3` RLE → `rle.c`（1900）；图形 blit 工具族
+> **转译进展（截至第 31 轮）**：`0x4E98D`+`0x4E8D3` RLE → `rle.c`（1900）；图形 blit 工具族
 > `0x4EC7C..0x4EEE0` → `gfx.c`（1450）；0xC0-RLE 文本 blit `0x4EBFF/0x4EC31/0x4EBAB` → `rle2.c`（1200）；
 > 24×24 精灵 RLE 族 → `sprite24.c`（2100）；字节/调色板工具 → `util.c`（2200）；地形代价洪泛/寻路
 > `0x4E390..0x4E751` → `path.c`（1000）；表访问器 `0x4E7DD..0x4E8BC` → `tables.c`（4528）；
-> 资源加载 `0x111BA` → `res.c`（160）；对话框辅助 `0x16559/0x16E24` → `dlg.c`（800）；
-> 其中 **39 个经 `src/repl.c` 接入运行中的游戏**（机器码逐字节对拍 + `regress` 8/8，PROGRESS §19..§29）。
+> 资源加载 `0x111BA` → `res.c`（160）；对话框辅助 `0x16559/0x16E24` → `dlg.c`（800）；开框/收框动画
+> `0x165AC/0x16B43/0x168B6/0x1685C` → `dlg.c`（boxcheck 240）；等键+嘴型 `0x16C57` → `dlg.c`（keycheck 100）；
+> 其中 **44 个经 `src/repl.c` 接入运行中的游戏**（机器码逐字节对拍 + `regress` 8/8，PROGRESS §19..§31）。
 
 游戏侧高频依赖（`lib_nosym`，需归类确认属于谁）：`0x4E381(15/64)`、`0x4EBE3(28/40)`、`0x4DF4C(56/32)`、`0x4E22A(114/13)`、`0x4E31C(101/15)` —— 0x4D000..0x4F000 段像**游戏自带工具库**（位流、24×24 图元、BIOS 封装），优先归类。
 

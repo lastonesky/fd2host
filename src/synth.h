@@ -22,6 +22,12 @@ long synth_rendered_notes(void);
 /* Override the General MIDI sound bank path (default: the Windows gm.dls). */
 void synth_set_bank_path(const char *path);
 
+/* Master output volume 0..100 percent (host CLI --volume, default 10).
+ * Applied to the rendered buffer *after* the --midi-dump WAV tap and the
+ * render stats, immediately before waveOutWrite - the loop thread resubmits
+ * the already-scaled buffer, so nothing else needs to know about it. */
+void synth_set_master_volume(int percent);
+
 /* Dump the rendered mix to a WAV file (diagnostics, no sound card involved). */
 void synth_set_dump_path(const char *path);
 

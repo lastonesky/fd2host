@@ -40,6 +40,7 @@
 #include <stdlib.h>
 #include "ail.h"
 #include "xmidi.h"
+#include "synth.h"
 
 #define AIL_OBJ0_BASE    0x00010000u
 /* FDPS asks for 8 sample handles in one go (sub_30270 loops 8 times), FD2 for 2. */
@@ -458,7 +459,6 @@ static void sample_close_device(ail_sample *s)
 static int sample_open_device(ail_sample *s)
 {
     WAVEFORMATEX wf;
-
     if (s->dev)
         return 1;
     /* Per-sample format: AIL_set_sample_type / _playback_rate fill it in
@@ -481,6 +481,48 @@ static int sample_open_device(ail_sample *s)
     return 1;
 }
 
+/* Master output volume (host --volume, 0..100, default 10): attenuates what
+ * actually reaches waveOut, nothing else. The pipeline above it - AIL volume
+ * tracking, the copy of the guest PCM, waveOut submission - is untouched, so
+ * audio bugs still show up while the test runs quietly. */
+static int g_master_volume = 10;
+
+void ail_set_master_volume(int percent)
+{
+    if (percent < 0)
+        percent = 0;
+    if (percent > 100)
+        percent = 100;
+    g_master_volume = percent;
+    synth_set_master_volume(percent);
+    printf("ail: master output volume = %d%% (music + SFX scaled at waveOut)\n",
+           percent);
+}
+
+/* Scale a host-side PCM copy by `g` (0..1). 8-bit waveOut PCM is unsigned,
+ * 16-bit is signed little-endian; channels are interleaved and all share the
+ * same gain, so the loop is per sample either way. */
+static void pcm_apply_gain(uint8_t *pcm, uint32_t bytes, int bits, double g)
+{
+    uint32_t i, n;
+
+    if (bits <= 8) {
+        for (i = 0; i < bytes; i++) {
+            double v = ((int)pcm[i] - 128) * g;
+            int    q = (int)(v + (v >= 0.0 ? 0.5 : -0.5)) + 128;
+            pcm[i] = (uint8_t)(q < 0 ? 0 : (q > 255 ? 255 : q));
+        }
+    } else {
+        int16_t *p = (int16_t *)(void *)pcm;
+        n = bytes / 2;
+        for (i = 0; i < n; i++) {
+            double v = (double)p[i] * g;
+            int    q = (int)(v + (v >= 0.0 ? 0.5 : -0.5));
+            p[i] = (int16_t)(q < -32768 ? -32768 : (q > 32767 ? 32767 : q));
+        }
+    }
+}
+
 static void sample_play(ail_sample *s)
 {
     uint32_t played;
@@ -498,6 +540,15 @@ static void sample_play(ail_sample *s)
     if (!s->pcm)
         return;
     memcpy(s->pcm, s->addr, s->len);
+    {
+        /* master volume x the game's AIL_set_sample_volume (0..127, the AIL
+         * default is 127): applied to the copy, never to guest memory. */
+        int bits = s->bits ? s->bits : g_bits;
+        double g = (double)g_master_volume / 100.0 *
+                   (double)s->volume / 127.0;
+        if (g < 1.0)
+            pcm_apply_gain(s->pcm, s->len, bits, g);
+    }
     s->hdr.lpData         = (LPSTR)s->pcm;
     s->hdr.dwBufferLength = s->len;
     if (waveOutPrepareHeader(s->dev, &s->hdr, sizeof s->hdr) != MMSYSERR_NOERROR)
@@ -671,9 +722,9 @@ static int32_t host_AIL_set_sample_playback_rate(void *h, int32_t rate)
     return 1;
 }
 
-/* Volume is recorded but not applied yet: waveOut plays at full scale. The
- * value is printed with every play so the game's own range (0..127?) can be
- * read off host.log before a mapping is chosen. */
+/* The game's own digital volume: recorded on the handle and applied in
+ * sample_play together with the master volume (the original comment here said
+ * "not applied yet"; FD2 never calls it, FDPS does). */
 static int32_t host_AIL_set_sample_volume(void *h, int32_t volume, int32_t ms)
 {
     ail_sample *s = sample_of(h);

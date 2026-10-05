@@ -432,6 +432,20 @@ void synth_set_dump_path(const char *path)
     g_dump_wav_path = path;
 }
 
+/* Host master volume (0..100, default 10) - see synth.h. Applied to the
+ * playback buffer only: the --midi-dump WAV and the render stats above stay
+ * at full scale so the offline music checks keep their evidence. */
+static int g_master = 10;
+
+void synth_set_master_volume(int percent)
+{
+    if (percent < 0)
+        percent = 0;
+    if (percent > 100)
+        percent = 100;
+    g_master = percent;
+}
+
 /* Write the rendered mix as a plain 16-bit mono PCM WAV. Playing the file
  * outside the game separates "is the sequence parsed and synthesised
  * correctly" from "does waveOut work", and makes tempo problems obvious
@@ -497,6 +511,45 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
     if (g_dump_wav_path && g_dump_wav_path[0])
         dump_wav(g_dump_wav_path, pcm, samples, sample_rate);
 
+    {
+        /* Render stats on the full-scale buffer: they document what the
+         * synthesiser produced, independent of the output volume. */
+        uint32_t k, nonzero = 0;
+        int16_t peak = 0;
+        for (k = 0; k < samples; k++) {
+            if (pcm[k])
+                nonzero++;
+            if (pcm[k] > peak)
+                peak = pcm[k];
+            else if ((int16_t)-pcm[k] > peak)
+                peak = (int16_t)-pcm[k];
+        }
+        printf("synth: rendered %ld notes (%ld GM samples, %ld drums) -> %.1f s of "
+               "16-bit PCM @ %u Hz (%.1f MB), loop=%d, non-silent %.1f%%, peak %d/32767, "
+               "polyphony %d, took %u ms\n",
+               g_notes, g_sampled_notes, g_drum_notes,
+               (double)samples / (double)sample_rate,
+               (unsigned)sample_rate,
+               (double)(samples * 2) / (1024.0 * 1024.0), loop,
+               100.0 * (double)nonzero / (double)samples, (int)peak,
+               g_peak_voices, (unsigned)(GetTickCount() - t0));
+    }
+
+    /* Master output volume: scale the buffer that goes to waveOut (the loop
+     * thread resubmits it unchanged). The waveOut device is not open yet, so
+     * there is no race with the driver reading the samples. */
+    if (g_master < 100) {
+        double g = (double)g_master / 100.0;
+        uint32_t k;
+        for (k = 0; k < samples; k++) {
+            double v = (double)pcm[k] * g;
+            int    q = (int)(v + (v >= 0.0 ? 0.5 : -0.5));
+            pcm[k] = (int16_t)(q < -32768 ? -32768 : (q > 32767 ? 32767 : q));
+        }
+        printf("synth: master volume %d%% applied to the playback buffer\n",
+               g_master);
+    }
+
     memset(&wf, 0, sizeof wf);
     wf.wFormatTag      = WAVE_FORMAT_PCM;
     wf.nChannels       = 1;
@@ -529,27 +582,6 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
     }
     InterlockedExchange(&g_stop_flag, 0);
     g_thread = CreateThread(NULL, 0, resubmit_thread, NULL, 0, NULL);
-    {
-        uint32_t k, nonzero = 0;
-        int16_t peak = 0;
-        for (k = 0; k < samples; k++) {
-            if (pcm[k])
-                nonzero++;
-            if (pcm[k] > peak)
-                peak = pcm[k];
-            else if ((int16_t)-pcm[k] > peak)
-                peak = (int16_t)-pcm[k];
-        }
-        printf("synth: rendered %ld notes (%ld GM samples, %ld drums) -> %.1f s of "
-               "16-bit PCM @ %u Hz (%.1f MB), loop=%d, non-silent %.1f%%, peak %d/32767, "
-               "polyphony %d, took %u ms\n",
-               g_notes, g_sampled_notes, g_drum_notes,
-               (double)samples / (double)sample_rate,
-               (unsigned)sample_rate,
-               (double)bytes / (1024.0 * 1024.0), loop,
-               100.0 * (double)nonzero / (double)samples, (int)peak,
-               g_peak_voices, (unsigned)(GetTickCount() - t0));
-    }
     return 1;
 }
 

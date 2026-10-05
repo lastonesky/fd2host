@@ -1,5 +1,6 @@
 # === Build artifacts ===
 build/
+dosbox/
 fd2host.map
 
 # === Compiled objects ===

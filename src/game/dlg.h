@@ -68,4 +68,11 @@ void dlg_box_stage(void *surface, int stride, int x0, int y0,
  * header-prefixed frame resource onto dest with the given stride. */
 void dlg_frame_tile(void *dest, int stride, const void *table, int idx);
 
+/* 0x16C57 - wait for a key while animating (palette cycle, speaker tile
+ * 18/19 flip, mouth open/close via DATO sub-images 3/0). `speaker != 0`
+ * enables the speaker tile. Ends with INT 16h AH=10h into word_53A8D and
+ * normalises the scan code in AH (E0h/52h -> 1Ch, 53h -> 01h).
+ * Verified by src/keycheck.c. */
+void dlg_wait_key(int speaker);
+
 #endif /* GAME_DLG_H */

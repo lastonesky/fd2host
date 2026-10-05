@@ -211,10 +211,14 @@ static void event_cb(const sapp_event *e)
             host_request_quit();
             break;
         }
+        if (host_no_user_input())
+            break;                 /* autokey injects via input_post_vk */
         push_vk(vk, 1);
         break;
 
     case SAPP_EVENTTYPE_KEY_UP:
+        if (host_no_user_input())
+            break;
         push_vk(sapp_to_vk((int)e->key_code), 0);
         break;
 

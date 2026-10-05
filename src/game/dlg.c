@@ -6,6 +6,7 @@
  *   0x16B43  dlg_close_box    - app-level
  *   0x168B6  dlg_box_stage    - app-level (reads the frame resource global)
  *   0x1685C  dlg_frame_tile   - pure
+ *   0x16C57  dlg_wait_key     - app-level (BDA tick / BIOS key / palette)
  *
  * The app-level half keeps the original addresses: the globals really do
  * live in the game's data segment (all four entries can be hooked without
@@ -21,12 +22,22 @@
  *   0x3790A  delay(10)
  *   0x4E381  flush the BIOS keyboard buffer (BDA 0x41A/0x41C)
  *   0x3706E  Watcom CRT malloc - pairs with the free inside 0x15E71
+ *   0x4E310  read the BIOS tick word (BDA 0x46C - the C cannot address the
+ *            BDA directly: Windows keeps page 0 unmappable)
+ *   0x4EBE3  16-bit ROL rand (state in word_627B8)
+ *   0x10620  is a key pending? (BDA 0x41A != 0x41C)
+ *   0x4E31C  palette animation - writes the VGA DAC through ports 0x3C8/9
+ *   0x370F0  int386(intno, inregs, outregs) - the BIOS key read at the end
+ *            of dlg_wait_key
  * 0x4ECBF (gfx_save_rect) and 0x4ED0B (gfx_blit_block) are already
  * translated, so the C calls the translated versions directly.
  *
  * Verified against the machine code by src/boxcheck.c (whole-frame VGA,
  * the five stage snapshots, the global flag and a full event log of every
- * service call - ordering, arguments and VGA at each delay).
+ * service call - ordering, arguments and VGA at each delay), and by
+ * src/keycheck.c for dlg_wait_key: its wait loop is driven by a hooked
+ * palette step (deterministic BIOS tick + scripted key) with the VGA
+ * snapshotted on every iteration.
  */
 #include "dlg.h"
 #include "gfx.h"
@@ -41,10 +52,14 @@
 #define VGA        ((uint8_t *)(uintptr_t)VGA_BASE)
 #define dword_51A83 (*(int32_t *)(uintptr_t)0x00051A83u) /* portrait anim mode */
 #define dword_53A18 ((void **)(uintptr_t)0x00053A18u)    /* 5 stage snapshots */
+#define dword_53A51 (*(int32_t *)(uintptr_t)0x00053A51u) /* text line step     */
 #define dword_53A81 (*(void **)(uintptr_t)0x00053A81u)   /* box frame resource */
+#define dword_53A85 (*(void **)(uintptr_t)0x00053A85u)   /* DATO sub-images    */
 #define dword_53AB9 (*(int32_t *)(uintptr_t)0x00053AB9u) /* portrait cols */
 #define dword_53ABD (*(int32_t *)(uintptr_t)0x00053ABDu) /* portrait rows */
 #define dword_53C67 (*(int32_t *)(uintptr_t)0x00053C67u) /* box position */
+#define word_53A8D  (*(uint16_t *)(uintptr_t)0x00053A8Du) /* INT 16h REGS.EAX */
+#define byte_53A8E  (*(uint8_t  *)(uintptr_t)0x00053A8Eu) /* .. AH (scan code) */
 
 typedef void *(*snap_save_fn)(const void *block, void *surface, int stride,
                               int x, int y);
@@ -53,6 +68,11 @@ typedef void  (*delay_fn)(unsigned ms);
 typedef void  (*flush_fn)(void);
 typedef void  (*glide_fn)(int face_x, int face_y);
 typedef void  *(*crt_alloc_fn)(size_t n);
+typedef unsigned (*tick_fn)(void);          /* 0x4E310: BDA 0x46C word     */
+typedef int     (*rand_fn)(void);           /* 0x4EBE3: ROL rand           */
+typedef int     (*pending_fn)(void);        /* 0x10620: key waiting?       */
+typedef void    (*palette_fn)(void);        /* 0x4E31C: DAC animation      */
+typedef int     (*int386_fn)(int intno, const void *in, void *out);
 
 #define ORIG_SNAP_SAVE   ((snap_save_fn)  (uintptr_t)0x00015E9Eu)
 #define ORIG_SNAP_RESTORE ((snap_restore_fn)(uintptr_t)0x00015E71u)
@@ -60,6 +80,11 @@ typedef void  *(*crt_alloc_fn)(size_t n);
 #define ORIG_FLUSH       ((flush_fn)      (uintptr_t)0x0004E381u)
 #define ORIG_GLIDE       ((glide_fn)      (uintptr_t)0x00012CEAu)
 #define ORIG_ALLOC       ((crt_alloc_fn)  (uintptr_t)0x0003706Eu)
+#define ORIG_TICK        ((tick_fn)       (uintptr_t)0x0004E310u)
+#define ORIG_RAND        ((rand_fn)       (uintptr_t)0x0004EBE3u)
+#define ORIG_PENDING     ((pending_fn)    (uintptr_t)0x00010620u)
+#define ORIG_PALETTE     ((palette_fn)    (uintptr_t)0x0004E31Cu)
+#define ORIG_INT386      ((int386_fn)     (uintptr_t)0x000370F0u)
 
 /* The 310x86 frame drawn by dlg_open_box, as five growing tile stages:
  * (cols, lines) per stage, 16 px cells inside a 3 px border. */
@@ -196,6 +221,71 @@ void dlg_frame_tile(void *dest, int stride, const void *table, int idx)
 
     gfx_blit_block(dest, base + *(const uint32_t *)(base + 4 * idx + 6),
                    stride);
+}
+
+/* 0x16C57 - block until a key is pending, animating while waiting:
+ * every BIOS tick the palette cycles (0x4E31C), the speaker tile flips
+ * (frame resource tiles 18/19, three ticks each, only when speaker != 0)
+ * and the mouth opens/closes (DATO sub-images 3 / 0, random hold time).
+ * The key itself is read with INT 16h AH=10h into word_53A8D and the scan
+ * code in AH is normalised (E0h/52h -> 1Ch, 53h -> 01h).
+ *
+ * The tick comparisons are 16-bit: the original sign-extends the BDA word
+ * before subtracting (cwde / movsx), so this does too. */
+void dlg_wait_key(int speaker)
+{
+    int     mouth_open = 0;             /* var_14: 1 = mouth (DATO 3) out */
+    int     tile       = 18;            /* esi: speaker tile index        */
+    int     fast       = 0;             /* edi: 3-tick tile flip counter  */
+    int     base       = 0x47A0;        /* var_1C: text area row step     */
+    int     area;                       /* var_20: text area base         */
+    int     mouth_wait;                 /* ebp: ticks to hold the mouth   */
+    int16_t tick_at;                    /* var_18                         */
+
+    if (dword_53A51 == 0)
+        base = 0x4770;
+
+    tick_at    = (int16_t)ORIG_TICK();
+    mouth_wait = (int)(ORIG_RAND() % 30) + 2;
+    area = (dword_53C67 == 0x728) ? 0xA0B4F : 0xA951F;
+
+    if (speaker == 1)
+        dlg_frame_tile((void *)(uintptr_t)(area + base + 0x640), 320,
+                       dword_53A81, 18);
+
+    while (!ORIG_PENDING()) {
+        ORIG_PALETTE();
+        if ((int16_t)ORIG_TICK() - tick_at < 2)
+            continue;
+
+        if (speaker == 1 && ++fast == 3) {          /* flip the tile   */
+            fast = 0;
+            if (++tile == 20)
+                tile = 18;
+            dlg_frame_tile((void *)(uintptr_t)(area + base + 0x640), 320,
+                           dword_53A81, tile);
+        }
+        if (mouth_open) {                           /* close the mouth */
+            dlg_blit_dato(dword_53A85, dword_53C67, 0);
+            mouth_wait = (int)(ORIG_RAND() % 30) + 2;
+            mouth_open = 0;
+        } else if (mouth_wait-- == 0) {             /* open it         */
+            dlg_blit_dato(dword_53A85, dword_53C67, 3);
+            mouth_open = 1;
+        }
+        tick_at = (int16_t)ORIG_TICK();
+    }
+
+    if (speaker == 1)
+        dlg_frame_tile((void *)(uintptr_t)(area + base), 320,
+                       dword_53A81, 13);
+
+    byte_53A8E = 0x10;                  /* AH = 10h: BIOS read (enhanced) */
+    ORIG_INT386(0x16, &word_53A8D, &word_53A8D);
+    if (byte_53A8E == 0xE0 || byte_53A8E == 0x52)
+        byte_53A8E = 0x1C;
+    if (byte_53A8E == 0x53)
+        byte_53A8E = 0x01;
 }
 
 void dlg_blit_dato(const void *dato_buf, int box_pos, int idx)
