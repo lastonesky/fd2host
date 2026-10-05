@@ -86,6 +86,7 @@ pwsh -File E:\FD2\port\build.ps1 -Target rlecheck; & E:\FD2\port\build\rlecheck.
 pwsh -File E:\FD2\port\build.ps1 -Target gfxcheck; & E:\FD2\port\build\gfxcheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target sprite24check; & E:\FD2\port\build\sprite24check.exe
 pwsh -File E:\FD2\port\build.ps1 -Target utilcheck; & E:\FD2\port\build\utilcheck.exe
+pwsh -File E:\FD2\port\build.ps1 -Target pathcheck; & E:\FD2\port\build\pathcheck.exe
 
 # 一键回归（重建沙箱、删 FD2.TMP、autokey 走 continue、8 项断言）
 pwsh -File E:\FD2\port\regress.ps1

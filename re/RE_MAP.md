@@ -151,12 +151,12 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | `0x4EBE3` | 随机表滚动 | `ROL16(word_627B8-28652)` | ★ |
 | `0x3702F` | 库公共 thunk？ | 538 lib + 16 game 调用，`_InterlockedExchange` 包装 —— **待确认**（lib 层，不转译） | — |
 
-> **第 19/21/22/23 轮转译进展**：`0x4E98D`（三模式 RLE 解码）+ `0x4E8D3`（LUT）→ `src/game/rle.c`
-> （`rlecheck` 1900 例）；图形 blit 工具族 `0x4ECBF/0x4EC7C/0x4ED0B/0x4ED34/0x4ED7A/0x4EEE0`
-> → `src/game/gfx.c`（`gfxcheck` 1450 例）；24×24 精灵 RLE 族 7 变体
-> `0x4DF84/0x4E016/0x4E0A2/0x4E127/0x4E1A6/0x4E22A/0x4E29C` → `src/game/sprite24.c`
-> （`sprite24check` 2100 例）；字节/调色板工具 `0x4DED4/0x4DEEC/0x4DF09/0x4DF28/0x4DF4C/0x4E795`
-> → `src/game/util.c`（`utilcheck` 2200 例）；均机器码逐字节对拍（PROGRESS §19/§21/§22/§23）。
+> **第 19/21/22/23/24 轮转译进展**：`0x4E98D`+`0x4E8D3` RLE → `src/game/rle.c`（1900 例）；
+> 图形 blit 工具族 `0x4ECBF/0x4EC7C/0x4ED0B/0x4ED34/0x4ED7A/0x4EEE0` → `src/game/gfx.c`（1450 例）；
+> 24×24 精灵 RLE 族 7 变体 `0x4DF84..0x4E29C` → `src/game/sprite24.c`（2100 例）；
+> 字节/调色板工具 `0x4DED4/0x4DEEC/0x4DF09/0x4DF28/0x4DF4C/0x4E795` → `src/game/util.c`（2200 例）；
+> **地形代价洪泛/寻路** `0x4E390..0x4E751` → `src/game/path.c`（1000 例）；
+> 均机器码逐字节对拍（PROGRESS §19/§21/§22/§23/§24）。
 
 游戏侧高频依赖（`lib_nosym`，需归类确认属于谁）：`0x4E381(15/64)`、`0x4EBE3(28/40)`、`0x4DF4C(56/32)`、`0x4E22A(114/13)`、`0x4E31C(101/15)` —— 0x4D000..0x4F000 段像**游戏自带工具库**（位流、24×24 图元、BIOS 封装），优先归类。
 
@@ -164,8 +164,9 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 `0x4DED4..0x4DEDA` 表访问器；`0x4DEEC/0x4DF09/0x4DF28/0x4DF4C` 字节/调色板变换（含 ROL 混淆）——
 **已转译** `src/game/util.c`；`0x4DF84..0x4E29C` **24×24 精灵 RLE 族 7 变体**（已转译
 `src/game/sprite24.c`）；`0x4E310/0x4E31C` 计时器读取 + 调色板动画（写 DAC 端口）；
-`0x4E381` 清键盘缓冲（BDA）；`0x4E390/0x4E42C/0x4E4BE/0x4E4F6/0x4E5CC/0x4E680/0x4E703/0x4E71F/0x4E751`
-连通性/BFS 簇（`byte_60068/69` 网格 + 四方向递归，**疑似战场移动范围/寻路**，待转译）；
+`0x4E381` 清键盘缓冲（BDA）；`0x4E390..0x4E751`
+连通性/BFS 簇（`byte_60068/69` 网格 + 四方向递归，**已确认为地形代价洪泛+寻路**，
+已转译 `src/game/path.c`，对拍 1000 例）；
 `0x4E795` 掩码重着色（已转译 `util_mask_recolor`）；`0x4E7DD..0x4E8BC` 系列表访问器
 （`&unk_XXXX + 步长*i`，无逻辑）。
 
@@ -182,6 +183,7 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 |   | ✅ **图形 blit 工具族已完成**（第 21 轮）：`src/game/gfx.c`（save/restore rect、block/透明 blit、16×16 字形、scanline 重排）+ `gfxcheck` 对拍 1450 例（PROGRESS §21） | 同 §19.4 |
 |   | ✅ **24×24 精灵 RLE 族已完成**（第 22 轮）：`src/game/sprite24.c`（7 变体）+ `sprite24check` 对拍 2100 例（PROGRESS §22） | 同 §19.4 |
 |   | ✅ **字节/调色板工具已完成**（第 23 轮）：`src/game/util.c`（6 函数）+ `utilcheck` 对拍 2200 例（PROGRESS §23） | 同 §19.4 |
+|   | ✅ **地形代价洪泛/寻路已完成**（第 24 轮）：`src/game/path.c`（2 入口 + 7 内部）+ `pathcheck` 对拍 1000 例（PROGRESS §24） | 同 §19.4 |
 | 3 | 图形 blit/调色板（`gfx_A0000` 粗筛集，先精化名单） | fd2host 显示对拍 |
 | 4 | 主状态机 + 脚本 VM | 逐步替换法：机器码 vs 转译 C 逐函数对拍（**待确认**可行性） |
 | 5 | CRT/平台层 → Win32（`dos.c` 已有大半）+ AIL 打桩 | host.log 行为等价 |
@@ -246,12 +248,9 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 2. 提取 `main` 状态机两张函数指针表（`funcs_25E23`/`funcs_25E3A`）的真实地址与项。
 3. 精化 `gfx_A0000` 名单（当前是字节粗筛，含误报）。
 4. 全局状态区 `dword_53A00..0x53F00` 的结构还原（`main` 已见约 20 个成员）。
-5. **下一批源码转译目标**：连通性/BFS 簇 `0x4E390..0x4E751`（疑似移动范围/寻路，先归档全局布局）、
-   表访问器 `0x4E7DD..0x4E8BC`；然后 ★★★ `sub_111BA`（资源加载器，132 调用点）、
-   `sub_15F84`（文本/脚本渲染器，1380 B）——继续用机器码对拍法（PROGRESS §19.4/§23）。
-   注意 `sub_111BA` 内部走 Watcom CRT 文件服务，独立对拍需先接宿主 `dos.c`；`sub_15F84`
-   是 usercall 多寄存器参数，需 `__asm` thunk 或先确认 ABI。另外原版工具库有**不守 ABI**的函数
-   （如 `0x4DF09` 改 EBX 不保存，§23.2），接回宿主时要留意。
+5. **下一批源码转译目标**：表访问器 `0x4E7DD..0x4E8BC`；计时器/调色板动画 `0x4E310/0x4E31C`、
+   清键盘 `0x4E381`（需平台层）；然后 ★★★ `sub_111BA`（资源加载）、`sub_15F84`（文本/脚本）。
+   连通性/BFS 簇（§4 注）已于第 24 轮完成。
 6. **官方逆向知识库**：`port/docs/`（已 curate 到 9 MB/274 文件，见 `docs/KEEP.md`）可作语义线索；
    但**它是另一个 FD2.EXE build**（md5 `b97caf22…`，非本项目 `a6e341a8…`），地址/常量/指令
    一律以 `E:\FD2\FD2.EXE.i64` 复核。详见 PROGRESS §21.1/§22.1。

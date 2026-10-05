@@ -1,0 +1,681 @@
+
+===== 0x4E390 size 156 =====
+void __cdecl __spoils<> sub_4E390(int a1, unsigned __int8 a2, unsigned __int8 a3, char a4, char *a5, int a6)
+{
+  int v6; // eax
+  int v7; // ebx
+
+  dword_6006A = a1;
+  byte_6006E = a2;
+  byte_6006F = a3;
+  byte_60070 = a4;
+  dword_60064 = (int)a5;
+  byte_60068 = *a5;
+  byte_60069 = a5[2];
+  dword_60060 = a6;
+  v6 = 4 * (unsigned __int8)byte_60068;
+  LOWORD(v6) = a3 * (unsigned __int8)byte_60068;
+  v7 = v6;
+  LOWORD(v6) = a2;
+  a5[4 * v6 + 7 + 4 * v7] = a4;
+  sub_4E42C();
+}
+
+--- disasm ---
+0004e390  55                     push    ebp
+0004e391  8b ec                  mov     ebp, esp
+0004e393  60                     pusha
+0004e394  8b 75 08               mov     esi, [ebp+arg_0]
+0004e397  89 35 6a 00 06 00      mov     ds:dword_6006A, esi
+0004e39d  8b 45 0c               mov     eax, [ebp+arg_4]
+0004e3a0  a2 6e 00 06 00         mov     ds:byte_6006E, al
+0004e3a5  8b 45 10               mov     eax, [ebp+arg_8]
+0004e3a8  a2 6f 00 06 00         mov     ds:byte_6006F, al
+0004e3ad  8b 45 14               mov     eax, [ebp+arg_C]
+0004e3b0  a2 70 00 06 00         mov     ds:byte_60070, al
+0004e3b5  8b 45 18               mov     eax, [ebp+arg_10]
+0004e3b8  a3 64 00 06 00         mov     ds:dword_60064, eax
+0004e3bd  8a 18                  mov     bl, [eax]
+0004e3bf  88 1d 68 00 06 00      mov     ds:byte_60068, bl
+0004e3c5  8a 58 02               mov     bl, [eax+2]
+0004e3c8  88 1d 69 00 06 00      mov     ds:byte_60069, bl
+0004e3ce  8b 45 1c               mov     eax, [ebp+arg_14]
+0004e3d1  a3 60 00 06 00         mov     ds:dword_60060, eax
+0004e3d6  33 c0                  xor     eax, eax
+0004e3d8  33 ed                  xor     ebp, ebp
+0004e3da  a0 68 00 06 00         mov     al, ds:byte_60068
+0004e3df  32 e4                  xor     ah, ah
+0004e3e1  c1 e0 02               shl     eax, 2
+0004e3e4  8b e8                  mov     ebp, eax
+0004e3e6  a0 68 00 06 00         mov     al, ds:byte_60068
+0004e3eb  8a 25 6f 00 06 00      mov     ah, ds:byte_6006F
+0004e3f1  f6 e4                  mul     ah
+0004e3f3  8b d8                  mov     ebx, eax
+0004e3f5  32 e4                  xor     ah, ah
+0004e3f7  a0 6e 00 06 00         mov     al, ds:byte_6006E
+0004e3fc  03 d8                  add     ebx, eax
+0004e3fe  c1 e3 02               shl     ebx, 2
+0004e401  83 c3 07               add     ebx, 7
+0004e404  03 1d 64 00 06 00      add     ebx, ds:dword_60064
+0004e40a  8a 15 6e 00 06 00      mov     dl, ds:byte_6006E
+0004e410  8a 35 6f 00 06 00      mov     dh, ds:byte_6006F
+0004e416  8a 0d 70 00 06 00      mov     cl, ds:byte_60070
+0004e41c  8d 3d 79 00 06 00      lea     edi, unk_60079
+0004e422  88 0b                  mov     [ebx], cl
+0004e424  e8 03 00 00 00         call    sub_4E42C
+0004e429  61                     popa
+0004e42a  5d                     pop     ebp
+0004e42b  c3                     retn
+
+===== 0x4E42C size 146 =====
+int __usercall sub_4E42C@<eax>(
+        int result@<eax>,
+        __int16 a2@<dx>,
+        char a3@<cl>,
+        int a4@<ebx>,
+        int a5@<ebp>,
+        int a6@<edi>)
+{
+  int v6; // edi
+  char v7; // cf
+  __int16 v8; // dx
+  __int16 v9; // dx
+  __int16 v10; // dx
+
+  *(_WORD *)a6 = a2;
+  *(_BYTE *)(a6 + 2) = a3;
+  *(_DWORD *)(a6 + 3) = a4;
+  v6 = a6 + 7;
+  if ( (unsigned __int8)(a2 + 1) < (unsigned __int8)byte_60068 )
+  {
+    result = ((int (*)(void))sub_4E4BE)();
+    if ( !v7 )
+      result = sub_4E42C(result);
+  }
+  v8 = *(_WORD *)(v6 - 7);
+  if ( (_BYTE)v8 != 0 )
+  {
+    LOBYTE(v8) = v8 - 1;
+    result = sub_4E4BE(result, v8, *(_DWORD *)(v6 - 4) - 4, *(_BYTE *)(v6 - 5));
+    if ( !v7 )
+      result = sub_4E42C(result);
+  }
+  v9 = *(_WORD *)(v6 - 7);
+  if ( ++HIBYTE(v9) < (unsigned __int8)byte_60069 )
+  {
+    result = sub_4E4BE(result, v9, a5 + *(_DWORD *)(v6 - 4), *(_BYTE *)(v6 - 5));
+    if ( !v7 )
+      result = sub_4E42C(result);
+  }
+  v10 = *(_WORD *)(v6 - 7);
+  if ( HIBYTE(v10) != 0 )
+  {
+    --HIBYTE(v10);
+    result = sub_4E4BE(result, v10, *(_DWORD *)(v6 - 4) - a5, *(_BYTE *)(v6 - 5));
+    if ( !v7 )
+      return sub_4E42C(result);
+  }
+  return result;
+}
+
+--- disasm ---
+0004e42c  66 89 17               mov     [edi], dx
+0004e42f  88 4f 02               mov     [edi+2], cl
+0004e432  89 5f 03               mov     [edi+3], ebx
+0004e435  83 c7 07               add     edi, 7
+0004e438  fe c2                  inc     dl
+0004e43a  3a 15 68 00 06 00      cmp     dl, ds:byte_60068
+0004e440  73 0f                  jnb     short loc_4E451
+0004e442  83 c3 04               add     ebx, 4
+0004e445  e8 74 00 00 00         call    sub_4E4BE
+0004e44a  72 05                  jb      short loc_4E451
+0004e44c  e8 db ff ff ff         call    sub_4E42C
+0004e451  8b 5f fc               mov     ebx, [edi-4]
+0004e454  8a 4f fb               mov     cl, [edi-5]
+0004e457  66 8b 57 f9            mov     dx, [edi-7]
+0004e45b  0a d2                  or      dl, dl
+0004e45d  74 11                  jz      short loc_4E470
+0004e45f  fe ca                  dec     dl
+0004e461  83 eb 04               sub     ebx, 4
+0004e464  e8 55 00 00 00         call    sub_4E4BE
+0004e469  72 05                  jb      short loc_4E470
+0004e46b  e8 bc ff ff ff         call    sub_4E42C
+0004e470  8b 5f fc               mov     ebx, [edi-4]
+0004e473  8a 4f fb               mov     cl, [edi-5]
+0004e476  66 8b 57 f9            mov     dx, [edi-7]
+0004e47a  fe c6                  inc     dh
+0004e47c  3a 35 69 00 06 00      cmp     dh, ds:byte_60069
+0004e482  73 0e                  jnb     short loc_4E492
+0004e484  03 dd                  add     ebx, ebp
+0004e486  e8 33 00 00 00         call    sub_4E4BE
+0004e48b  72 05                  jb      short loc_4E492
+0004e48d  e8 9a ff ff ff         call    sub_4E42C
+0004e492  8b 5f fc               mov     ebx, [edi-4]
+0004e495  8a 4f fb               mov     cl, [edi-5]
+0004e498  66 8b 57 f9            mov     dx, [edi-7]
+0004e49c  0a f6                  or      dh, dh
+0004e49e  74 10                  jz      short loc_4E4B0
+0004e4a0  fe ce                  dec     dh
+0004e4a2  2b dd                  sub     ebx, ebp
+0004e4a4  e8 15 00 00 00         call    sub_4E4BE
+0004e4a9  72 05                  jb      short loc_4E4B0
+0004e4ab  e8 7c ff ff ff         call    sub_4E42C
+0004e4b0  66 83 ef 07            sub     di, 7
+0004e4b4  66 8b 17               mov     dx, [edi]
+0004e4b7  8a 4f 02               mov     cl, [edi+2]
+0004e4ba  8b 5f 03               mov     ebx, [edi+3]
+0004e4bd  c3                     retn
+
+===== 0x4E4BE size 56 =====
+char __usercall sub_4E4BE@<al>(unsigned __int8 a1@<cl>, char *a2@<ebx>, int a3@<esi>)
+{
+  __int16 v3; // ax
+  int v4; // eax
+  _BOOL1 v5; // cf
+  char v6; // cl
+
+  v3 = *(_WORD *)(a2 - 3);
+  HIBYTE(v3) &= 3u;
+  v4 = *(unsigned __int8 *)(dword_60060 + (unsigned __int16)(4 * v3) + 1);
+  v5 = a1 < *(_BYTE *)(a3 + v4);
+  v6 = a1 - *(_BYTE *)(a3 + v4);
+  if ( !v5 && v6 > *a2 )
+  {
+    LOBYTE(v4) = *(a2 - 1);
+    if ( (v4 & 0x40) == 0 )
+    {
+      if ( (v4 & 0x80u) != 0 )
+        v6 = 0;
+      *a2 = v6;
+    }
+  }
+  return v4;
+}
+
+--- disasm ---
+0004e4be  33 c0                  xor     eax, eax
+0004e4c0  66 8b 43 fd            mov     ax, [ebx-3]
+0004e4c4  80 e4 03               and     ah, 3
+0004e4c7  66 c1 e0 02            shl     ax, 2
+0004e4cb  03 05 60 00 06 00      add     eax, ds:dword_60060
+0004e4d1  40                     inc     eax
+0004e4d2  8a 28                  mov     ch, [eax]
+0004e4d4  33 c0                  xor     eax, eax
+0004e4d6  8a c5                  mov     al, ch
+0004e4d8  2a 0c 06               sub     cl, [esi+eax]
+0004e4db  72 17                  jb      short loc_4E4F4
+0004e4dd  8a 2b                  mov     ch, [ebx]
+0004e4df  38 e9                  cmp     cl, ch
+0004e4e1  7e 11                  jle     short loc_4E4F4
+0004e4e3  8a 43 ff               mov     al, [ebx-1]
+0004e4e6  a8 40                  test    al, 40h
+0004e4e8  75 0a                  jnz     short loc_4E4F4
+0004e4ea  a8 80                  test    al, 80h
+0004e4ec  74 02                  jz      short loc_4E4F0
+0004e4ee  32 c9                  xor     cl, cl
+0004e4f0  88 0b                  mov     [ebx], cl
+0004e4f2  f8                     clc
+0004e4f3  c3                     retn
+0004e4f4  f9                     stc
+0004e4f5  c3                     retn
+
+===== 0x4E4F6 size 214 =====
+int __usercall sub_4E4F6@<eax>(
+        int a1@<eax>,
+        int a2,
+        unsigned __int8 a3,
+        unsigned __int8 a4,
+        char a5,
+        int a6,
+        char a7,
+        char a8,
+        char a9,
+        char *a10,
+        int a11)
+{
+  int v11; // eax
+  int v12; // ebx
+  __int16 v13; // dx
+  int v14; // eax
+
+  dword_6006A = a2;
+  byte_6006E = a3;
+  byte_6006F = a4;
+  byte_60070 = a5;
+  dword_60073 = a6;
+  word_60071 = a7;
+  MEMORY[0x60072] = a8;
+  byte_6017A = a9;
+  dword_60064 = (int)a10;
+  byte_60068 = *a10;
+  byte_60069 = a10[2];
+  dword_60060 = a11;
+  v11 = 4 * (unsigned __int8)byte_60068;
+  LOWORD(v11) = a4 * (unsigned __int8)byte_60068;
+  v12 = v11;
+  LOWORD(v11) = a3;
+  LOBYTE(v13) = a3;
+  HIBYTE(v13) = a4;
+  a10[4 * v11 + 7 + 4 * v12] = a5;
+  byte_60077 = 0;
+  byte_60078 = -1;
+  v14 = sub_4E751(a1);
+  sub_4E5CC(v14, v13);
+  return (unsigned __int8)byte_60078;
+}
+
+--- disasm ---
+0004e4f6  55                     push    ebp
+0004e4f7  8b ec                  mov     ebp, esp
+0004e4f9  60                     pusha
+0004e4fa  8b 75 08               mov     esi, [ebp+arg_0]
+0004e4fd  89 35 6a 00 06 00      mov     ds:dword_6006A, esi
+0004e503  8b 45 0c               mov     eax, [ebp+arg_4]
+0004e506  a2 6e 00 06 00         mov     ds:byte_6006E, al
+0004e50b  8b 45 10               mov     eax, [ebp+arg_8]
+0004e50e  a2 6f 00 06 00         mov     ds:byte_6006F, al
+0004e513  8b 45 14               mov     eax, [ebp+arg_C]
+0004e516  a2 70 00 06 00         mov     ds:byte_60070, al
+0004e51b  8b 45 18               mov     eax, [ebp+arg_10]
+0004e51e  a3 73 00 06 00         mov     ds:dword_60073, eax
+0004e523  8b 45 1c               mov     eax, [ebp+arg_14]
+0004e526  a2 71 00 06 00         mov     byte ptr ds:word_60071, al
+0004e52b  8b 45 20               mov     eax, [ebp+arg_18]
+0004e52e  a2 72 00 06 00         mov     byte ptr ds:word_60071+1, al
+0004e533  8b 45 24               mov     eax, [ebp+arg_1C]
+0004e536  a2 7a 01 06 00         mov     ds:byte_6017A, al
+0004e53b  8b 45 28               mov     eax, [ebp+arg_20]
+0004e53e  a3 64 00 06 00         mov     ds:dword_60064, eax
+0004e543  8a 18                  mov     bl, [eax]
+0004e545  88 1d 68 00 06 00      mov     ds:byte_60068, bl
+0004e54b  8a 58 02               mov     bl, [eax+2]
+0004e54e  88 1d 69 00 06 00      mov     ds:byte_60069, bl
+0004e554  8b 45 2c               mov     eax, [ebp+arg_24]
+0004e557  a3 60 00 06 00         mov     ds:dword_60060, eax
+0004e55c  33 c0                  xor     eax, eax
+0004e55e  33 ed                  xor     ebp, ebp
+0004e560  a0 68 00 06 00         mov     al, ds:byte_60068
+0004e565  32 e4                  xor     ah, ah
+0004e567  c1 e0 02               shl     eax, 2
+0004e56a  8b e8                  mov     ebp, eax
+0004e56c  a0 68 00 06 00         mov     al, ds:byte_60068
+0004e571  8a 25 6f 00 06 00      mov     ah, ds:byte_6006F
+0004e577  f6 e4                  mul     ah
+0004e579  8b d8                  mov     ebx, eax
+0004e57b  32 e4                  xor     ah, ah
+0004e57d  a0 6e 00 06 00         mov     al, ds:byte_6006E
+0004e582  03 d8                  add     ebx, eax
+0004e584  c1 e3 02               shl     ebx, 2
+0004e587  83 c3 07               add     ebx, 7
+0004e58a  03 1d 64 00 06 00      add     ebx, ds:dword_60064
+0004e590  8a 15 6e 00 06 00      mov     dl, ds:byte_6006E
+0004e596  8a 35 6f 00 06 00      mov     dh, ds:byte_6006F
+0004e59c  8a 0d 70 00 06 00      mov     cl, ds:byte_60070
+0004e5a2  8d 3d 79 00 06 00      lea     edi, unk_60079
+0004e5a8  88 0b                  mov     [ebx], cl
+0004e5aa  c6 05 77 00 06 00 00   mov     ds:byte_60077, 0
+0004e5b1  c6 05 78 00 06 00 ff   mov     ds:byte_60078, 0FFh
+0004e5b8  e8 94 01 00 00         call    sub_4E751
+0004e5bd  e8 0a 00 00 00         call    sub_4E5CC
+0004e5c2  61                     popa
+0004e5c3  33 c0                  xor     eax, eax
+0004e5c5  a0 78 00 06 00         mov     al, ds:byte_60078
+0004e5ca  5d                     pop     ebp
+0004e5cb  c3                     retn
+
+===== 0x4E5CC size 180 =====
+int __usercall sub_4E5CC@<eax>(
+        int result@<eax>,
+        __int16 a2@<dx>,
+        __int16 a3@<cx>,
+        int a4@<ebx>,
+        int a5@<ebp>,
+        int a6@<edi>)
+{
+  int v6; // edi
+  char v7; // cf
+  int v8; // ebx
+  __int16 v9; // dx
+  __int16 v10; // dx
+  int v11; // ebx
+  __int16 v12; // dx
+  __int16 v13; // dx
+  int v14; // ebx
+  __int16 v15; // dx
+  __int16 v16; // dx
+
+  HIBYTE(a3) = 3;
+  *(_WORD *)a6 = a2;
+  *(_WORD *)(a6 + 2) = a3;
+  *(_DWORD *)(a6 + 4) = a4;
+  v6 = a6 + 8;
+  ++byte_60077;
+  LOBYTE(a2) = a2 + 1;
+  if ( (unsigned __int8)a2 < (unsigned __int8)byte_60068 )
+  {
+    result = ((int (*)(void))sub_4E680)();
+    if ( !v7 )
+      result = sub_4E5CC(result, a2);
+  }
+  v8 = *(_DWORD *)(v6 - 4);
+  v9 = *(_WORD *)(v6 - 8);
+  *(_BYTE *)(v6 - 5) = 1;
+  if ( (_BYTE)v9 != 0 )
+  {
+    LOBYTE(v9) = v9 - 1;
+    result = sub_4E680(result, v9, v8 - 4);
+    if ( !v7 )
+      result = sub_4E5CC(result, v10);
+  }
+  v11 = *(_DWORD *)(v6 - 4);
+  v12 = *(_WORD *)(v6 - 8);
+  *(_BYTE *)(v6 - 5) = 0;
+  if ( ++HIBYTE(v12) < (unsigned __int8)byte_60069 )
+  {
+    result = sub_4E680(result, v12, a5 + v11);
+    if ( !v7 )
+      result = sub_4E5CC(result, v13);
+  }
+  v14 = *(_DWORD *)(v6 - 4);
+  v15 = *(_WORD *)(v6 - 8);
+  *(_BYTE *)(v6 - 5) = 2;
+  if ( HIBYTE(v15) != 0 )
+  {
+    --HIBYTE(v15);
+    result = sub_4E680(result, v15, v14 - a5);
+    if ( !v7 )
+      result = sub_4E5CC(result, v16);
+  }
+  --byte_60077;
+  return result;
+}
+
+--- disasm ---
+0004e5cc  b5 03                  mov     ch, 3
+0004e5ce  66 89 17               mov     [edi], dx
+0004e5d1  66 89 4f 02            mov     [edi+2], cx
+0004e5d5  89 5f 04               mov     [edi+4], ebx
+0004e5d8  83 c7 08               add     edi, 8
+0004e5db  fe 05 77 00 06 00      inc     ds:byte_60077
+0004e5e1  fe c2                  inc     dl
+0004e5e3  3a 15 68 00 06 00      cmp     dl, ds:byte_60068
+0004e5e9  73 0f                  jnb     short loc_4E5FA
+0004e5eb  83 c3 04               add     ebx, 4
+0004e5ee  e8 8d 00 00 00         call    sub_4E680
+0004e5f3  72 05                  jb      short loc_4E5FA
+0004e5f5  e8 d2 ff ff ff         call    sub_4E5CC
+0004e5fa  8b 5f fc               mov     ebx, [edi-4]
+0004e5fd  66 8b 4f fa            mov     cx, [edi-6]
+0004e601  66 8b 57 f8            mov     dx, [edi-8]
+0004e605  b5 01                  mov     ch, 1
+0004e607  88 6f fb               mov     [edi-5], ch
+0004e60a  0a d2                  or      dl, dl
+0004e60c  74 11                  jz      short loc_4E61F
+0004e60e  fe ca                  dec     dl
+0004e610  83 eb 04               sub     ebx, 4
+0004e613  e8 68 00 00 00         call    sub_4E680
+0004e618  72 05                  jb      short loc_4E61F
+0004e61a  e8 ad ff ff ff         call    sub_4E5CC
+0004e61f  8b 5f fc               mov     ebx, [edi-4]
+0004e622  66 8b 4f fa            mov     cx, [edi-6]
+0004e626  66 8b 57 f8            mov     dx, [edi-8]
+0004e62a  32 ed                  xor     ch, ch
+0004e62c  88 6f fb               mov     [edi-5], ch
+0004e62f  fe c6                  inc     dh
+0004e631  3a 35 69 00 06 00      cmp     dh, ds:byte_60069
+0004e637  73 0e                  jnb     short loc_4E647
+0004e639  03 dd                  add     ebx, ebp
+0004e63b  e8 40 00 00 00         call    sub_4E680
+0004e640  72 05                  jb      short loc_4E647
+0004e642  e8 85 ff ff ff         call    sub_4E5CC
+0004e647  8b 5f fc               mov     ebx, [edi-4]
+0004e64a  66 8b 4f fa            mov     cx, [edi-6]
+0004e64e  66 8b 57 f8            mov     dx, [edi-8]
+0004e652  b5 02                  mov     ch, 2
+0004e654  88 6f fb               mov     [edi-5], ch
+0004e657  0a f6                  or      dh, dh
+0004e659  74 10                  jz      short loc_4E66B
+0004e65b  fe ce                  dec     dh
+0004e65d  2b dd                  sub     ebx, ebp
+0004e65f  e8 1c 00 00 00         call    sub_4E680
+0004e664  72 05                  jb      short loc_4E66B
+0004e666  e8 61 ff ff ff         call    sub_4E5CC
+0004e66b  66 83 ef 08            sub     di, 8
+0004e66f  66 8b 17               mov     dx, [edi]
+0004e672  66 8b 4f 02            mov     cx, [edi+2]
+0004e676  8b 5f 04               mov     ebx, [edi+4]
+0004e679  fe 0d 77 00 06 00      dec     ds:byte_60077
+0004e67f  c3                     retn
+
+===== 0x4E680 size 131 =====
+char __usercall sub_4E680@<al>(__int16 a1@<dx>, unsigned __int8 a2@<cl>, char *a3@<ebx>, int a4@<esi>)
+{
+  __int16 v4; // ax
+  int v5; // eax
+  _BOOL1 v6; // cf
+  char v7; // cl
+  int v8; // eax
+  char v9; // al
+
+  v4 = *(_WORD *)(a3 - 3);
+  HIBYTE(v4) &= 3u;
+  v5 = *(unsigned __int8 *)(dword_60060 + (unsigned __int16)(4 * v4) + 1);
+  v6 = a2 < *(_BYTE *)(a4 + v5);
+  v7 = a2 - *(_BYTE *)(a4 + v5);
+  if ( !v6 )
+  {
+    LOBYTE(v8) = *a3;
+    if ( v7 < *a3 )
+      return v8;
+    if ( v7 > *a3 )
+    {
+      LOBYTE(v8) = sub_4E71F();
+    }
+    else
+    {
+      if ( byte_6017A != 1 )
+        return v8;
+      LOBYTE(v8) = sub_4E71F();
+      if ( (unsigned __int8)v8 <= (unsigned __int8)(*(a3 - 2) & 0xFC) )
+        return v8;
+    }
+    BYTE1(v8) = *(a3 - 2) & 3;
+    LOBYTE(v8) = BYTE1(v8) | v8;
+    *(a3 - 2) = v8;
+    if ( byte_6017A == 2 )
+    {
+      *a3 = v7;
+      LOBYTE(v8) = sub_4E703(v8, a1, (int)a3);
+      return v8;
+    }
+    v9 = *(a3 - 1);
+    if ( (v9 & 0x40) == 0 )
+    {
+      if ( v9 < 0 )
+        v7 = 0;
+      *a3 = v7;
+      LOBYTE(v8) = sub_4E751(SBYTE1(v8), a1);
+      return v8;
+    }
+  }
+  JUMPOUT(0x4E4F4);
+}
+
+--- disasm ---
+0004e680  33 c0                  xor     eax, eax
+0004e682  66 8b 43 fd            mov     ax, [ebx-3]
+0004e686  80 e4 03               and     ah, 3
+0004e689  66 c1 e0 02            shl     ax, 2
+0004e68d  03 05 60 00 06 00      add     eax, ds:dword_60060
+0004e693  40                     inc     eax
+0004e694  8a 28                  mov     ch, [eax]
+0004e696  33 c0                  xor     eax, eax
+0004e698  8a c5                  mov     al, ch
+0004e69a  2a 0c 06               sub     cl, [esi+eax]
+0004e69d  0f 82 51 fe ff ff      jb      loc_4E4F4
+0004e6a3  8a 03                  mov     al, [ebx]
+0004e6a5  38 c1                  cmp     cl, al
+0004e6a7  7c 58                  jl      short loc_4E701
+0004e6a9  7f 1a                  jg      short loc_4E6C5
+0004e6ab  80 3d 7a 01 06 00 01   cmp     ds:byte_6017A, 1
+0004e6b2  75 4d                  jnz     short loc_4E701
+0004e6b4  e8 66 00 00 00         call    sub_4E71F
+0004e6b9  8a 63 fe               mov     ah, [ebx-2]
+0004e6bc  80 e4 fc               and     ah, 0FCh
+0004e6bf  38 e0                  cmp     al, ah
+0004e6c1  76 3e                  jbe     short loc_4E701
+0004e6c3  eb 05                  jmp     short loc_4E6CA
+0004e6c5  e8 55 00 00 00         call    sub_4E71F
+0004e6ca  8a 63 fe               mov     ah, [ebx-2]
+0004e6cd  80 e4 03               and     ah, 3
+0004e6d0  0a c4                  or      al, ah
+0004e6d2  88 43 fe               mov     [ebx-2], al
+0004e6d5  80 3d 7a 01 06 00 02   cmp     ds:byte_6017A, 2
+0004e6dc  75 09                  jnz     short loc_4E6E7
+0004e6de  88 0b                  mov     [ebx], cl
+0004e6e0  e8 1e 00 00 00         call    sub_4E703
+0004e6e5  f8                     clc
+0004e6e6  c3                     retn
+0004e6e7  8a 43 ff               mov     al, [ebx-1]
+0004e6ea  a8 40                  test    al, 40h
+0004e6ec  0f 85 02 fe ff ff      jnz     loc_4E4F4
+0004e6f2  a8 80                  test    al, 80h
+0004e6f4  74 02                  jz      short loc_4E6F8
+0004e6f6  32 c9                  xor     cl, cl
+0004e6f8  88 0b                  mov     [ebx], cl
+0004e6fa  e8 52 00 00 00         call    sub_4E751
+0004e6ff  f8                     clc
+0004e700  c3                     retn
+0004e701  f9                     stc
+0004e702  c3                     retn
+
+===== 0x4E703 size 28 =====
+char __fastcall sub_4E703(int a1, __int16 a2, int a3)
+{
+  char result; // al
+
+  result = *(_BYTE *)(a3 - 1);
+  if ( (result & 0x40) != 0 )
+  {
+    *(_WORD *)dword_60073 = a2;
+    byte_60078 = 1;
+  }
+  return result;
+}
+
+--- disasm ---
+0004e703  8a 43 ff               mov     al, [ebx-1]
+0004e706  a8 40                  test    al, 40h
+0004e708  74 14                  jz      short locret_4E71E
+0004e70a  57                     push    edi
+0004e70b  8b 3d 73 00 06 00      mov     edi, ds:dword_60073
+0004e711  88 17                  mov     [edi], dl
+0004e713  88 77 01               mov     [edi+1], dh
+0004e716  c6 05 78 00 06 00 01   mov     ds:byte_60078, 1
+0004e71d  5f                     pop     edi
+0004e71e  c3                     retn
+
+===== 0x4E71F size 50 =====
+char sub_4E71F()
+{
+  char v0; // ah
+  char *v1; // esi
+  char v2; // bl
+  char v3; // bh
+
+  v0 = byte_60077;
+  v1 = (char *)&unk_60079;
+  v2 = 0;
+  v3 = -1;
+  do
+  {
+    if ( v1[3] != v3 )
+    {
+      ++v2;
+      v3 = v1[3];
+    }
+    v1 += 8;
+    --v0;
+  }
+  while ( v0 != 0 );
+  return 4 * v2;
+}
+
+--- disasm ---
+0004e71f  66 53                  push    bx
+0004e721  56                     push    esi
+0004e722  66 50                  push    ax
+0004e724  8a 25 77 00 06 00      mov     ah, ds:byte_60077
+0004e72a  8d 35 79 00 06 00      lea     esi, unk_60079
+0004e730  32 db                  xor     bl, bl
+0004e732  b7 ff                  mov     bh, 0FFh
+0004e734  8a 46 03               mov     al, [esi+3]
+0004e737  38 f8                  cmp     al, bh
+0004e739  74 04                  jz      short loc_4E73F
+0004e73b  fe c3                  inc     bl
+0004e73d  8a f8                  mov     bh, al
+0004e73f  83 c6 08               add     esi, 8
+0004e742  fe cc                  dec     ah
+0004e744  75 ee                  jnz     short loc_4E734
+0004e746  66 58                  pop     ax
+0004e748  5e                     pop     esi
+0004e749  8a c3                  mov     al, bl
+0004e74b  c0 e0 02               shl     al, 2
+0004e74e  66 5b                  pop     bx
+0004e750  c3                     retn
+
+===== 0x4E751 size 68 =====
+__int16 __usercall sub_4E751@<ax>(char a1@<ah>, __int16 a2@<dx>)
+{
+  char *v2; // esi
+  _BYTE *v3; // edi
+  __int16 result; // ax
+
+  if ( a2 == word_60071 )
+  {
+    a1 = byte_60077;
+    if ( (unsigned __int8)byte_60077 <= (unsigned __int8)byte_60078 )
+    {
+      byte_60078 = byte_60077;
+      if ( byte_60077 != 0 )
+      {
+        v2 = (char *)&unk_60079;
+        v3 = (_BYTE *)dword_60073;
+        do
+        {
+          LOBYTE(result) = v2[3];
+          *v3++ = result;
+          v2 += 8;
+          --a1;
+        }
+        while ( a1 != 0 );
+      }
+    }
+  }
+  HIBYTE(result) = a1;
+  return result;
+}
+
+--- disasm ---
+0004e751  3a 15 71 00 06 00      cmp     dl, byte ptr ds:word_60071
+0004e757  75 3b                  jnz     short locret_4E794
+0004e759  3a 35 72 00 06 00      cmp     dh, byte ptr ds:word_60071+1
+0004e75f  75 33                  jnz     short locret_4E794
+0004e761  8a 25 77 00 06 00      mov     ah, ds:byte_60077
+0004e767  3a 25 78 00 06 00      cmp     ah, ds:byte_60078
+0004e76d  77 25                  ja      short locret_4E794
+0004e76f  88 25 78 00 06 00      mov     ds:byte_60078, ah
+0004e775  0a e4                  or      ah, ah
+0004e777  74 1b                  jz      short locret_4E794
+0004e779  56                     push    esi
+0004e77a  57                     push    edi
+0004e77b  8d 35 79 00 06 00      lea     esi, unk_60079
+0004e781  8b 3d 73 00 06 00      mov     edi, ds:dword_60073
+0004e787  8a 46 03               mov     al, [esi+3]
+0004e78a  aa                     stosb
+0004e78b  83 c6 08               add     esi, 8
+0004e78e  fe cc                  dec     ah
+0004e790  75 f5                  jnz     short loc_4E787
+0004e792  5f                     pop     edi
+0004e793  5e                     pop     esi
+0004e794  c3                     retn
