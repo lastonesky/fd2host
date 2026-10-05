@@ -81,6 +81,10 @@ Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -Wor
 # 加载正确性判据（唯一可信）：与 Ghidra 重定位镜像逐字节对比
 & E:\FD2\port\build\letest.exe
 
+# 源码转译对拍（原机器码 vs 转译 C，逐字节 + 副作用）
+pwsh -File E:\FD2\port\build.ps1 -Target rlecheck; & E:\FD2\port\build\rlecheck.exe
+pwsh -File E:\FD2\port\build.ps1 -Target gfxcheck; & E:\FD2\port\build\gfxcheck.exe
+
 # 一键回归（重建沙箱、删 FD2.TMP、autokey 走 continue、8 项断言）
 pwsh -File E:\FD2\port\regress.ps1
 
@@ -150,4 +154,4 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 | `re/FDPS_MAP.md` | 逆向测绘地图（FDPS 炎龙外传）：90 条 AIL 入口表、定时器族、spawn FD.EXE 流程 |
 | `re/funcmap.csv` | 全量函数表（1359 行） |
 | `re/*.txt` / `re/*.c` | 静态扫描清单与关键函数反编译存档 |
-| 外部：github.com/wicanr2/fd2_re（`docs/`、`docs/knowledge-base/`） | 反编译踩坑与知识库（同游戏逆向资料） |
+| 外部：github.com/wicanr2/fd2_re（`docs/`、`docs/knowledge-base/`） | 反编译踩坑与知识库（同游戏逆向资料）。**本地快照 `port/docs/`（`.gitignore` 已忽略，~28 MB）**：函数级语义/router 可用，但它是**另一个 FD2.EXE build**（md5 `b97caf22…`，非本项目 `a6e341a8…`）——地址/常量/指令一律以 `E:\FD2\FD2.EXE.i64` 复核（`PROGRESS.md` §21.1） |

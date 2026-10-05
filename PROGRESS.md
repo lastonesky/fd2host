@@ -1681,3 +1681,85 @@ regress.bmp: 36 色、全画面非黑（退出前最后一帧 = 场景帧）
 
 单次回归 **~75 s → ~15 s（省 60 s）**；慢机器/路径未完成时仍由 `--exit-after=60` 兕底，
 比原来更稳（完成判据驱动退出，不再赌固定时长）。
+
+---
+
+## 21. 第 21 轮：官方逆向知识库（`docs/`）评估 + 图形 blit 工具族转译（2026-10-05）
+
+### 21.1 `port/docs/` 是什么、能不能直接用
+
+`port/docs/` 是 `github.com/wicanr2/fd2_re`（同游戏的 Go/Ebiten **重制**项目）的 docs 快照：
+845 个文件 / **28 MB**，`knowledge-base/` 78 份主题文档 + `data/`（IDA 转储、覆盖矩阵、
+逐章证据、UI traces、`fd2_function_inventory.json` 等）。**对本项目有用**：函数级语义
+（如 `sub_15F84` 文本渲染器、`sub_111BA` 资源加载器）、调用点实参、数据结构与各 U I 资源
+的用途，能显著省掉重新摸索的时间。检索用 `rg`，批量结论写文件、不要灌进上下文。
+
+⚠ **重大差异（必须记住）**：docs 分析的 FD2.EXE 是**另一个 build**：
+
+| | docs 的 build | 本项目在跑的 build |
+|---|---|---|
+| 大小 | 357074 B | **509158 B** |
+| md5 | `b97caf2239a27a896069d03549d96e1e` | **`a6e341a8decc6ebf7f4872076d9cf161`** |
+| 映像 | `E:\Games\FDCollection\Game\FD2\FD2.EXE` | `E:\FD2\FD2.EXE`（`FD2.EXE.i64` 记录同一 md5） |
+
+- 大函数边界/地址高度重合（`sub_15F84`=0x15F84/1380 B、`sub_111BA`=0x111BA/235 B 在两边
+  起止与大小**完全一致**），所以 docs 的高层语义基本可直接参考；
+- 但**部分立即数与 call 目标不同**（实证：`0x15FC4` 的比较立即数、`0x165AC` 的 call 位移
+  `0x36CD2` vs `0x3702A`），且 `0x4E8xx` 图形族布局不同 —— docs 的 `sub_4EA2A`（字形渲染）
+  在本 build 是 `0x4ED7A`；本 build 的 `0x4E98D` 是 443 B 的 RLE，直接覆盖 docs 所谓的
+  `0x4E8xx..0x4EAxx` 区（docs 的 `sub_4E8AF`/`sub_4E8E1`/`sub_4E92C`/`sub_4E96F` 在本
+  build 对应的是 `0x4E8A5`/`0x4E8BC`/… 的另一批函数）。
+- **结论/约定**：docs 只作语义线索；任何**地址 / 常量 / 指令字节**必须以本 build 的
+  `E:\FD2\FD2.EXE.i64`（ida MCP）复核。`docs/` 为 28 MB 外部快照，加入 `.gitignore`，不入库。
+
+### 21.2 转译：图形 blit 工具族 `src/game/gfx.c`
+
+§19.6 点名的"下一批"其实是一个自洽的 obj0 工具库（0x4EC7C..0x4EEE0），全部是**纯内存
+操作**（目标/来源指针都由参数给出），因此可以像 RLE 一样用"机器码对拍"验证。本 build 的
+六个入口（初始 IDA 只把一半识别成独立函数，usercall 半截函数要用别名/手工对齐）：
+
+| 转译名 | 原地址 | 作用 | 原传参 ABI |
+|---|---|---|---|
+| `gfx_save_rect` | `0x4ECBF`+`0x4ECF0` | strided 曲面 → 紧凑矩形记录 `[u16 w][u16 h][i32 off][pixels]`（**保存**，取源 stride） | cdecl 6 参 |
+| `gfx_restore_rect` | `0x4EC7C`+`0x4ECA4` | 记录 → `surface+off`（**恢复**，取目标 stride；off 是记录里的字段） | cdecl 3 参 |
+| `gfx_blit_block` | `0x4ED0B` | `[u16 w][u16 h][pixels]` 不透明块 → strided 目标 | cdecl 3 参 |
+| `gfx_blit_transparent` | `0x4ED34`+`0x4ED4F` | 同上，**0 字节透明**（不覆盖目标） | cdecl 3 参 |
+| `gfx_draw_glyph` | `0x4ED7A` | 16×16 1bpp 字形：每行 u16（**先 xchg al,ah**），置位画前景，另在**下一行同列/左一列**画阴影；`fill!=0` 先平铺整格；**字形 index==10 跳过不画** | cdecl 7 参 |
+| `gfx_expand_scanlines` | `0x4EEE0` | 192 行、每行从 `src+4+row*320+table[idx]` 复制 312 B 到 320-B 步进目标，`idx` 每行 +1 模 16 | cdecl 3 参 |
+
+配套：`byte_627C8`（16 B scanline 相位表，**全镜像只有 1 个只读 xref**）已作为常量
+`gfx_phase_table[16]` 嵌入；原 0x627A3..0x627B0 的一堆 scratch 全局以 `gfx_pen_*`/`gfx_rec_*`
+镜像出来供对拍断言。细节语义与边界（16 位宽度/行计数、`gfx_blit_transparent`/`gfx_draw_glyph`
+把 stride **截断成 u16**、`gfx_restore_rect`/`gfx_blit_block`/`gfx_save_rect` 用完整 32 位 stride）
+见 `src/game/gfx.h`。
+
+### 21.3 对拍（`src/gfxcheck.c` + `build.ps1 -Target gfxcheck`）
+
+不同 usercall 内部实现（`0x4ECA4`/`0x4ECF0` 走 edi/esi/ebp 寄存器）**不用 `__asm` thunk**：
+它们只被 cdecl 包装器调用，而包装器自己装寄存器，所以直接按 cdecl 调 `0x4EC7C`/`0x4ECBF`/
+`0x4ED34` 即可。测试用与 `rlecheck` 同一可信 LE 加载路径（映射 FD2.EXE 为可执行、应用 fixup），
+对每类随机用例同时跑原机器码与 C 实现，断言：
+
+1. 目标缓冲**含哨兵余量**逐字节一致（能抓到越界/未写的字节）；
+2. 原 scratch 全局（0x627B4/B6/A3/A5/A6/A7/AC/B0）与镜像 C 全局一致；
+3. 嵌入的 `gfx_phase_table` 与镜像 `byte_627C8` 一致。
+
+覆盖：save↔restore 往返 300、非透明块 300、透明块 300（约半数 0 字节）、字形 400
+（含 `fill=0` 与 `index=10`）、scanline 重排 150。
+
+### 21.4 实测判据
+
+```
+build\gfxcheck.exe  →  PASS: 1450 cases, 0 failures（首轮即通过）
+build\rlecheck.exe  →  PASS: 1900 cases, 0 failures（回归，未受影响）
+regress.ps1         →  ALL PASS 8/8（fd2host 未改，15 s）
+```
+
+### 21.5 下轮入口
+
+1. `gfx_draw_glyph` 的消费方 —— 文本渲染器 `sub_15F84`（docs 有逐控制码语义可参照，
+   但以本 build 复核）；先抽清它的 usercall 14 寄存器参数与全局状态区。
+2. 资源加载器 `sub_111BA`（LMI 容器：`fseek(4*index+6)` 读 `{start,end}` → malloc → 读入，
+   并释放旧指针）—— 可作下一个"叶子 + 对拍"目标，或直接接进宿主以替换原生 fopen 路径。
+3. 图形工具库剩余成员（0x4DED4..0x4E866 绘图/数学原语）继续分类转译。
+4. FDPS 相关工作仍冻结（§7.8）。

@@ -153,7 +153,9 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 
 > **第 19 轮转译进展**：`0x4E98D`（三模式 RLE 解码）与 `0x4E8D3`（LUT 变体）已转译为
 > `src/game/rle.c`，`rlecheck` 以机器码对拍 **1900 例逐字节一致**（PROGRESS §19）；
-> 家族其余成员（`0x4EC7C`/`0x4ECBF` 无压缩块、`0x4ED7A` 字形渲染，注意 usercall 寄存器传参）待转译。
+> **第 21 轮**：无障碍块/字形工具族 `0x4ECBF`/`0x4EC7C`/`0x4ED0B`/`0x4ED34`/`0x4ED7A`/`0x4EEE0`
+> 已转译为 `src/game/gfx.c`，`gfxcheck` 对拍 **1450 例逐字节一致**（PROGRESS §21）。
+> 下一步：`sub_111BA`（资源加载）、`sub_15F84`（文本/脚本渲染）。
 
 游戏侧高频依赖（`lib_nosym`，需归类确认属于谁）：`0x4E381(15/64)`、`0x4EBE3(28/40)`、`0x4DF4C(56/32)`、`0x4E22A(114/13)`、`0x4E31C(101/15)` —— 0x4D000..0x4F000 段像**游戏自带工具库**（位流、24×24 图元、BIOS 封装），优先归类。
 
@@ -167,6 +169,7 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | 1 | 模块归类：把 569 `game` + 0x4D000..0x4F000 段按调用图/字符串聚成模块；提取数据结构（全局 `dword_53xxx` 状态区、obj2 数据） | 交叉引用人工核对 |
 | 2 | **叶子模块先行**：DAT 解码器（BG/SHAP/ANI/RLE，格式已知于 FD2_analysis.md）→ 独立 C + 测试样本对拍 | 与原始解压输出逐字节 diff |
 |   | ✅ **RLE 已完成**（第 19 轮）：`src/game/rle.c` + `rlecheck` 机器码对拍 1900 例（PROGRESS §19） | 对拍判据已建立，可复用于后续模块 |
+|   | ✅ **图形 blit 工具族已完成**（第 21 轮）：`src/game/gfx.c`（save/restore rect、block/透明 blit、16×16 字形、scanline 重排）+ `gfxcheck` 对拍 1450 例（PROGRESS §21） | 同 §19.4 |
 | 3 | 图形 blit/调色板（`gfx_A0000` 粗筛集，先精化名单） | fd2host 显示对拍 |
 | 4 | 主状态机 + 脚本 VM | 逐步替换法：机器码 vs 转译 C 逐函数对拍（**待确认**可行性） |
 | 5 | CRT/平台层 → Win32（`dos.c` 已有大半）+ AIL 打桩 | host.log 行为等价 |
@@ -231,8 +234,12 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 2. 提取 `main` 状态机两张函数指针表（`funcs_25E23`/`funcs_25E3A`）的真实地址与项。
 3. 精化 `gfx_A0000` 名单（当前是字节粗筛，含误报）。
 4. 全局状态区 `dword_53A00..0x53F00` 的结构还原（`main` 已见约 20 个成员）。
-5. **下一批源码转译目标**：无压缩块族 `0x4EC7C`/`0x4ECBF`（usercall 寄存器传参，对拍需 `__asm`
-   thunk）、字形渲染 `0x4ED7A`、然后 `sub_111BA`（资源加载）、`sub_15F84`（脚本 VM）——
-   继续用第 19 轮的机器码对拍法（独立 C + `rlecheck` 式随机流逐字节比对，PROGRESS §19.4）。
+5. **下一批源码转译目标**：`sub_111BA`（资源加载器，132 调用点，LMI 容器目录读取）、
+   `sub_15F84`（文本/脚本渲染器，1380 B）——继续用机器码对拍法（独立 C + 随机流逐字节
+   比对，PROGRESS §19.4）。注意 `sub_111BA`/`sub_15F84` 是 **usercall / 多寄存器传参**，
+   对拍需 `__asm` thunk 或先确认栈传参 ABI。图形 blit 工具族（§4 注）已于第 21 轮完成。
+6. **官方逆向知识库**：`port/docs/`（fd2_re 重制项目 docs 快照，28 MB，不入库）可作语义/router
+   线索；但**它是另一个 FD2.EXE build**（md5 `b97caf22…`，非本项目 `a6e341a8…`），地址/常量/指令
+   一律以 `E:\FD2\FD2.EXE.i64` 复核。详见 PROGRESS §21.1。
 6. **平台侧遗留**（第 12 轮收尾清单）：`AH=49/4A` 改成真释放；"首次保存"与"存档变小截断"
    两条路径实测；深层路径（战斗/地图）出现新 `UNHANDLED INT21` 时按 §6.1 表补齐。

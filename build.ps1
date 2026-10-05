@@ -33,6 +33,9 @@ $targets = @{
     # differential test: src/game/rle.c (source translation) vs the original
     # machine code at 0x4E98D / 0x4E8D3 - see src/rlecheck.c
     rlecheck = @{ srcs = @("rlecheck.c", "le.c", "game\rle.c"); libs = @(); subsystem = "console" }
+    # differential test: src/game/gfx.c (graphics blitter helpers) vs the
+    # original machine code at 0x4ECBF/0x4EC7C/0x4ED0B/0x4ED34/0x4ED7A/0x4EEE0
+    gfxcheck = @{ srcs = @("gfxcheck.c", "le.c", "game\gfx.c"); libs = @(); subsystem = "console" }
     fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";

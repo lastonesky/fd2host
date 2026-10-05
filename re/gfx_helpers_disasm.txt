@@ -1,0 +1,231 @@
+# FD2 graphics blitter helper family - raw IDA disassembly (our build)
+# FD2.EXE md5 a6e341a8decc6ebf7f4872076d9cf161, image base 0x10000
+# generated from E:\FD2\FD2.EXE.i64 via ida MCP. Provenance for src/game/gfx.c
+
+
+===== 0x4EC7C sub_4EC7C  restore rect (record -> strided surface) (size 40) =====
+  (calls helper sub_4ECA4 @0x4ECA4)
+0004ec7c  55                     push    ebp
+0004ec7d  8b ec                  mov     ebp, esp
+0004ec7f  60                     pusha
+0004ec80  8b 75 08               mov     esi, [ebp+arg_0]
+0004ec83  66 ad                  lodsw
+0004ec85  66 a3 b4 27 06 00      mov     ds:word_627B4, ax
+0004ec8b  66 ad                  lodsw
+0004ec8d  66 a3 b6 27 06 00      mov     ds:word_627B6, ax
+0004ec93  8b 7d 0c               mov     edi, [ebp+arg_4]
+0004ec96  ad                     lodsd
+0004ec97  03 f8                  add     edi, eax
+0004ec99  8b 6d 10               mov     ebp, [ebp+arg_8]
+0004ec9c  e8 03 00 00 00         call    sub_4ECA4
+0004eca1  61                     popa
+0004eca2  5d                     pop     ebp
+0004eca3  c3                     retn
+
+===== 0x4ECBF sub_4ECBF  save rect (strided surface -> record) (size 49) =====
+  (calls helper sub_4ECF0 @0x4ECF0)
+0004ecbf  55                     push    ebp
+0004ecc0  8b ec                  mov     ebp, esp
+0004ecc2  60                     pusha
+0004ecc3  8b 7d 08               mov     edi, [ebp+arg_0]
+0004ecc6  8b 45 0c               mov     eax, [ebp+arg_4]
+0004ecc9  66 a3 b4 27 06 00      mov     ds:word_627B4, ax
+0004eccf  66 ab                  stosw
+0004ecd1  8b 45 10               mov     eax, [ebp+arg_8]
+0004ecd4  66 a3 b6 27 06 00      mov     ds:word_627B6, ax
+0004ecda  66 ab                  stosw
+0004ecdc  8b 75 14               mov     esi, [ebp+arg_C]
+0004ecdf  8b 45 18               mov     eax, [ebp+arg_10]
+0004ece2  ab                     stosd
+0004ece3  03 f0                  add     esi, eax
+0004ece5  8b 6d 1c               mov     ebp, [ebp+arg_14]
+0004ece8  e8 03 00 00 00         call    sub_4ECF0
+0004eced  61                     popa
+0004ecee  5d                     pop     ebp
+0004ecef  c3                     retn
+
+===== 0x4ED0B sub_4ED0B  blit header-prefixed block (size 41) =====
+0004ed0b  55                     push    ebp
+0004ed0c  8b ec                  mov     ebp, esp
+0004ed0e  60                     pusha
+0004ed0f  8b 7d 08               mov     edi, [ebp+arg_0]
+0004ed12  8b 75 0c               mov     esi, [ebp+arg_4]
+0004ed15  8b 5d 10               mov     ebx, [ebp+arg_8]
+0004ed18  66 ad                  lodsw
+0004ed1a  66 8b e8               mov     bp, ax
+0004ed1d  66 ad                  lodsw
+0004ed1f  66 8b d0               mov     dx, ax
+0004ed22  33 c9                  xor     ecx, ecx
+0004ed24  57                     push    edi
+0004ed25  66 8b cd               mov     cx, bp
+0004ed28  f3 a4                  rep movsb
+0004ed2a  5f                     pop     edi
+0004ed2b  03 fb                  add     edi, ebx
+0004ed2d  66 4a                  dec     dx
+0004ed2f  75 f3                  jnz     short loc_4ED24
+0004ed31  61                     popa
+0004ed32  5d                     pop     ebp
+0004ed33  c3                     retn
+
+===== 0x4ED34 sub_4ED34  blit transparent (0 = skip) (size 27) =====
+  (calls helper sub_4ED4F @0x4ED4F)
+0004ed34  55                     push    ebp
+0004ed35  8b ec                  mov     ebp, esp
+0004ed37  60                     pusha
+0004ed38  8b 7d 08               mov     edi, [ebp+arg_0]
+0004ed3b  8b 75 0c               mov     esi, [ebp+arg_4]
+0004ed3e  8b 45 10               mov     eax, [ebp+arg_8]
+0004ed41  66 a3 a3 27 06 00      mov     ds:word_627A3, ax
+0004ed47  e8 03 00 00 00         call    sub_4ED4F
+0004ed4c  61                     popa
+0004ed4d  5d                     pop     ebp
+0004ed4e  c3                     retn
+
+===== 0x4ED7A sub_4ED7A  16x16 glyph render (size 188) =====
+0004ed7a  55                     push    ebp
+0004ed7b  8b ec                  mov     ebp, esp
+0004ed7d  60                     pusha
+0004ed7e  8b 45 08               mov     eax, [ebp+arg_0]
+0004ed81  a3 ac 27 06 00         mov     ds:dword_627AC, eax
+0004ed86  8b 45 0c               mov     eax, [ebp+arg_4]
+0004ed89  a3 b0 27 06 00         mov     ds:dword_627B0, eax
+0004ed8e  8b 45 10               mov     eax, [ebp+arg_8]
+0004ed91  a3 a8 27 06 00         mov     ds:dword_627A8, eax
+0004ed96  8b 45 14               mov     eax, [ebp+arg_C]
+0004ed99  66 a3 a3 27 06 00      mov     ds:word_627A3, ax
+0004ed9f  8b 45 18               mov     eax, [ebp+arg_10]
+0004eda2  a2 a5 27 06 00         mov     ds:byte_627A5, al
+0004eda7  8b 45 1c               mov     eax, [ebp+arg_14]
+0004edaa  a2 a7 27 06 00         mov     ds:byte_627A7, al
+0004edaf  8b 45 20               mov     eax, [ebp+arg_18]
+0004edb2  a2 a6 27 06 00         mov     ds:byte_627A6, al
+0004edb7  33 ed                  xor     ebp, ebp
+0004edb9  66 8b 2d a3 27 06 00   mov     bp, ds:word_627A3
+0004edc0  0a c0                  or      al, al
+0004edc2  74 22                  jz      short loc_4EDE6
+0004edc4  8a e0                  mov     ah, al
+0004edc6  66 8b d8               mov     bx, ax
+0004edc9  c1 e0 10               shl     eax, 10h
+0004edcc  66 8b c3               mov     ax, bx
+0004edcf  8b 3d a8 27 06 00      mov     edi, ds:dword_627A8
+0004edd5  b3 10                  mov     bl, 10h
+0004edd7  57                     push    edi
+0004edd8  b9 04 00 00 00         mov     ecx, 4
+0004eddd  f3 ab                  rep stosd
+0004eddf  5f                     pop     edi
+0004ede0  03 fd                  add     edi, ebp
+0004ede2  fe cb                  dec     bl
+0004ede4  75 f1                  jnz     short loc_4EDD7
+0004ede6  a1 b0 27 06 00         mov     eax, ds:dword_627B0
+0004edeb  83 f8 0a               cmp     eax, 0Ah
+0004edee  74 43                  jz      short loc_4EE33
+0004edf0  c1 e0 05               shl     eax, 5
+0004edf3  8b 35 ac 27 06 00      mov     esi, ds:dword_627AC
+0004edf9  03 f0                  add     esi, eax
+0004edfb  8b 3d a8 27 06 00      mov     edi, ds:dword_627A8
+0004ee01  8b dd                  mov     ebx, ebp
+0004ee03  4b                     dec     ebx
+0004ee04  8a 15 a5 27 06 00      mov     dl, ds:byte_627A5
+0004ee0a  8a 35 a7 27 06 00      mov     dh, ds:byte_627A7
+0004ee10  b5 10                  mov     ch, 10h
+0004ee12  66 ad                  lodsw
+0004ee14  86 c4                  xchg    al, ah
+0004ee16  57                     push    edi
+0004ee17  b1 10                  mov     cl, 10h
+0004ee19  66 d1 e0               shl     ax, 1
+0004ee1c  73 09                  jnb     short loc_4EE27
+0004ee1e  88 17                  mov     [edi], dl
+0004ee20  88 34 3b               mov     [ebx+edi], dh
+0004ee23  88 74 3d 00            mov     [ebp+edi+var_s0], dh
+0004ee27  47                     inc     edi
+0004ee28  fe c9                  dec     cl
+0004ee2a  75 ed                  jnz     short loc_4EE19
+0004ee2c  5f                     pop     edi
+0004ee2d  03 fd                  add     edi, ebp
+0004ee2f  fe cd                  dec     ch
+0004ee31  75 df                  jnz     short loc_4EE12
+0004ee33  61                     popa
+0004ee34  5d                     pop     ebp
+0004ee35  c3                     retn
+
+===== 0x4EEE0 sub_4EEE0  expand/de-interleave scanlines (size 73) =====
+0004eee0  55                     push    ebp
+0004eee1  8b ec                  mov     ebp, esp
+0004eee3  56                     push    esi
+0004eee4  57                     push    edi
+0004eee5  53                     push    ebx
+0004eee6  8b 75 08               mov     esi, [ebp+arg_0]
+0004eee9  83 c6 04               add     esi, 4
+0004eeec  8b 7d 0c               mov     edi, [ebp+arg_4]
+0004eeef  8b 55 10               mov     edx, [ebp+arg_8]
+0004eef2  33 db                  xor     ebx, ebx
+0004eef4  66 bd c0 00            mov     bp, 0C0h
+0004eef8  8d 05 c8 27 06 00      lea     eax, byte_627C8
+0004eefe  8a 1c 10               mov     bl, [eax+edx]
+0004ef01  56                     push    esi
+0004ef02  03 f3                  add     esi, ebx
+0004ef04  b9 4e 00 00 00         mov     ecx, 4Eh ; 'N'
+0004ef09  f3 a5                  rep movsd
+0004ef0b  5e                     pop     esi
+0004ef0c  81 c6 40 01 00 00      add     esi, 140h
+0004ef12  66 42                  inc     dx
+0004ef14  66 83 fa 10            cmp     dx, 10h
+0004ef18  72 03                  jb      short loc_4EF1D
+0004ef1a  66 33 d2               xor     dx, dx
+0004ef1d  83 c7 08               add     edi, 8
+0004ef20  66 4d                  dec     bp
+0004ef22  75 da                  jnz     short loc_4EEFE
+0004ef24  5b                     pop     ebx
+0004ef25  5f                     pop     edi
+0004ef26  5e                     pop     esi
+0004ef27  5d                     pop     ebp
+0004ef28  c3                     retn
+
+===== 0x4ECA4 helper of 0x4EC7C (dest stride, contiguous src) (size 27) =====
+0004eca4  33 c9                  xor     ecx, ecx
+0004eca6  66 8b 15 b6 27 06 00   mov     dx, ds:word_627B6
+0004ecad  66 8b 0d b4 27 06 00   mov     cx, ds:word_627B4
+0004ecb4  57                     push    edi
+0004ecb5  f3 a4                  rep movsb
+0004ecb7  5f                     pop     edi
+0004ecb8  03 fd                  add     edi, ebp
+0004ecba  66 4a                  dec     dx
+0004ecbc  75 ef                  jnz     short loc_4ECAD
+0004ecbe  c3                     retn
+
+===== 0x4ECF0 helper of 0x4ECBF (src stride, contiguous dest) (size 27) =====
+0004ecf0  33 c9                  xor     ecx, ecx
+0004ecf2  66 8b 15 b6 27 06 00   mov     dx, ds:word_627B6
+0004ecf9  66 8b 0d b4 27 06 00   mov     cx, ds:word_627B4
+0004ed00  56                     push    esi
+0004ed01  f3 a4                  rep movsb
+0004ed03  5e                     pop     esi
+0004ed04  03 f5                  add     esi, ebp
+0004ed06  66 4a                  dec     dx
+0004ed08  75 ef                  jnz     short loc_4ECF9
+0004ed0a  c3                     retn
+
+===== 0x4ED4F helper of 0x4ED34 (0 = transparent) (size 43) =====
+0004ed4f  66 ad                  lodsw
+0004ed51  66 8b e8               mov     bp, ax
+0004ed54  66 ad                  lodsw
+0004ed56  66 8b d0               mov     dx, ax
+0004ed59  33 c9                  xor     ecx, ecx
+0004ed5b  33 db                  xor     ebx, ebx
+0004ed5d  66 8b 1d a3 27 06 00   mov     bx, ds:word_627A3
+0004ed64  57                     push    edi
+0004ed65  66 8b cd               mov     cx, bp
+0004ed68  ac                     lodsb
+0004ed69  0a c0                  or      al, al
+0004ed6b  74 02                  jz      short loc_4ED6F
+0004ed6d  88 07                  mov     [edi], al
+0004ed6f  47                     inc     edi
+0004ed70  e2 f6                  loop    loc_4ED68
+0004ed72  5f                     pop     edi
+0004ed73  03 fb                  add     edi, ebx
+0004ed75  66 4a                  dec     dx
+0004ed77  75 eb                  jnz     short loc_4ED64
+0004ed79  c3                     retn
+
+===== byte_627C8 @0x627C8 (16-byte scanline offset table) =====
+02 03 03 04 04 04 03 03 02 01 01 00 00 00 01 01

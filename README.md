@@ -19,8 +19,10 @@ port/
 │   ├── host.c         宿主主程序：地址空间预留、窗口、显示、键盘、主循环
 │   ├── letest.c       加载器自检（与 Ghidra 导出的重定位镜像逐字节对比）
 │   ├── game/          **源码转译产物**（从逆向还原的 C 源码，带原地址注释）
-│   │   └── rle.h/rle.c   RLE 解码器（原 0x4E98D/0x4E8D3，PROGRESS §19）
+│   │   ├── rle.h/rle.c   RLE 解码器（原 0x4E98D/0x4E8D3，PROGRESS §19）
+│   │   └── gfx.h/gfx.c   图形 blit 工具族（save/restore rect、block/透明 blit、16×16 字形、scanline 重排，PROGRESS §21）
 │   ├── rlecheck.c     转译对拍测试：随机 RLE 流 × 原机器码 vs 转译 C，逐字节比对
+│   ├── gfxcheck.c     转译对拍测试：图形 blit 工具族 × 原机器码 vs 转译 C，逐字节比对
 │   ├── ail.c          AIL 替换层：16 个 AIL_* 入口 → 宿主实现（数字音效走 WinMM waveOut）
 │   ├── xmidi.c        XMIDI 解析（FDMUS.DAT 的 XDIR/CAT/FORM XMID）→ 事件列表
 │   ├── synth.c        自带软件合成器：事件 → PCM → waveOut（音乐不依赖系统 MIDI）
@@ -38,9 +40,9 @@ port/
 pwsh -File port\build.ps1 -Target fd2host     # 生成 port\build\fd2host.exe
 Start-Process port\build\fd2host.exe -ArgumentList '--exit-after=30' -WorkingDirectory 'E:\FD2'
 
-# 源码转译对拍（第 19 轮起）：转译 C vs 原始机器码逐字节比对，1900 例全过才算转译正确
-pwsh -File port\build.ps1 -Target rlecheck
-& port\build\rlecheck.exe
+# 源码转译对拍（第 19 轮起）：转译 C vs 原始机器码逐字节比对，全过才算转译正确
+pwsh -File port\build.ps1 -Target rlecheck ; & port\build\rlecheck.exe   # 1900 例
+pwsh -File port\build.ps1 -Target gfxcheck ; & port\build\gfxcheck.exe   # 1450 例
 
 # 跑别的 DOS/4GW(LE) 游戏（通用化见 PROGRESS.md §14，先做静态体检）
 python port\re\preflight.py "E:\Games\FDCollection\Game\FDPS\FDPS.EXE"
@@ -131,6 +133,7 @@ LE 加载 + 7937 条 fixup 应用
 → 第 19 轮：**源码转译开工** —— RLE 模块 0x4E98D/0x4E8D3 → `src/game/rle.c`，机器码对拍 **1900 例逐字节一致**
    └ 同轮按用户决定**停止 FDPS 支持**（PROGRESS §7.8 冻结），全力回到“逆向为高级语言代码”（PROGRESS §19）
 → 第 20 轮：回归提速 —— `--exit-when-file` 完成即退出 + 脚本轮询，**75 s → 15 s**；低地址被加载器占用时自动重试（PROGRESS §20）
+→ 第 21 轮：**图形 blit 工具族转译** —— 0x4ECBF/0x4EC7C/0x4ED0B/0x4ED34/0x4ED7A/0x4EEE0 → `src/game/gfx.c`，机器码对拍 **1450 例逐字节一致**；同轮评估官方逆向知识库 `docs/`（发现其 FD2.EXE 是另一 build，见 §21.1）
 ```
 
 ## 当前状态与下一步
@@ -162,9 +165,9 @@ LE 加载 + 7937 条 fixup 应用
 5. **首次保存实测**：`FD2.SAV` 不存在时的创建路径（机制已通，回归只覆盖了 `FD2.TMP`）
    + "存档变小"时的截断对拍。可复现回归：`pwsh -File port\regress.ps1`。
 6. **逐步源码化（路线 C 主体）**：按 `re/RE_MAP.md` 的模块顺序把机器码替换为 C 源码，
-   最终形成可编译 x86-64 的引擎。**首个模块 RLE 解码已完成**（`src/game/rle.c`，
-   `rlecheck` 1900 例机器码对拍，PROGRESS §19）；下一批：无压缩块族 `0x4EC7C/0x4ECBF`、
-   字形渲染 `0x4ED7A`、资源加载 `sub_111BA`、脚本 VM `sub_15F84`。
+   最终形成可编译 x86-64 的引擎。**已完成**：RLE 解码（`src/game/rle.c`，`rlecheck` 1900 例，
+   PROGRESS §19）+ 图形 blit 工具族（`src/game/gfx.c`，`gfxcheck` 1450 例，§21）；
+   下一批：资源加载 `sub_111BA`、文本/脚本渲染 `sub_15F84`。
 7. **跨平台**：单代码库 + 后端选择（**不用 git 分支**）。已抽出的是 `render.h`/`host.h` +
    入口层 `main_win32.c`（第 1 步完成）；`audio.h` 随**第 3 步**（sokol_audio 替换 waveOut）抽，
    `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入
@@ -180,6 +183,8 @@ LE 加载 + 7937 条 fixup 应用
 - `letest.exe`：加载器 vs Ghidra 镜像逐字节对比，是加载正确性的唯一可信判据。
 - `rlecheck.exe`：源码转译 vs **原始机器码**逐字节对拍（随机流 1900 例 + 全局副作用），
   是转译正确性的唯一可信判据（方法见 PROGRESS §19.4，可复用于后续每个模块）。
+- `gfxcheck.exe`：图形 blit 工具族的同类对拍（1450 例，含哨兵余量与 scratch 全局断言），
+  覆盖 save↔restore、block/透明 blit、16×16 字形、scanline 重排（PROGRESS §21.3）。
 - `--screenshot=<file.bmp> [--shot-frame=<n>]`：导出**实际送显**的 RGB 缓冲，不依赖窗口/桌面，
   用于核对调色板与通道顺序；BMP→PNG 可用 `[System.Drawing.Image]::FromFile(...).Save(...)`。
 - 崩溃转储会打印：EIP 前后 48 字节、`RLE w/h (@0x627B4)`、`[ESI]` 源字节、`[ESP]` 返回地址、
@@ -189,3 +194,6 @@ LE 加载 + 7937 条 fixup 应用
 - Ghidra 本地 HTTP 桥（`http://127.0.0.1:8089`，`/read_memory`）可**不经上下文**批量导出镜像与内存。
 - IDA Pro 9.5 + ida MCP（用法见 `PROGRESS.md` §10）：逆向与源码转译的主工作台，
   测绘结果在 `re/RE_MAP.md`、全量函数表 `re/funcmap.csv`。
+- `port/docs/`：`github.com/wicanr2/fd2_re`（同游戏 Go 重制）的 docs 快照（`.gitignore` 已忽略，
+  不入库）。**只作语义来源**：它是**另一个 FD2.EXE build**（md5 `b97caf22…`，本项目 `a6e341a8…`），
+  地址/常量/指令以其 `E:\FD2\FD2.EXE.i64` 为准（PROGRESS §21.1）。

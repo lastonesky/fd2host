@@ -57,3 +57,10 @@ Desktop.ini
 *.bak
 *.log
 *.cache
+
+# === External reference snapshot ===
+# port/docs/ = github.com/wicanr2/fd2_re (the Go/Ebiten remake project)
+# docs snapshot, ~28 MB. Useful RE semantics, but it is a DIFFERENT FD2.EXE
+# build (md5 b97caf22..., 357074 B) than ours (a6e341a8..., 509158 B) - see
+# PROGRESS.md §21.1. Not part of this repo's history.
+docs/
