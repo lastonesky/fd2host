@@ -26,12 +26,14 @@ port/
 │   │   └── util.h/util.c 字节/调色板工具（查表翻译/校验和/反混淆/掩码重着色，PROGRESS §23）
 │   │   └── path.h/path.c 地形代价洪泛与寻路（移动范围/最优路线，PROGRESS §24）
 │   │   └── res.h/res.c   LMI 容器资源加载（原 0x111BA，PROGRESS §25）
+│   │   └── tables.h/tables.c 表访问器（原 0x4E7DD..0x4E8BC，PROGRESS §27）
 │   ├── rlecheck.c     转译对拍测试：随机 RLE 流 × 原机器码 vs 转译 C，逐字节比对
 │   ├── gfxcheck.c     转译对拍测试：图形 blit 工具族 × 原机器码 vs 转译 C，逐字节比对
 │   ├── sprite24check.c 转译对拍测试：24×24 精灵 RLE 族 × 原机器码 vs 转译 C，逐字节比对
 │   ├── utilcheck.c    转译对拍测试：字节/调色板工具 × 原机器码 vs 转译 C，逐字节比对
 │   ├── pathcheck.c    转译对拍测试：地形代价洪泛/寻路 × 原机器码 vs 转译 C，逐字节比对
 │   ├── rescheck.c     转译对拍测试：资源加载器（把 CRT 文件/内存调用重定向到 libc 后调原机器码）
+│   ├── tablescheck.c  转译对拍测试：表访问器（11 个） × 原机器码 vs 转译 C
 │   ├── ail.c          AIL 替换层：16 个 AIL_* 入口 → 宿主实现（数字音效走 WinMM waveOut）
 │   ├── xmidi.c        XMIDI 解析（FDMUS.DAT 的 XDIR/CAT/FORM XMID）→ 事件列表
 │   ├── synth.c        自带软件合成器：事件 → PCM → waveOut（音乐不依赖系统 MIDI）
@@ -56,6 +58,7 @@ pwsh -File port\build.ps1 -Target sprite24check ; & port\build\sprite24check.exe
 pwsh -File port\build.ps1 -Target utilcheck ; & port\build\utilcheck.exe      # 2200 例
 pwsh -File port\build.ps1 -Target pathcheck ; & port\build\pathcheck.exe      # 1000 例
 pwsh -File port\build.ps1 -Target rescheck ; & port\build\rescheck.exe        # 160 例
+pwsh -File port\build.ps1 -Target tablescheck ; & port\build\tablescheck.exe  # 4528 例
 
 # 跑别的 DOS/4GW(LE) 游戏（通用化见 PROGRESS.md §14，先做静态体检）
 python port\re\preflight.py "E:\Games\FDCollection\Game\FDPS\FDPS.EXE"
@@ -153,6 +156,7 @@ LE 加载 + 7937 条 fixup 应用
 → 第 24 轮：**地形代价洪泛/寻路转译** —— `0x4E390..0x4E751`（2 入口 + 7 内部）→ `src/game/path.c`，对拍 **1000 例逐字节一致**；确认这是单位的**移动范围 + 最优路径**算法（地形代价表 + 四方向 DFS + 转向择优）
 → 第 25 轮：**资源加载器转译 + CRT 重定向对拍术** —— `0x111BA` → `src/game/res.c`，对拍 **160 例逐字节一致**；新方法：把 Watcom CRT 的文件/内存入口换成宿主 libc 后再调原机器码，**解锁依赖文件/内存的函数测试**（下一步 `sub_15F84` 可用）
 → 第 26 轮：**转译代码接入宿主** —— 新增 `src/repl.c`，把 23 个已对拍函数入口 jmp 到 C 实现，游戏**真的在跑转译代码**；`regress.ps1 -Replace none/all` 均 8/8，固定帧 150 对拍与基线噪声一致；同轮修复无 `--exit-when-file` 时 `--exit-after` 2 s 早退的 bug
+→ 第 27 轮：**表访问器转译** —— `0x4E7DD..0x4E8BC`（11 个）→ `src/game/tables.c`，对拍 **4528 例逐字节一致**；接入数 **23 → 34**，**obj0 工具库 0x4DED4..0x4EEE0 全部转译完成**
 ```
 
 ## 当前状态与下一步
@@ -184,11 +188,10 @@ LE 加载 + 7937 条 fixup 应用
 5. **首次保存实测**：`FD2.SAV` 不存在时的创建路径（机制已通，回归只覆盖了 `FD2.TMP`）
    + "存档变小"时的截断对拍。可复现回归：`pwsh -File port\regress.ps1`。
 6. **逐步源码化（路线 C 主体）**：按 `re/RE_MAP.md` 的模块顺序把机器码替换为 C 源码，
-   最终形成可编译 x86-64 的引擎。**已验证并对拍**：RLE 解码（`rle.c`，1900 例）、图形 blit
-   工具族（`gfx.c`，1450 例）、24×24 精灵 RLE 族（`sprite24.c`，2100 例）、字节/调色板工具
-   （`util.c`，2200 例）、地形代价洪泛/寻路（`path.c`，1000 例）、资源加载（`res.c`，160 例）；
-   **其中 23 个已通过 `src/repl.c` 接入运行中的游戏**（默认 `--replace=all`）；下一批：`sub_15F84`
-   文本/脚本渲染、表访问器 `0x4E7DD..0x4E8BC`，以及 CRT 堆/文件层整体替换（`res.c` 随后接入）。
+   最终形成可编译 x86-64 的引擎。**obj0 工具库 0x4DED4..0x4EEE0 已全部转译并对拍**：
+   RLE（1900）、gfx（1450）、sprite24（2100）、util（2200）、path（1000）、tables（4528）、
+   res（160）；**其中 34 个经 `src/repl.c` 接入运行中的游戏**（`--replace=all` 默认开）；
+   下一批：★★★ `sub_15F84` 文本/脚本渲染器（多轮），以及 CRT 堆/文件层整体替换。
 7. **跨平台**：单代码库 + 后端选择（**不用 git 分支**）。已抽出的是 `render.h`/`host.h` +
    入口层 `main_win32.c`（第 1 步完成）；`audio.h` 随**第 3 步**（sokol_audio 替换 waveOut）抽，
    `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入

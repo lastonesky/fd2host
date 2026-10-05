@@ -1,0 +1,175 @@
+
+===== 0x4E7DD size 21 =====
+char *__cdecl sub_4E7DD(int a1)
+{
+  return (char *)&unk_615FE + 2 * a1 - 64;
+}
+
+0004e7dd  55               push    ebp
+0004e7de  8b ec            mov     ebp, esp
+0004e7e0  8b 45 08         mov     eax, [ebp+arg_0]
+0004e7e3  83 e8 20         sub     eax, 20h ; ' '
+0004e7e6  d1 e0            shl     eax, 1
+0004e7e8  8d 15 fe 15 06 00 lea     edx, unk_615FE
+0004e7ee  03 c2            add     eax, edx
+0004e7f0  5d               pop     ebp
+0004e7f1  c3               retn
+
+===== 0x4E7F2 size 23 =====
+char *__cdecl sub_4E7F2(int a1)
+{
+  return (char *)&unk_626B3 + 12 * a1;
+}
+
+0004e7f2  55               push    ebp
+0004e7f3  8b ec            mov     ebp, esp
+0004e7f5  8b 45 08         mov     eax, [ebp+arg_0]
+0004e7f8  ba 0c 00 00 00   mov     edx, 0Ch
+0004e7fd  f7 e2            mul     edx
+0004e7ff  8d 15 b3 26 06 00 lea     edx, unk_626B3
+0004e805  03 c2            add     eax, edx
+0004e807  5d               pop     ebp
+0004e808  c3               retn
+
+===== 0x4E809 size 24 =====
+char *__cdecl sub_4E809(int a1)
+{
+  return (char *)&unk_6238D + 31 * a1 - 31;
+}
+
+0004e809  55               push    ebp
+0004e80a  8b ec            mov     ebp, esp
+0004e80c  8b 45 08         mov     eax, [ebp+arg_0]
+0004e80f  48               dec     eax
+0004e810  ba 1f 00 00 00   mov     edx, 1Fh
+0004e815  f7 e2            mul     edx
+0004e817  8d 15 8d 23 06 00 lea     edx, unk_6238D
+0004e81d  03 c2            add     eax, edx
+0004e81f  5d               pop     ebp
+0004e820  c3               retn
+
+===== 0x4E821 size 23 =====
+char *__cdecl sub_4E821(int a1)
+{
+  return (char *)&unk_620A1 + 11 * a1;
+}
+
+0004e821  55               push    ebp
+0004e822  8b ec            mov     ebp, esp
+0004e824  8b 45 08         mov     eax, [ebp+arg_0]
+0004e827  ba 0b 00 00 00   mov     edx, 0Bh
+0004e82c  f7 e2            mul     edx
+0004e82e  8d 15 a1 20 06 00 lea     edx, unk_620A1
+0004e834  03 c2            add     eax, edx
+0004e836  5d               pop     ebp
+0004e837  c3               retn
+
+===== 0x4E838 size 23 =====
+char *__cdecl sub_4E838(int a1)
+{
+  return (char *)&unk_61DA1 + 24 * a1;
+}
+
+0004e838  55               push    ebp
+0004e839  8b ec            mov     ebp, esp
+0004e83b  8b 45 08         mov     eax, [ebp+arg_0]
+0004e83e  ba 18 00 00 00   mov     edx, 18h
+0004e843  f7 e2            mul     edx
+0004e845  8d 15 a1 1d 06 00 lea     edx, unk_61DA1
+0004e84b  03 c2            add     eax, edx
+0004e84d  5d               pop     ebp
+0004e84e  c3               retn
+
+===== 0x4E84F size 23 =====
+char *__cdecl sub_4E84F(int a1)
+{
+  return (char *)&unk_61AF9 + 10 * a1;
+}
+
+0004e84f  55               push    ebp
+0004e850  8b ec            mov     ebp, esp
+0004e852  8b 45 08         mov     eax, [ebp+arg_0]
+0004e855  ba 0a 00 00 00   mov     edx, 0Ah
+0004e85a  f7 e2            mul     edx
+0004e85c  8d 15 f9 1a 06 00 lea     edx, unk_61AF9
+0004e862  03 c2            add     eax, edx
+0004e864  5d               pop     ebp
+0004e865  c3               retn
+
+===== 0x4E866 size 23 =====
+char *__cdecl sub_4E866(int a1)
+{
+  return (char *)&unk_619FD + 7 * a1;
+}
+
+0004e866  55               push    ebp
+0004e867  8b ec            mov     ebp, esp
+0004e869  8b 45 08         mov     eax, [ebp+arg_0]
+0004e86c  ba 07 00 00 00   mov     edx, 7
+0004e871  f7 e2            mul     edx
+0004e873  8d 15 fd 19 06 00 lea     edx, unk_619FD
+0004e879  03 c2            add     eax, edx
+0004e87b  5d               pop     ebp
+0004e87c  c3               retn
+
+===== 0x4E87D size 17 =====
+int __cdecl sub_4E87D(int a1)
+{
+  return (int)*(&off_61955 + a1);
+}
+
+0004e87d  55               push    ebp
+0004e87e  8b ec            mov     ebp, esp
+0004e880  8b 5d 08         mov     ebx, [ebp+arg_0]
+0004e883  c1 e3 02         shl     ebx, 2
+0004e886  8b 83 55 19 06 00 mov     eax, ds:off_61955[ebx]
+0004e88c  5d               pop     ebp
+0004e88d  c3               retn
+
+===== 0x4E88E size 23 =====
+char *__cdecl sub_4E88E(int a1)
+{
+  return (char *)&unk_6188A + 7 * a1;
+}
+
+0004e88e  55               push    ebp
+0004e88f  8b ec            mov     ebp, esp
+0004e891  8b 45 08         mov     eax, [ebp+arg_0]
+0004e894  ba 07 00 00 00   mov     edx, 7
+0004e899  f7 e2            mul     edx
+0004e89b  8d 15 8a 18 06 00 lea     edx, unk_6188A
+0004e8a1  03 c2            add     eax, edx
+0004e8a3  5d               pop     ebp
+0004e8a4  c3               retn
+
+===== 0x4E8A5 size 23 =====
+char *__cdecl sub_4E8A5(int a1)
+{
+  return (char *)&unk_61646 + 20 * a1;
+}
+
+0004e8a5  55               push    ebp
+0004e8a6  8b ec            mov     ebp, esp
+0004e8a8  8b 45 08         mov     eax, [ebp+arg_0]
+0004e8ab  ba 14 00 00 00   mov     edx, 14h
+0004e8b0  f7 e2            mul     edx
+0004e8b2  8d 15 46 16 06 00 lea     edx, unk_61646
+0004e8b8  03 c2            add     eax, edx
+0004e8ba  5d               pop     ebp
+0004e8bb  c3               retn
+
+===== 0x4E8BC size 23 =====
+char *__cdecl sub_4E8BC(int a1)
+{
+  return (char *)&unk_602AD + 23 * a1;
+}
+
+0004e8bc  55               push    ebp
+0004e8bd  8b ec            mov     ebp, esp
+0004e8bf  8b 45 08         mov     eax, [ebp+arg_0]
+0004e8c2  ba 17 00 00 00   mov     edx, 17h
+0004e8c7  f7 e2            mul     edx
+0004e8c9  8d 15 ad 02 06 00 lea     edx, unk_602AD
+0004e8cf  03 c2            add     eax, edx
+0004e8d1  5d               pop     ebp
+0004e8d2  c3               retn

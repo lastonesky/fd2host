@@ -2081,3 +2081,62 @@ rlecheck 1900/0  gfxcheck 1450/0  sprite24check 2100/0  utilcheck 2200/0  pathch
 1. 继续转译 ★★★ `sub_15F84`（文本/脚本渲染）——现在可用「CRT 重定向 + 固定帧对拍 + 接入 repl」
    的完整链路；表访问器 `0x4E7DD..0x4E8BC` 顺带清掉。
 2. 把 CRT 堆（`malloc/free/_nmalloc/...`）与文件层整体替换为宿主实现，届时 `res.c` 也可接入。
+
+---
+
+## 27. 第 27 轮：表访问器收尾 + 接入 34 个转译函数（2026-10-05）
+
+### 27.1 转译：`src/game/tables.c`
+
+obj0 库区最后一块：`0x4E7DD..0x4E8BC` 的 **11 个一行访问器**，都是 `base + stride*index + offset`
+（32 位无符号乘，原版 `mul edx`），其中 `0x4E87D` 是 4 字节表的 dword 读取。基址/步长/偏移见
+`game/tables.h`；C 版把基址参数化（数据表将来变成 C 数组），`repl.c` 提供 FD2 固定基址。
+
+| 地址 | base | stride | offset |
+|---|---|---|---|
+| `0x4E7DD` | 0x615FE | 2 | −64 |
+| `0x4E7F2` | 0x626B3 | 12 | 0 |
+| `0x4E809` | 0x6238D | 31 | −31 |
+| `0x4E821` | 0x620A1 | 11 | 0 |
+| `0x4E838` | 0x61DA1 | 24 | 0 |
+| `0x4E84F` | 0x61AF9 | 10 | 0 |
+| `0x4E866` | 0x619FD | 7 | 0 |
+| `0x4E87D` | 0x61955 | （dword 表，×4） | 0 |
+| `0x4E88E` | 0x6188A | 7 | 0 |
+| `0x4E8A5` | 0x61646 | 20 | 0 |
+| `0x4E8BC` | 0x602AD | 23 | 0 |
+
+至此 **obj0 工具库 0x4DED4..0x4EEE0 全部转译完成**。
+
+### 27.2 对拍与接入
+
+`src/tablescheck.c`：每个访问器取边界值（0/1/0x1F/0x20/0xFF/负值）+ 400 随机索引，
+与 C 辅助函数比对返回值（指针或 dword）：
+
+```
+build\tablescheck.exe  →  PASS: 4528 cases, 0 failures（含 11 个访问器）
+```
+
+11 个访问器加入 `src/repl.c`（`REPL_UTIL` 组）⇒ 接入数 **23 → 34**：
+
+```
+host.log: repl: installed 34 translated function(s) (mask 0x1F)
+regress.ps1: ALL PASS 8/8
+```
+
+### 27.3 实测判据
+
+```
+tablescheck 4528/0   rlecheck 1900/0   gfxcheck 1450/0   sprite24check 2100/0
+utilcheck 2200/0     pathcheck 1000/0  rescheck 160/0
+regress.ps1 ALL PASS 8/8（34 个转译函数在跑）
+```
+
+### 27.4 下轮入口
+
+1. ★★★ **`sub_15F84`（文本/脚本渲染器）**：已归档反编译 `re/sub_15F84.c`。它是 14 参数的
+   usercall **词流解释器**（switch on `*v15`：`-1` 结束/`-2` 换行/`-3` 换行+等键翻页/
+   `-4..-6` 数字/`-17..-20` 开对话框（4 种肖像来源）/默认字形索引），递归、写大量 `0x53xxx`
+   全局、调用 `sub_165AC/168B6/16B43/16C57/16559/16E24/164E8/12C60/111BA/4EBFF/4EC31/4ED7A/10620`。
+   属多轮工程：先归档全局区与各 callee 契约，再分子块转译+对拍。
+2. 表访问器已完成；CRT 堆/文件层整体替换仍是让 `res.c` 接入的前提。

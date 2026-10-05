@@ -24,6 +24,7 @@
 #include "game/sprite24.h"
 #include "game/util.h"
 #include "game/path.h"
+#include "game/tables.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -32,6 +33,19 @@ static const void *__cdecl rep_rec3(int index)
 {
     return util_rec3((const void *)(uintptr_t)0x60181u, index);
 }
+
+/* The eleven table accessors 0x4E7DD..0x4E8BC, with the FD2 data bases. */
+static void    *__cdecl rep_t615FE(int i) { return tbl_ptr((void *)(uintptr_t)0x615FEu,  2, i, -64); }
+static void    *__cdecl rep_t626B3(int i) { return tbl_ptr((void *)(uintptr_t)0x626B3u, 12, i,   0); }
+static void    *__cdecl rep_t6238D(int i) { return tbl_ptr((void *)(uintptr_t)0x6238Du, 31, i, -31); }
+static void    *__cdecl rep_t620A1(int i) { return tbl_ptr((void *)(uintptr_t)0x620A1u, 11, i,   0); }
+static void    *__cdecl rep_t61DA1(int i) { return tbl_ptr((void *)(uintptr_t)0x61DA1u, 24, i,   0); }
+static void    *__cdecl rep_t61AF9(int i) { return tbl_ptr((void *)(uintptr_t)0x61AF9u, 10, i,   0); }
+static void    *__cdecl rep_t619FD(int i) { return tbl_ptr((void *)(uintptr_t)0x619FDu,  7, i,   0); }
+static uint32_t __cdecl rep_t61955(int i) { return tbl_u32((const void *)(uintptr_t)0x61955u, i); }
+static void    *__cdecl rep_t6188A(int i) { return tbl_ptr((void *)(uintptr_t)0x6188Au,  7, i,   0); }
+static void    *__cdecl rep_t61646(int i) { return tbl_ptr((void *)(uintptr_t)0x61646u, 20, i,   0); }
+static void    *__cdecl rep_t602AD(int i) { return tbl_ptr((void *)(uintptr_t)0x602ADu, 23, i,   0); }
 
 struct repl_entry {
     uint32_t    addr;     /* linear address of the original function */
@@ -69,6 +83,19 @@ static const struct repl_entry g_repl[] = {
     { 0x4DF28, "util_deobfuscate",    (void *)util_deobfuscate,    REPL_UTIL },
     { 0x4DF4C, "util_fix_records",    (void *)util_fix_records,    REPL_UTIL },
     { 0x4E795, "util_mask_recolor",   (void *)util_mask_recolor,   REPL_UTIL },
+
+    /* --- table accessors (src/game/tables.c) -------------------------- */
+    { 0x4E7DD, "tbl_615FE",           (void *)rep_t615FE,          REPL_UTIL },
+    { 0x4E7F2, "tbl_626B3",           (void *)rep_t626B3,          REPL_UTIL },
+    { 0x4E809, "tbl_6238D",           (void *)rep_t6238D,          REPL_UTIL },
+    { 0x4E821, "tbl_620A1",           (void *)rep_t620A1,          REPL_UTIL },
+    { 0x4E838, "tbl_61DA1",           (void *)rep_t61DA1,          REPL_UTIL },
+    { 0x4E84F, "tbl_61AF9",           (void *)rep_t61AF9,          REPL_UTIL },
+    { 0x4E866, "tbl_619FD",           (void *)rep_t619FD,          REPL_UTIL },
+    { 0x4E87D, "tbl_61955_dword",     (void *)rep_t61955,          REPL_UTIL },
+    { 0x4E88E, "tbl_6188A",           (void *)rep_t6188A,          REPL_UTIL },
+    { 0x4E8A5, "tbl_61646",           (void *)rep_t61646,          REPL_UTIL },
+    { 0x4E8BC, "tbl_602AD",           (void *)rep_t602AD,          REPL_UTIL },
 
     /* --- movement range + path tracer (src/game/path.c) --------------- */
     { 0x4E390, "path_mark",           (void *)path_mark,           REPL_PATH },
