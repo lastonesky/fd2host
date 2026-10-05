@@ -52,6 +52,8 @@ Start-Process port\build\fd2host.exe -ArgumentList `
 可用参数：`--gamedir <目录>`、`--exe <路径>`、`--exit-after <秒>`、`--trace=<n>`、`--headless`、
 **所有带值的参数都同时支持 `--opt value` 与 `--opt=value` 两种写法**（`host_init()` 统一归一化，
 另一种写法不再静默回退到默认值，见 `PROGRESS.md` §8-32/§8-33）、
+`--exit-when-file=<路径>:<字节数>`（文件写满且 autokey 跑完 → 提前干净退出 + 2 s 缓冲，
+退出前抓最后一帧；与 `--exit-after` 上限配合，回归单次 **~15 s**，见 `PROGRESS.md` §20）、
 `--screenshot=<file.bmp>`、`--shot-frame=<n>`（在第 n 帧导出实际送显的 RGB 缓冲，默认 300）；
 `--cmdtail=<尾巴>`（写进 PSP:0x80 的命令行，`INT 21h AH=4B` 拉起子进程时自动传递）、
 `--log=<路径>`（换日志文件；子进程各用各的 `host.<pid>.log`，否则会截掉父日志，见 `PROGRESS.md` §8-47）；

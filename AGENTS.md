@@ -91,7 +91,8 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 ```
 
 常用参数（全部支持 `--opt value` 与 `--opt=value` 两种写法）：
-`--gamedir`、`--exe`、`--exit-after <秒>`、`--headless`、`--trace=<n>`（单步跟踪）、
+`--gamedir`、`--exe`、`--exit-after <秒>`、`--exit-when-file=<路径>:<字节数>`（文件写满且 autokey
+跑完 → 提前干净退出，回归提速到 ~15 s，§20）、`--headless`、`--trace=<n>`（单步跟踪）、
 `--screenshot=<bmp> --shot-frame=<n>`、`--autokey=<延时ms:VK[,VK...];...>`（无人值守按键回归）、
 `--midi-dump=<wav>`（离线核对音乐）、`--ail-dump=<dir>`、`--midi-test`、`--gm-bank=<path>`。
 

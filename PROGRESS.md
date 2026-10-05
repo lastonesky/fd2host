@@ -63,6 +63,12 @@ Windows MIDI（Miles AIL 的 16 个入口已被宿主实现替换，见 §11）�
   （LE 加载器映射原始 exe → 直接调原函数 vs 转译 C，随机合法流 **1900 例逐字节一致**，
   含全局副作用），FD2 回归 8/8 PASS。详见 **§19**。
 
+- **第 20 轮（2026-10-05）：回归提速 75 s → 15 s** —— 用户反馈“跑测试结尾至少干等 10 秒”。
+  实测：`FD2.TMP` 在 **11.7 s** 就写满（路径完成），而宿主固定跑满 60 s、脚本再盲睡 +15 s。
+  宿主新增 **`--exit-when-file=<path>:<minbytes>`**（文件写满 + autokey 完成 + 2 s 缓冲 → 干净退出，
+  退出前抓最后一帧作证据），`regress.ps1` 改为**轮询进程退出**并加入环境性崩溃**自动重试**。
+  实测连续两次 **15 s / ALL PASS 8/8**。详见 **§20**。
+
 ⇒ 路线 C 的 POC 目标"**窗口中看到游戏画面**"**已达成**。下一步见 §7。
 逆向侧：IDA Pro 9.5 + ida MCP 环境已建好，测绘结果在 `port/re/RE_MAP.md`（见 §10）。
 
@@ -625,11 +631,18 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     `host.<pid>.log`；`--log` 必须在**重定向之前**扫描 argv（参数归一化发生在重定向之后，
     两种写法都得手动认）。
 
-48. **`0x10000` 有可能被进程初始化阶段的映射抢走（偶发）**（第 16 轮，待跟踪）：
-    子进程一次 `le: cannot reserve object region @0x10000: 487` + `0x10000 is COMMIT type=MAPPED
-    prot=0x2 region=0x3000`，重跑就好 ⇒ 是某个 DLL 在 DllMain 阶段建的只读文件映射碰上了
-    低址 ASLR。预留发生在 `fd2_entry`（DllMain 之后、CRT 之前），抢不回来；
-    现在失败路径会用 `K32GetMappedFileNameA` 打出**是谁**，下次复现直接知道。
+48. **低地址窗被进程初始化阶段的映射抢走（偶发，两种签名）**（第 16 轮发现，第 20 轮补第二签名）：
+    预留发生在 `fd2_entry`（DllMain 之后、CRT 之前），抢不回来，重跑即好（新 ASLR 布局）——
+    - **签名 A（0x10000）**：`le: cannot reserve object region @0x10000: 487` + `type=MAPPED
+      prot=0x2`，是某个 DLL 在 DllMain 阶段建的只读文件映射。失败路径会用
+      `K32GetMappedFileNameA` 打出**是谁**。
+    - **签名 B（0x90000..0xFFFFF，第 20 轮实测）**：`host.err` 出现
+      `le: guest window blocks 0x7F00 not reserved (the loader put something here)`
+      （mask 位 8..14 = 0x90000..0xFFFFF 没抢到）+ `cannot commit @0x90000/@0xC0000 (87)` ⇒
+      **VGA 窗口缺失**，渲染线程转换帧缓冲读到 `0xAD000`（= 0xA0000+0xD000）即 AV，
+      **EIP 报在宿主映像的像素转换循环里**（症状很误导，像是宿主自己跳飞）。
+      判据：`host.err` 的 mask 行 + `host.log` 的 `cpu:` 行。regress.ps1 见此签名**自动重试**
+      （最多 3 次）；真实回归没有该签名，首跑失败即报。
 
 49. **`type 0x02` fixup 的源只有 16 位，写 4 字节会踩掉后面 2 字节代码**（第 18 轮，第 14 轮引入）：
     FDPS 唯一一条 `0x02` 记录指向 `mov ax,seg X` 的 imm16（2 字节），当时的处理写成了
@@ -933,6 +946,11 @@ PASS  FD2.TMP non-empty         PASS  clean end (watchdog/exit)
       FD2.TMP = 207360 bytes (original: 207360)
 ```
 
+> **第 20 轮更新**：机制已提速 —— `--exit-when-file` 写满即退 + 脚本轮询退出 + 环境性崩溃
+> 自动重试，单次 **~15 s**（原 60 s 盲跑 + 15 s 盲睡 = 75 s），见 **§20**。
+> `clean end` 断言相应扩为三种干净退出信号：`watchdog fired` / `AH=4Ch terminate` /
+> `exit condition met`。
+
 日志关键三行：`dos: open 'FD2.TMP' -> FFFFFFFF (2)` → `dos: create 'FD2.TMP' -> … (dos handle 5)`
 → `dos: open 'FD2.TMP' -> … (0)`，文件尺寸与原版一字不差。
 
@@ -940,7 +958,8 @@ PASS  FD2.TMP non-empty         PASS  clean end (watchdog/exit)
 
 - **游戏退出路径已通**（`§7.6` 的一项打勾）：`dos: INT10 set video mode 0x03` →
   `dos: INT 21h AH=4Ch terminate, code=3` → `ail: shutdown` → `dos: game requested exit`。
-- **画面无回退**：`build/regress.bmp`（第 900 帧）仍是王座厅 + 对话框，调色板与通道序正确。
+- **画面无回退**：`build/regress.bmp` 是回归自动生成的画面证据；**第 20 轮起**它由宿主在
+  **退出前最后一帧**抓取（原为固定第 900 帧，早退后到不了），实测 36 色、全画面非黑。
 - 真实目录的存档**没被测试碰到**：所有回归都在 `build/sandbox` 里跑（`E:\FD2\FD2.SAV` 仍是
   Nov 2025 的原件）。
 
@@ -1599,3 +1618,66 @@ regress.ps1         →  ALL PASS 8/8（build.ps1 新目标未影响宿主）
 2. ★★★ 级：资源加载器 `sub_111BA`、脚本 VM `sub_15F84`（对拍同法，但要先抽清全局状态区）。
 3. 模块归类（RE_MAP §5 阶段 1）继续：`lib_nosym` 剩余、`gfx_A0000` 名单精化。
 4. FDPS 相关工作全部冻结（§7.8）。
+
+---
+
+## 20. 第 20 轮：回归提速（75 s → 15 s）+ 环境性崩溃自动重试（2026-10-05）
+
+**用户反馈**：每次跑游戏启动测试，“后面至少有 10 秒钟没有动，每次都浪费”。
+
+### 20.1 实测浪费在哪（先量化再动手）
+
+用 200 ms 轮询实测一次完整回归的时间线：
+
+```
+t=11.7s  FD2.TMP 写满 207360 字节（continue 路径完成，autokey 最后一键 12.5s）
+t=60.2s  宿主才退出（--exit-after 看门狗）    ← 静止画面白跑 ~48 s
+t=75s    脚本 Start-Sleep($Seconds+15) 才结束 ← 进程已亡又盲等 15 s
+```
+
+⇒ 两处浪费：固定 deadline 不知道“路径何时完成”；固定睡眠不知道“进程何时退出”。
+
+### 20.2 宿主：`--exit-when-file=<path>:<minbytes>`（src/host.c）
+
+- **看门狗线程统一两个触发器**：`--exit-after` 硬上限（原行为，日志行不变）与
+  **完成触发器**（文件写满 **且** autokey 调度已跑完 → 再缓冲 `EXIT_SETTLE_MS=2000`
+  让最后几键落地）→ 走同一条干净退出路径（`dos_terminate_child` + `dos_dump_stats`）。
+  新日志行：`host: exit condition reached/met ...`。
+- **退出前抓最后一帧**：settle 到点时若 `--screenshot` 还没拍过，把 `--shot-frame` 设为
+  `g_frames+1` 再等 250 ms —— 早退也有画面证据（否则永远到不了固定帧号）。
+- 文件大小用 **`FindFirstFile`（目录元数据）**轮询，游戏还开着文件写句柄也不会共享冲突；
+  路径解析取**最后一个冒号**分隔尺寸，`E:\...` 的盘符冒号不受影响（无数字后缀 = 只要求存在）。
+- 看门狗线程创建从 parse 期间挪到 `le_reserve_address_space()` **之后**（所有输入已解析完，
+  且不与低址窗预留抢先后）；`--exit-when-file` 与 `--exit-after` 支持空格/等号两种写法。
+
+### 20.3 脚本：轮询退出 + 环境性重试（regress.ps1）
+
+- `Start-Sleep ($Seconds+15)` → **轮询 `$proc.HasExited`**（250 ms 间隔，上限 `Seconds+15`），
+  超时才告警停进程；每次跑前删掉旧 `regress.bmp`（只有新鲜截屏才算证据）。
+- **重试（最多 3 次）**：断言失败 **且** `host.err` 含 `guest window blocks`（= 加载器抢了低地址窗，
+  §8-48 签名 B）才重跑 —— 真实回归没有该签名，首跑失败即报，不会被重试掩盖。
+- `clean end` 扩为三种干净退出信号：`watchdog fired` / `AH=4Ch terminate` / `exit condition met`。
+
+### 20.4 插曲：一次偶发启动崩溃的定位（与本轮改动无关，实证链）
+
+改动后第一次回归全灭（宿主 0.3 s 即亡）：`host.log` 有 `cpu: ACCESS VIOLATION at 0x5F4312B0
+(Eip=0x5F4312B0) read from address 0xAD000`（EIP 在宿主映像里，像是宿主自己跳飞）。查
+`host.err`：`guest window blocks 0x7F00 not reserved`（mask 位 8..14 = `0x90000..0xFFFFF`）+
+`cannot commit @0x90000/@0xC0000 (87)` ⇒ **VGA 窗口缺失**，渲染线程转换帧缓冲读到
+`0xAD000 = 0xA0000+0xD000`（像素循环中段）时 AV，EIP 自然落在宿主的转换循环里。
+
+- **与本轮改动无关**：早期预留在 `fd2_entry`（进程入口），早于本轮所有新代码；手动重跑
+  同参数 **14.7 s 干净退出**。根因是 `le.c` 注释里已记录的已知偶发问题（加载器把 DLL 放进低址窗）。
+- 归档为 **§8-48 签名 B**；由 §20.3 的自动重试兕底。
+
+### 20.5 实测结果
+
+```
+pwsh -File regress.ps1   →  attempt 1/3 ... ran 15.0 s ... ALL PASS 8/8（连续两次 15 s）
+host.log: exit condition reached (file >= 207360 bytes, autokey done) - settling 2000 ms
+host.log: exit condition met after 14 s (477 frames drawn)
+regress.bmp: 36 色、全画面非黑（退出前最后一帧 = 场景帧）
+```
+
+单次回归 **~75 s → ~15 s（省 60 s）**；慢机器/路径未完成时仍由 `--exit-after=60` 兕底，
+比原来更稳（完成判据驱动退出，不再赌固定时长）。

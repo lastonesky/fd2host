@@ -73,6 +73,9 @@ static const char  *g_autokey;          /* --autokey=<schedule>            */
 static const char  *g_midi_dump;        /* --midi-dump=<file.wav>          */
 static const char  *g_cmdtail;          /* --cmdtail=<tail> -> PSP:0x80    */
 static int          g_exit_after_secs;  /* --exit-after, for spawned children */
+static char         g_exit_when_path[MAX_PATH]; /* --exit-when-file=path:minbytes */
+static uint32_t     g_exit_when_size;   /* required size of that file      */
+static volatile int g_autokey_done = 1; /* 0 while a --autokey schedule runs */
 static DWORD        g_start_tick;       /* when host_init began             */
 
 /* Seconds left on --exit-after (0 = unlimited). INT 21h AH=4B hands this to
@@ -157,17 +160,85 @@ static DWORD WINAPI autokey_thread(LPVOID param)
         step = next;
     }
     printf("host: autokey schedule finished\n");
+    g_autokey_done = 1;
     free(spec);
     return 0;
 }
 
 /* ------------------------------------------------------------------ utils */
 
+/* --------------------------------------------------------------- shutdown
+ *
+ * The watchdog thread ends a bounded run. Two triggers share one clean
+ * shutdown path:
+ *
+ *   --exit-after=N          hard deadline (original behaviour, same log
+ *                           line, so existing checks keep working);
+ *   --exit-when-file=P:S    stop as soon as file P holds >= S bytes AND the
+ *                           --autokey schedule (if any) has finished, then
+ *                           settle EXIT_SETTLE_MS so the last keystrokes
+ *                           still play out. Measured on the regress run:
+ *                           FD2.TMP is full at ~12 s of a 60 s run - without
+ *                           this the host burned ~48 s of static frames and
+ *                           the script slept another 15 s past process exit.
+ *
+ * A requested --screenshot is taken on the very last frame (if the regular
+ * --shot-frame has not fired yet), so an early exit still leaves visual
+ * evidence. */
+#define EXIT_SETTLE_MS 2000
+
+static int exit_file_ok(void)
+{
+    WIN32_FIND_DATAA fd;
+    HANDLE h;
+    uint64_t size;
+
+    if (!g_exit_when_path[0])
+        return 1;                       /* no file condition given */
+    /* FindFirstFile reads directory metadata: it never fails with a sharing
+     * violation while the game still has the file open for writing. */
+    h = FindFirstFileA(g_exit_when_path, &fd);
+    if (h == INVALID_HANDLE_VALUE)
+        return 0;                       /* not created yet */
+    FindClose(h);
+    size = ((uint64_t)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+    return size >= (uint64_t)g_exit_when_size;
+}
+
 static DWORD WINAPI watchdog(LPVOID param)
 {
-    int secs = (int)(intptr_t)param;
-    Sleep((DWORD)secs * 1000);
-    printf("host: watchdog fired after %d s (%d frames drawn)\n", secs, g_frames);
+    DWORD settle_at = 0;
+
+    (void)param;
+    for (;;) {
+        DWORD elapsed = GetTickCount() - g_start_tick;
+
+        if (g_exit_after_secs > 0 &&
+            elapsed >= (DWORD)g_exit_after_secs * 1000) {
+            printf("host: watchdog fired after %d s (%d frames drawn)\n",
+                   g_exit_after_secs, g_frames);
+            break;
+        }
+        if (g_autokey_done && exit_file_ok()) {
+            if (!settle_at) {
+                settle_at = GetTickCount();
+                printf("host: exit condition reached (file >= %u bytes, "
+                       "autokey done) - settling %u ms\n",
+                       g_exit_when_size, (unsigned)EXIT_SETTLE_MS);
+            } else if (GetTickCount() - settle_at >= EXIT_SETTLE_MS) {
+                if (g_screenshot_path && !g_screenshot_done) {
+                    g_screenshot_frame = g_frames + 1; /* last frame = evidence */
+                    Sleep(250);                        /* let it be drawn */
+                }
+                printf("host: exit condition met after %u s (%d frames drawn)\n",
+                       (unsigned)(elapsed / 1000), g_frames);
+                break;
+            }
+        } else {
+            settle_at = 0;              /* condition lost: restart the settle */
+        }
+        Sleep(200);
+    }
     dos_terminate_child();        /* a P_WAIT child must not outlive us */
     dos_dump_stats();
     ExitProcess(0);
@@ -337,7 +408,7 @@ static int opt_wants_value(const char *a)
         "--exe", "--gamedir", "--exit-after", "--trace", "--screenshot",
         "--wshot", "--shot-frame", "--ail", "--ail-dump", "--ail-rate", "--ail-bits",
         "--midi-rate", "--midi-backend", "--gm-bank", "--autokey",
-        "--midi-dump", "--cmdtail", "--log"
+        "--midi-dump", "--cmdtail", "--log", "--exit-when-file"
     };
     size_t i;
     for (i = 0; i < sizeof opts / sizeof opts[0]; i++)
@@ -437,9 +508,31 @@ int host_init(int argc, char **argv)
         else if (!strncmp(argv[i], "--gamedir=", 10)) gamedir = argv[i] + 10;
         else if (!strncmp(argv[i], "--exit-after=", 13)) {
             int secs = atoi(argv[i] + 13);
-            if (secs > 0) {
+            if (secs > 0)
                 g_exit_after_secs = secs;
-                CreateThread(NULL, 0, watchdog, (LPVOID)(intptr_t)secs, 0, NULL);
+        }
+        /* --exit-when-file=<path>:<minbytes> - bounded run that ends as soon
+         * as the tested path is complete instead of always burning the whole
+         * --exit-after budget. The last ':' separates the size, so "E:\..."
+         * keeps its own colon; without a numeric suffix the file just has to
+         * exist (min 1 byte). */
+        else if (!strncmp(argv[i], "--exit-when-file=", 17)) {
+            const char *spec = argv[i] + 17;
+            const char *colon = strrchr(spec, ':');
+            size_t n = strlen(spec);
+            if (n >= sizeof g_exit_when_path) n = sizeof g_exit_when_path - 1;
+            memcpy(g_exit_when_path, spec, n);
+            g_exit_when_path[n] = 0;
+            g_exit_when_size = 1;
+            if (colon && colon != spec + 1) {
+                const char *q;
+                int digits = colon[1] != 0;
+                for (q = colon + 1; *q; q++)
+                    if (*q < '0' || *q > '9') digits = 0;
+                if (digits) {
+                    g_exit_when_size = (uint32_t)strtoul(colon + 1, NULL, 10);
+                    g_exit_when_path[colon - spec] = 0;
+                }
             }
         }
         else if (!strncmp(argv[i], "--cmdtail=", 10)) {
@@ -491,6 +584,8 @@ int host_init(int argc, char **argv)
         }
         else if (!strncmp(argv[i], "--autokey=", 10)) {
             g_autokey = argv[i] + 10;
+            if (g_autokey[0])
+                g_autokey_done = 0;     /* the completion trigger must wait */
         }
         else if (!strncmp(argv[i], "--midi-dump=", 12)) {
             g_midi_dump = argv[i] + 12;
@@ -507,6 +602,12 @@ int host_init(int argc, char **argv)
         return 9;
     }
     printf("host: address space reserved\n");
+
+    /* All watchdog inputs are parsed now - start the exit watcher (deadline
+     * and/or completion trigger). Started after the reservation so the
+     * low-window reservation still wins the race. */
+    if (g_exit_after_secs > 0 || g_exit_when_path[0])
+        CreateThread(NULL, 0, watchdog, NULL, 0, NULL);
 
     /* The game opens its data files by bare name (DIG.INI, FDOTHER.DAT, ...),
      * so the working directory has to be the game directory. */
