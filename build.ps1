@@ -45,6 +45,9 @@ $targets = @{
     # differential test: src/game/path.c (movement range + path trace) vs the
     # original machine code at 0x4E390 / 0x4E4F6
     pathcheck = @{ srcs = @("pathcheck.c", "le.c", "game\path.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    # differential test: src/game/res.c (LMI resource loader) vs 0x111BA,
+    # with the game's CRT file/memory entry points redirected to the host libc
+    rescheck = @{ srcs = @("rescheck.c", "le.c", "game\res.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";

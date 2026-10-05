@@ -1954,3 +1954,62 @@ regress.ps1        ALL PASS 8/8
    `sub_15F84`（文本/脚本渲染，usercall 多寄存器）。
 3. 宿主侧：可开始把已转译的纯模块（rle/gfx/sprite24/util）逐步**接入宿主**（替换原机器码），
    每接一个跑 `regress.ps1` + 帧对拍。
+
+---
+
+## 25. 第 25 轮：资源加载器 `sub_111BA` 转译 + CRT 重定向对拍术（2026-10-05）
+
+### 25.1 `sub_111BA` 的真实 ABI（从调用点实证）
+
+Hex-Rays 把它读成 7 参 `__fastcall` 是错的（入口的 `push 20h; call sub_3702F` 是 Watcom
+**栈探针**，把签名骗了）。看调用点（如 `0x10136`）只有 3 次 `push` ⇒ **cdecl 3 参**：
+
+```
+void *res_load(const char *filename, void *old_buffer, int index)
+```
+
+语义（逐指令）：`free(old_buffer)` → `fopen(filename,"rb")` → `malloc(8)` →
+`fseek(4*index+6)` → 读 8 字节 `{start,end}` → `size=end-start`（写全局 `dword_53BFF`）→
+`malloc(size)` → `fseek(start)` → 读 size 字节 → `fclose` → 返回缓冲。失败走 `0x1005E`
+（`push 1; jmp exit`）。**LMI 容器**：`+6` 起是 `count+1` 个 u32 偏移，资源 `i` 占
+`[off[i], off[i+1])`。`sub_3702F/sub_37042` 只是栈探针（实测无害）。
+
+### 25.2 新方法：**CRT 重定向对拍术**（本轮最大收获）
+
+`sub_111BA` 依赖 Watcom CRT 的文件/内存函数（`fopen/fseek/fread/malloc/free/fclose`），
+直接跑会陷进 INT 21h（需要 DOS 层），且 Watcom `malloc` 没经过 CRT 启动可能不可用。
+本轮改用**只重定向 CRT、不碰游戏代码**的办法：
+
+1. LE 加载并用 `le_map_and_relocate` 映射 FD2.EXE；
+2. 把上面 6 个 CRT 入口（`0x3706E/0x3776E/0x37324/0x3759C/0x37940/0x373CA`）头 5 字节
+   改写成 `E9 rel32` jmp 到宿主 libc 的薄封装；
+3. 之后直接调用**原版机器码**，它的文件/内存调用走到 MSVC 的 `fopen/fread/...`。
+
+这恰好就是"最终移植要做的替换"（用现代 libc 换 Watcom CRT），而且**不改任何游戏逻辑**，
+只在函数入口写等长 jmp（不动 call 位移），符合 §4 的硬约束意图。Watosn `malloc` 初始化问题
+被绕过；**任何依赖 CRT 的游戏函数现在都能这样对拍**（`sub_15F84` 等下一步可用）。
+
+### 25.3 转译与对拍
+
+| 文件 | 内容 |
+|---|---|
+| `src/game/res.h` / `res.c` | `res_load`（原 `0x111BA`）+ `res_size`（原 `dword_53BFF`） |
+| `src/rescheck.c` | 造合成 LMI 容器（8 资源 × 随机长度）：原版经 CRT 钩子 vs 转译 C，比对资源内容与大小 |
+| `re/util_disasm.txt` | 已含本轮前归档；`sub_111BA` 反汇编见会话记录/`re/`（可补归档） |
+
+### 25.4 实测判据
+
+```
+build\rescheck.exe  →  PASS: 160 cases, 0 failures（首轮即通过）
+pathcheck 1000/0  utilcheck 2200/0  sprite24check 2100/0  gfxcheck 1450/0  rlecheck 1900/0
+regress.ps1         →  ALL PASS 8/8
+```
+
+### 25.5 下轮入口
+
+1. 用同一 CRT 重定向术把 **`sub_111BA` 接进宿主**（宿主启动时替换这 6 个 CRT 入口，
+   游戏即用转译的资源加载）——这是"真正在跑转译代码"的第一步，且几乎零风险（纯等价替换）。
+2. ★★★ `sub_15F84`（文本/脚本渲染，1380 B usercall）：可先用 CRT/内存重定向 + 全局状态快照
+   做对拍（比 path 簇更复杂，需先归档它写到的全局区 `0x53xxx`）。
+3. 表访问器 `0x4E7DD..0x4E8BC`；计时器/调色板动画 `0x4E310/0x4E31C`（需端口/时间，可用同样的
+   "重定向依赖"术测其表逻辑）。

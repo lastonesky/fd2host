@@ -87,6 +87,7 @@ pwsh -File E:\FD2\port\build.ps1 -Target gfxcheck; & E:\FD2\port\build\gfxcheck.
 pwsh -File E:\FD2\port\build.ps1 -Target sprite24check; & E:\FD2\port\build\sprite24check.exe
 pwsh -File E:\FD2\port\build.ps1 -Target utilcheck; & E:\FD2\port\build\utilcheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target pathcheck; & E:\FD2\port\build\pathcheck.exe
+pwsh -File E:\FD2\port\build.ps1 -Target rescheck; & E:\FD2\port\build\rescheck.exe
 
 # 一键回归（重建沙箱、删 FD2.TMP、autokey 走 continue、8 项断言）
 pwsh -File E:\FD2\port\regress.ps1
@@ -138,6 +139,7 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 | 游戏自己不报错也没画面 | 看 `dos: write h=1 ... n=` 是否为 0（游戏 printf 被丢，§8-35）；看“端口操作数”是否暴涨到几千万（`0x3DA` 死循环，§8-38）；看是否卡在 `AIL_register_timer`（回调不触发，§14.5） |
 | 手工复现 fresh install | 数据文件拷到任意目录 + **删 `FD2.TMP`** → `--gamedir <该目录> --autokey=...` |
 | 反汇编/反编译游戏函数 | ida MCP（主）；Ghidra HTTP 桥 `/read_memory`、`/list_segments`（批量） |
+| **对拍依赖文件/内存的游戏函数** | **CRT 重定向术**（§25.2）：`le_map_and_relocate` 后把 CRT 入口 `0x3706E/0x3776E/0x37324/0x3759C/0x37940/0x373CA` 头 5 字节改成 jmp 到宿主 libc 封装，再直接调原机器码——不碰游戏逻辑，不需要 DOS 层。样例见 `src/rescheck.c` |
 
 ## 6. 常见坑（速查，完整清单见 `PROGRESS.md` §8，**动手前先通读 §8**）
 

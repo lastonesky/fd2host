@@ -1,0 +1,81 @@
+# sub_111BA - LMI resource loader (our build, md5 a6e341a8...)
+
+000111ba  68 20 00 00 00       push    20h ; ' '
+000111bf  e8 6b 5e 02 00       call    sub_3702F
+000111c4  53                   push    ebx
+000111c5  56                   push    esi
+000111c6  57                   push    edi
+000111c7  8b 5c 24 14          mov     ebx, [esp+0Ch+arg_4]
+000111cb  85 db                test    ebx, ebx
+000111cd  74 09                jz      short loc_111D8
+000111cf  53                   push    ebx
+000111d0  e8 99 65 02 00       call    free
+000111d5  83 c4 04             add     esp, 4
+000111d8  68 de 00 05 00       push    offset aRb_12; "rb"
+000111dd  ff 74 24 14          push    [esp+10h+arg_0]
+000111e1  e8 3e 61 02 00       call    fopen
+000111e6  83 c4 08             add     esp, 8
+000111e9  89 c6                mov     esi, eax
+000111eb  85 c0                test    eax, eax
+000111ed  75 16                jnz     short loc_11205
+000111ef  ff 74 24 10          push    [esp+0Ch+arg_0]
+000111f3  68 e1 00 05 00       push    offset aFileNotFoundS; "\n\n File not found %s!!! \n\n"
+000111f8  e8 1c 5f 02 00       call    printf
+000111fd  83 c4 08             add     esp, 8
+00011200  e9 59 ee ff ff       jmp     loc_1005E
+00011205  6a 08                push    8
+00011207  e8 62 5e 02 00       call    malloc
+0001120c  89 c3                mov     ebx, eax
+0001120e  83 c4 04             add     esp, 4
+00011211  6a 00                push    0
+00011213  8b 44 24 1c          mov     eax, [esp+10h+arg_8]
+00011217  c1 e0 02             shl     eax, 2
+0001121a  83 c0 06             add     eax, 6
+0001121d  50                   push    eax
+0001121e  56                   push    esi
+0001121f  e8 1c 67 02 00       call    fseek
+00011224  83 c4 0c             add     esp, 0Ch
+00011227  56                   push    esi
+00011228  6a 08                push    8
+0001122a  6a 01                push    1
+0001122c  53                   push    ebx
+0001122d  e8 98 61 02 00       call    sub_373CA
+00011232  83 c4 10             add     esp, 10h
+00011235  8b 3b                mov     edi, [ebx]
+00011237  8b 43 04             mov     eax, [ebx+4]
+0001123a  29 f8                sub     eax, edi
+0001123c  a3 ff 3b 05 00       mov     dword_53BFF, eax
+00011241  53                   push    ebx
+00011242  e8 27 65 02 00       call    free
+00011247  83 c4 04             add     esp, 4
+0001124a  ff 35 ff 3b 05 00    push    dword_53BFF
+00011250  e8 19 5e 02 00       call    malloc
+00011255  83 c4 04             add     esp, 4
+00011258  89 c3                mov     ebx, eax
+0001125a  85 c0                test    eax, eax
+0001125c  75 1a                jnz     short loc_11278
+0001125e  ff 74 24 18          push    [esp+0Ch+arg_8]
+00011262  ff 74 24 14          push    [esp+10h+arg_0]
+00011266  68 fc 00 05 00       push    offset aOutOfMemoryAtL; "Out of Memory at Load %s Number:%d!!\n"
+0001126b  e8 a9 5e 02 00       call    printf
+00011270  83 c4 0c             add     esp, 0Ch
+00011273  e9 e6 ed ff ff       jmp     loc_1005E
+00011278  6a 00                push    0
+0001127a  57                   push    edi
+0001127b  56                   push    esi
+0001127c  e8 bf 66 02 00       call    fseek
+00011281  83 c4 0c             add     esp, 0Ch
+00011284  56                   push    esi
+00011285  ff 35 ff 3b 05 00    push    dword_53BFF
+0001128b  6a 01                push    1
+0001128d  53                   push    ebx
+0001128e  e8 37 61 02 00       call    sub_373CA
+00011293  83 c4 10             add     esp, 10h
+00011296  56                   push    esi
+00011297  e8 00 63 02 00       call    fclose
+0001129c  83 c4 04             add     esp, 4
+0001129f  89 d8                mov     eax, ebx
+000112a1  5f                   pop     edi
+000112a2  5e                   pop     esi
+000112a3  5b                   pop     ebx
+000112a4  c3                   retn

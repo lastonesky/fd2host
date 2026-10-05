@@ -24,11 +24,13 @@ port/
 │   │   └── sprite24.h/.c 24×24 精灵 RLE 族（7 种颜色模式，PROGRESS §22）
 │   │   └── util.h/util.c 字节/调色板工具（查表翻译/校验和/反混淆/掩码重着色，PROGRESS §23）
 │   │   └── path.h/path.c 地形代价洪泛与寻路（移动范围/最优路线，PROGRESS §24）
+│   │   └── res.h/res.c   LMI 容器资源加载（原 0x111BA，PROGRESS §25）
 │   ├── rlecheck.c     转译对拍测试：随机 RLE 流 × 原机器码 vs 转译 C，逐字节比对
 │   ├── gfxcheck.c     转译对拍测试：图形 blit 工具族 × 原机器码 vs 转译 C，逐字节比对
 │   ├── sprite24check.c 转译对拍测试：24×24 精灵 RLE 族 × 原机器码 vs 转译 C，逐字节比对
 │   ├── utilcheck.c    转译对拍测试：字节/调色板工具 × 原机器码 vs 转译 C，逐字节比对
 │   ├── pathcheck.c    转译对拍测试：地形代价洪泛/寻路 × 原机器码 vs 转译 C，逐字节比对
+│   ├── rescheck.c     转译对拍测试：资源加载器（把 CRT 文件/内存调用重定向到 libc 后调原机器码）
 │   ├── ail.c          AIL 替换层：16 个 AIL_* 入口 → 宿主实现（数字音效走 WinMM waveOut）
 │   ├── xmidi.c        XMIDI 解析（FDMUS.DAT 的 XDIR/CAT/FORM XMID）→ 事件列表
 │   ├── synth.c        自带软件合成器：事件 → PCM → waveOut（音乐不依赖系统 MIDI）
@@ -52,6 +54,7 @@ pwsh -File port\build.ps1 -Target gfxcheck ; & port\build\gfxcheck.exe   # 1450 
 pwsh -File port\build.ps1 -Target sprite24check ; & port\build\sprite24check.exe  # 2100 例
 pwsh -File port\build.ps1 -Target utilcheck ; & port\build\utilcheck.exe      # 2200 例
 pwsh -File port\build.ps1 -Target pathcheck ; & port\build\pathcheck.exe      # 1000 例
+pwsh -File port\build.ps1 -Target rescheck ; & port\build\rescheck.exe        # 160 例
 
 # 跑别的 DOS/4GW(LE) 游戏（通用化见 PROGRESS.md §14，先做静态体检）
 python port\re\preflight.py "E:\Games\FDCollection\Game\FDPS\FDPS.EXE"
@@ -146,6 +149,7 @@ LE 加载 + 7937 条 fixup 应用
 → 第 22 轮：**24×24 精灵 RLE 族转译** —— 7 个颜色模式变体 → `src/game/sprite24.c`，对拍 **2100 例逐字节一致**；`docs/` 清理到 9 MB/274 文件（`docs/KEEP.md`）；修复对拍 exe 自己被 ASLR 放进 guest 窗口的问题（加 `/BASE:0x60000000`）
 → 第 23 轮：**字节/调色板工具转译** —— 6 函数 → `src/game/util.c`，对拍 **2200 例逐字节一致**；发现 `0x4DF09` 不守 ABI（改 EBX 不保存）与 `0x4E795` 返回值语义两个坑
 → 第 24 轮：**地形代价洪泛/寻路转译** —— `0x4E390..0x4E751`（2 入口 + 7 内部）→ `src/game/path.c`，对拍 **1000 例逐字节一致**；确认这是单位的**移动范围 + 最优路径**算法（地形代价表 + 四方向 DFS + 转向择优）
+→ 第 25 轮：**资源加载器转译 + CRT 重定向对拍术** —— `0x111BA` → `src/game/res.c`，对拍 **160 例逐字节一致**；新方法：把 Watcom CRT 的文件/内存入口换成宿主 libc 后再调原机器码，**解锁依赖文件/内存的函数测试**（下一步 `sub_15F84` 可用）
 ```
 
 ## 当前状态与下一步
@@ -179,8 +183,8 @@ LE 加载 + 7937 条 fixup 应用
 6. **逐步源码化（路线 C 主体）**：按 `re/RE_MAP.md` 的模块顺序把机器码替换为 C 源码，
    最终形成可编译 x86-64 的引擎。**已完成**：RLE 解码（`rle.c`，1900 例）、图形 blit 工具族
    （`gfx.c`，1450 例）、24×24 精灵 RLE 族（`sprite24.c`，2100 例）、字节/调色板工具
-   （`util.c`，2200 例）、地形代价洪泛/寻路（`path.c`，1000 例）；下一批：表访问器
-   `0x4E7DD..0x4E8BC`，然后资源加载 `sub_111BA`、文本/脚本渲染 `sub_15F84`。
+   （`util.c`，2200 例）、地形代价洪泛/寻路（`path.c`，1000 例）、资源加载（`res.c`，160 例）；
+   下一批：用 CRT 重定向术把 `res.c` 接进宿主，然后 `sub_15F84` 文本/脚本渲染。
 7. **跨平台**：单代码库 + 后端选择（**不用 git 分支**）。已抽出的是 `render.h`/`host.h` +
    入口层 `main_win32.c`（第 1 步完成）；`audio.h` 随**第 3 步**（sokol_audio 替换 waveOut）抽，
    `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入
@@ -203,6 +207,9 @@ LE 加载 + 7937 条 fixup 应用
 - `utilcheck.exe`：字节/调色板 6 函数的对拍（2200 例，含返回值与 `word_6017B` 断言）；
   `0x4DF09` 不守 ABI，测试用 asm 保存/恢复 EBX（PROGRESS §23.2）。
 - `pathcheck.exe`：地形代价洪泛/寻路的对拍（1000 例，比较 map 全量 + 输出缓冲 + 最优长度）（PROGRESS §24）。
+- `rescheck.exe`：资源加载器的对拍（160 例）。它先把游戏 CRT 的 `fopen/fclose/fseek/fread/malloc/free`
+  入口改成 jmp 到宿主 libc，再调**原版 `0x111BA`**——这套"CRT 重定向"术可测试任何依赖
+  文件/内存的游戏函数（PROGRESS §25.2）。
 - 所有走 `le.c` 的 console 对拍 exe 都链 `/BASE:0x60000000`：否则 exe 自己的映像会被
   ASLR 放进 guest 窗口 `0x10000..0x6FFFF` 导致预留失败（PROGRESS §22.4）。
 - `--screenshot=<file.bmp> [--shot-frame=<n>]`：导出**实际送显**的 RGB 缓冲，不依赖窗口/桌面，
