@@ -32,6 +32,7 @@
 #include "le.h"
 #include "dos.h"
 #include "ail.h"
+#include "repl.h"
 #include "xmidi.h"
 #include "synth.h"
 #include "render.h"
@@ -44,6 +45,7 @@ static int       g_scale = 3;
 static int       g_show_frame = 1;
 
 static uint32_t  g_rgb[320 * 200];
+static unsigned  g_replace_mask = REPL_ALL;  /* --replace=none|all|groups */
 static volatile int g_running  = 1;
 static volatile int g_use_image;         /* load pre-relocated images     */
 static volatile int g_frames;
@@ -194,7 +196,7 @@ static int exit_file_ok(void)
     uint64_t size;
 
     if (!g_exit_when_path[0])
-        return 1;                       /* no file condition given */
+        return 0;                       /* no file condition: never "ready" */
     /* FindFirstFile reads directory metadata: it never fails with a sharing
      * violation while the game still has the file open for writing. */
     h = FindFirstFileA(g_exit_when_path, &fd);
@@ -408,7 +410,7 @@ static int opt_wants_value(const char *a)
         "--exe", "--gamedir", "--exit-after", "--trace", "--screenshot",
         "--wshot", "--shot-frame", "--ail", "--ail-dump", "--ail-rate", "--ail-bits",
         "--midi-rate", "--midi-backend", "--gm-bank", "--autokey",
-        "--midi-dump", "--cmdtail", "--log", "--exit-when-file"
+        "--midi-dump", "--cmdtail", "--log", "--exit-when-file", "--replace"
     };
     size_t i;
     for (i = 0; i < sizeof opts / sizeof opts[0]; i++)
@@ -557,6 +559,9 @@ int host_init(int argc, char **argv)
             const char *m = argv[i] + 6;
             g_ail_mode = !strcmp(m, "none") ? 2 : (!strcmp(m, "fd2") ? 1 : 0);
         }
+        else if (!strncmp(argv[i], "--replace=", 10)) {
+            g_replace_mask = repl_parse(argv[i] + 10);
+        }
         else if (!strncmp(argv[i], "--ail-dump=", 11)) {
             g_ail_dump_dir = argv[i] + 11;
         }
@@ -681,6 +686,21 @@ int host_init(int argc, char **argv)
                    "patches (original Miles code runs; --ail=fd2 forces "
                    "FD2's table)\n", bn);
         }
+    }
+
+    /* Install the verified source translations over the original machine
+     * code (src/repl.c). The addresses are FD2-specific, so this is gated
+     * to the FD2 build; --replace=none keeps the original code for A/B. */
+    {
+        const char *bn = strrchr(exe, '\\');
+        bn = bn ? bn + 1 : exe;
+        if (_stricmp(bn, "FD2.EXE") != 0)
+            printf("repl: '%s' is not FD2 - source translations skipped\n", bn);
+        else if (g_replace_mask == 0)
+            printf("repl: disabled (--replace=none) - original code runs\n");
+        else
+            repl_install((uint8_t *)(uintptr_t)g_le.objects[0].base,
+                         g_replace_mask);
     }
 
     return 0;

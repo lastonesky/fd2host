@@ -17,6 +17,7 @@ port/
 │   ├── le.h / le.c    LE(Linear Executable) 加载器：解析对象、页、fixup 重定位
 │   ├── dos.h / dos.c  平台层：VEH 捕获 int/特权指令 + DOS/DPMI/BIOS 服务替换
 │   ├── host.c         宿主主程序：地址空间预留、窗口、显示、键盘、主循环
+│   ├── repl.h/repl.c  **源码接入层**：把已验证的转译函数入口改成 jmp 到 C 实现（默认开，`--replace=` 可关）
 │   ├── letest.c       加载器自检（与 Ghidra 导出的重定位镜像逐字节对比）
 │   ├── game/          **源码转译产物**（从逆向还原的 C 源码，带原地址注释）
 │   │   ├── rle.h/rle.c   RLE 解码器（原 0x4E98D/0x4E8D3，PROGRESS §19）
@@ -64,6 +65,7 @@ Start-Process port\build\fd2host.exe -ArgumentList `
 
 日志写入 `port/build/host.log`（宿主是 WINDOWS 子系统，不弹控制台窗口）。
 可用参数：`--gamedir <目录>`、`--exe <路径>`、`--exit-after <秒>`、`--trace=<n>`、`--headless`、
+`--replace=<none|all|rle,gfx,sprite24,util,path>`（默认 `all`：把已对拍的转译函数接入游戏；`none` = 原机器码，用于 A/B）
 **所有带值的参数都同时支持 `--opt value` 与 `--opt=value` 两种写法**（`host_init()` 统一归一化，
 另一种写法不再静默回退到默认值，见 `PROGRESS.md` §8-32/§8-33）、
 `--exit-when-file=<路径>:<字节数>`（文件写满且 autokey 跑完 → 提前干净退出 + 2 s 缓冲，
@@ -150,6 +152,7 @@ LE 加载 + 7937 条 fixup 应用
 → 第 23 轮：**字节/调色板工具转译** —— 6 函数 → `src/game/util.c`，对拍 **2200 例逐字节一致**；发现 `0x4DF09` 不守 ABI（改 EBX 不保存）与 `0x4E795` 返回值语义两个坑
 → 第 24 轮：**地形代价洪泛/寻路转译** —— `0x4E390..0x4E751`（2 入口 + 7 内部）→ `src/game/path.c`，对拍 **1000 例逐字节一致**；确认这是单位的**移动范围 + 最优路径**算法（地形代价表 + 四方向 DFS + 转向择优）
 → 第 25 轮：**资源加载器转译 + CRT 重定向对拍术** —— `0x111BA` → `src/game/res.c`，对拍 **160 例逐字节一致**；新方法：把 Watcom CRT 的文件/内存入口换成宿主 libc 后再调原机器码，**解锁依赖文件/内存的函数测试**（下一步 `sub_15F84` 可用）
+→ 第 26 轮：**转译代码接入宿主** —— 新增 `src/repl.c`，把 23 个已对拍函数入口 jmp 到 C 实现，游戏**真的在跑转译代码**；`regress.ps1 -Replace none/all` 均 8/8，固定帧 150 对拍与基线噪声一致；同轮修复无 `--exit-when-file` 时 `--exit-after` 2 s 早退的 bug
 ```
 
 ## 当前状态与下一步
@@ -181,10 +184,11 @@ LE 加载 + 7937 条 fixup 应用
 5. **首次保存实测**：`FD2.SAV` 不存在时的创建路径（机制已通，回归只覆盖了 `FD2.TMP`）
    + "存档变小"时的截断对拍。可复现回归：`pwsh -File port\regress.ps1`。
 6. **逐步源码化（路线 C 主体）**：按 `re/RE_MAP.md` 的模块顺序把机器码替换为 C 源码，
-   最终形成可编译 x86-64 的引擎。**已完成**：RLE 解码（`rle.c`，1900 例）、图形 blit 工具族
-   （`gfx.c`，1450 例）、24×24 精灵 RLE 族（`sprite24.c`，2100 例）、字节/调色板工具
+   最终形成可编译 x86-64 的引擎。**已验证并对拍**：RLE 解码（`rle.c`，1900 例）、图形 blit
+   工具族（`gfx.c`，1450 例）、24×24 精灵 RLE 族（`sprite24.c`，2100 例）、字节/调色板工具
    （`util.c`，2200 例）、地形代价洪泛/寻路（`path.c`，1000 例）、资源加载（`res.c`，160 例）；
-   下一批：用 CRT 重定向术把 `res.c` 接进宿主，然后 `sub_15F84` 文本/脚本渲染。
+   **其中 23 个已通过 `src/repl.c` 接入运行中的游戏**（默认 `--replace=all`）；下一批：`sub_15F84`
+   文本/脚本渲染、表访问器 `0x4E7DD..0x4E8BC`，以及 CRT 堆/文件层整体替换（`res.c` 随后接入）。
 7. **跨平台**：单代码库 + 后端选择（**不用 git 分支**）。已抽出的是 `render.h`/`host.h` +
    入口层 `main_win32.c`（第 1 步完成）；`audio.h` 随**第 3 步**（sokol_audio 替换 waveOut）抽，
    `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入

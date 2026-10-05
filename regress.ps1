@@ -40,7 +40,10 @@ param(
     # Which binary to regression-test. build\fd2host.exe is whatever was
     # built last, so pass -Exe to test the other render backend explicitly:
     #   pwsh -File regress.ps1 -Exe build\fd2host_sokol.exe
-    [string] $Exe = "E:\FD2\port\build\fd2host.exe"
+    [string] $Exe = "E:\FD2\port\build\fd2host.exe",
+    # A/B: "" = host default (all translations installed), "none" = original
+    # machine code only, or a group list (rle,gfx,sprite24,util,path).
+    [string] $Replace = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -77,14 +80,16 @@ for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
     # ${...}: braces keep PowerShell from getting confused by the ':size'
     # suffix of --exit-when-file. The regular --shot-frame stays as a
     # fallback; with the early exit the host dumps its last frame instead.
-    $proc = Start-Process $Exe -ArgumentList @(
+    $argList = @(
         "--gamedir=$sb",
         "--exit-after=$Seconds",
         "--exit-when-file=${sb}\FD2.TMP:207360",
         "--autokey=$schedule",
         "--screenshot=$shot",
         "--shot-frame=900"
-    ) -PassThru
+    )
+    if ($Replace) { $argList += "--replace=$Replace" }
+    $proc = Start-Process $Exe -ArgumentList $argList -PassThru
     Write-Host "attempt $attempt/$maxAttempts (autokey: $schedule; exit when FD2.TMP=207360, cap ${Seconds}s) ..."
 
     # Poll for the host's own exit instead of Start-Sleep ($Seconds + 15):

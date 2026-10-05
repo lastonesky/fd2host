@@ -2013,3 +2013,71 @@ regress.ps1         →  ALL PASS 8/8
    做对拍（比 path 簇更复杂，需先归档它写到的全局区 `0x53xxx`）。
 3. 表访问器 `0x4E7DD..0x4E8BC`；计时器/调色板动画 `0x4E310/0x4E31C`（需端口/时间，可用同样的
    "重定向依赖"术测其表逻辑）。
+
+---
+
+## 26. 第 26 轮：转译函数接入宿主 + `--exit-after` 早退 bug 修复（2026-10-05）
+
+### 26.1 先修 bug：无 `--exit-when-file` 时 `exit_file_ok()` 返回 1 → 任何 `--exit-after` 运行 2 s 就退
+
+`exit_file_ok()` 在未给文件条件时 `return 1`，于是看门狗的完成触发器
+`g_autokey_done && exit_file_ok()` 立刻为真 → 所有只带 `--exit-after` 的运行在
+`EXIT_SETTLE_MS=2000` 后提前退出（约 74 帧），与 README「`--exit-after=30`」矛盾。
+**修复**：无路径时 `return 0`（没有文件条件就永远不算"写满"）。验证：
+
+```
+--exit-after=5 运行 → elapsed=5.1 s，watchdog fired after 5 s (159 frames drawn)
+```
+
+`regress.ps1` 传了 `--exit-when-file`，不受影响。同轮给 `regress.ps1` 加了
+`-Replace ""|none|all|groups` 参数，便于 A/B。
+
+### 26.2 接入：`src/repl.c` —— 让游戏真的跑转译代码
+
+新增替换层：把每个已通过机器码对拍的转译函数的**入口**改写成 5 字节 `jmp rel32`
+指向 C 实现（与 `src/ail.c` 替换 AIL 入口同一机制），在 `le_map_and_relocate` 之后、
+游戏线程启动之前安装。共 **23 个**：
+
+- `rle`：`0x4E98D`/`0x4E8D3`；`gfx`：`0x4EC7C/0x4ECBF/0x4ED0B/0x4ED34/0x4ED7A/0x4EEE0`；
+- `sprite24`：`0x4DF84/0x4E016/0x4E0A2/0x4E127/0x4E1A6/0x4E22A/0x4E29C`；
+- `util`：`0x4DED4/0x4DEEC/0x4DF09/0x4DF28/0x4DF4C/0x4E795`；`path`：`0x4E390/0x4E4F6`。
+
+**安全性论证**（写进 `src/repl.h`）：这些是普通 cdecl 函数，MSVC 实现保留的 callee-saved
+寄存器是原版保证的超集（唯一例外 `0x4DF09` 原版不保存 EBX，我们的 C 保存，安全）；
+**ida 实证：没有任何被替换集合之外的代码读取这些 scratch 全局**（`0x627A3..0x627B6`、
+`0x6017B`、`0x60060..0x6017A` 的 xref 全在集合内）；只对 `FD2.EXE` build 生效（地址是 FD2 的）。
+`--replace=none|all|groups` 可切换（默认 all）。**`src/game/res.c` 暂不接入**：原版走 Watcom
+堆分配、游戏再用同一堆 free，换成 libc malloc 会混堆，等 CRT 堆一起替换时再接。
+
+### 26.3 A/B 验证
+
+```
+pwsh -File regress.ps1 -Replace none  → ALL PASS 8/8（repl: disabled）
+pwsh -File regress.ps1 -Replace all   → ALL PASS 8/8（repl: installed 23）
+```
+
+- regress 尾帧不可直接比：它是"退出前最后一帧"，动画相位不同 ⇒ 两次 none 也差 **17.9%** 像素。
+- 改为**固定帧 150**（`--shot-frame=150` + 指向不存在文件的 `--exit-when-file` 抑制早退）：
+
+| 对比 | 差异像素 |
+|---|---|
+| none vs none | 143 / 64000（0.2234%） |
+| all vs all | 224 / 64000（0.3500%） |
+| **none vs all** | **143 / 64000（0.2234%）** |
+
+⇒ none↔all 的差异**不超过 none↔none 的基线**（游戏自带 ~0.2% 帧定时噪声），转译未引入额外差异；
+结合 23 个函数已逐字节对拍，判定**接入等价**。
+
+### 26.4 实测判据
+
+```
+fd2host: repl: installed 23 translated function(s) (mask 0x1F)
+regress.ps1 (-Replace none / all): ALL PASS 8/8
+rlecheck 1900/0  gfxcheck 1450/0  sprite24check 2100/0  utilcheck 2200/0  pathcheck 1000/0  rescheck 160/0
+```
+
+### 26.5 下轮入口
+
+1. 继续转译 ★★★ `sub_15F84`（文本/脚本渲染）——现在可用「CRT 重定向 + 固定帧对拍 + 接入 repl」
+   的完整链路；表访问器 `0x4E7DD..0x4E8BC` 顺带清掉。
+2. 把 CRT 堆（`malloc/free/_nmalloc/...`）与文件层整体替换为宿主实现，届时 `res.c` 也可接入。
