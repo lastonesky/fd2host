@@ -151,12 +151,12 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | `0x4EBE3` | 随机表滚动 | `ROL16(word_627B8-28652)` | ★ |
 | `0x3702F` | 库公共 thunk？ | 538 lib + 16 game 调用，`_InterlockedExchange` 包装 —— **待确认**（lib 层，不转译） | — |
 
-> **转译进展（截至第 28 轮）**：`0x4E98D`+`0x4E8D3` RLE → `rle.c`（1900）；图形 blit 工具族
+> **转译进展（截至第 29 轮）**：`0x4E98D`+`0x4E8D3` RLE → `rle.c`（1900）；图形 blit 工具族
 > `0x4EC7C..0x4EEE0` → `gfx.c`（1450）；0xC0-RLE 文本 blit `0x4EBFF/0x4EC31/0x4EBAB` → `rle2.c`（1200）；
 > 24×24 精灵 RLE 族 → `sprite24.c`（2100）；字节/调色板工具 → `util.c`（2200）；地形代价洪泛/寻路
 > `0x4E390..0x4E751` → `path.c`（1000）；表访问器 `0x4E7DD..0x4E8BC` → `tables.c`（4528）；
-> 资源加载 `0x111BA` → `res.c`（160）；其中 **37 个经 `src/repl.c` 接入运行中的游戏**
-> （机器码逐字节对拍 + `regress` 8/8，见 PROGRESS §19..§28）。
+> 资源加载 `0x111BA` → `res.c`（160）；对话框辅助 `0x16559/0x16E24` → `dlg.c`（800）；
+> 其中 **39 个经 `src/repl.c` 接入运行中的游戏**（机器码逐字节对拍 + `regress` 8/8，PROGRESS §19..§29）。
 
 游戏侧高频依赖（`lib_nosym`，需归类确认属于谁）：`0x4E381(15/64)`、`0x4EBE3(28/40)`、`0x4DF4C(56/32)`、`0x4E22A(114/13)`、`0x4E31C(101/15)` —— 0x4D000..0x4F000 段像**游戏自带工具库**（位流、24×24 图元、BIOS 封装），优先归类。
 
@@ -187,6 +187,7 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 |   | ✅ **资源加载器已完成**（第 25 轮）：`src/game/res.c`（原 `0x111BA`）+ `rescheck` 对拍 160 例；同轮建立 **CRT 重定向对拍术**（PROGRESS §25.2） | 同 §19.4 + CRT 替换 |
 |   | ✅ **表访问器已完成**（第 27 轮）：`src/game/tables.c`（11 个）+ `tablescheck` 对拍 4528 例（PROGRESS §27） | 同 §19.4 |
 |   | ✅ **0xC0-RLE 文本 blit 已完成**（第 28 轮）：`src/game/rle2.c`（3 变体 + 共享解码器）+ `rle2check` 对拍 1200 例（PROGRESS §28） | 同 §19.4 |
+|   | ✅ **对话框辅助已完成**（第 29 轮）：`src/game/dlg.c`（`0x16559` 贴 DATO 子图 / `0x16E24` 文本上滚）+ `dlgcheck` 对拍 800 例（整帧 VGA 对比，PROGRESS §29） | 同 §19.4 |
 | 3 | 图形 blit/调色板（`gfx_A0000` 粗筛集，先精化名单） | fd2host 显示对拍 |
 | 4 | 主状态机 + 脚本 VM | 逐步替换法：机器码 vs 转译 C 逐函数对拍（**待确认**可行性） |
 | 5 | CRT/平台层 → Win32（`dos.c` 已有大半）+ AIL 打桩 | host.log 行为等价 |
@@ -251,9 +252,9 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 2. 提取 `main` 状态机两张函数指针表（`funcs_25E23`/`funcs_25E3A`）的真实地址与项。
 3. 精化 `gfx_A0000` 名单（当前是字节粗筛，含误报）。
 4. 全局状态区 `dword_53A00..0x53F00` 的结构还原（`main` 已见约 20 个成员）。
-5. **下一批源码转译目标**：★★★ `sub_15F84`（文本/脚本渲染器，词流解释器；已补齐其依赖的
-   `rle2` 文本 blit，仍需 `sub_16559/16C57/16B43/16E24/164E8/12C60/165AC` 等 callee 与 `0x53xxx`
-   全局区）；同类纯函数 `0x4EB59`（展开）/`0x4EBE3`（滚动随机）/`0x4EB48`（dword 表）；CRT 堆/文件层替换。
+5. **下一批源码转译目标**：★★★ `sub_15F84`（文本/脚本渲染器）：已补齐依赖 `rle2`、`dlg`（`0x16559/0x16E24`）；
+   仍需 `sub_165AC`（开框 5 阶段，`malloc`+快照+格网+delay）、`sub_16B43`（收框）、`sub_16C57`（等键+嘴型）、
+   `sub_164E8` 等；这些用 VGA + delay/malloc 同法对拍。之后整体转译 `sub_15F84` 对拍 VGA。
 6. **官方逆向知识库**：`port/docs/`（已 curate 到 9 MB/274 文件，见 `docs/KEEP.md`）可作语义线索；
    但**它是另一个 FD2.EXE build**（md5 `b97caf22…`，非本项目 `a6e341a8…`），地址/常量/指令
    一律以 `E:\FD2\FD2.EXE.i64` 复核。详见 PROGRESS §21.1/§22.1。

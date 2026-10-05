@@ -2202,3 +2202,49 @@ pathcheck 1000/0  rescheck 160/0  tablescheck 4528/0  rle2check 1200/0
    `sub_10620` 已确认只是"BIOS 键盘有待按键"检查（`BDA 0x41A != 0x41C`），`0x4ED7A` 的返回值
    被它忽略（前者不受我们的 void 化影响）。
 2. 同类纯函数：`0x4EB59`（按 a1 纵向/横向展开）、`0x4EBE3`（滚动随机）、`0x4EB48`（dword 表）。
+
+---
+
+## 29. 第 29 轮：对话框辅助函数转译（0x16559 / 0x16E24）（2026-10-05）
+
+### 29.1 转译：`src/game/dlg.c`
+
+向着 ★★★ `sub_15F84` 走，先清掉它两个**只依赖 VGA + 两个全局**的辅助函数：
+
+| 转译名 | 原地址 | 语义 |
+|---|---|---|
+| `dlg_blit_dato` | `0x16559` | 取 DATO 资源偏移表第 `idx` 项指向的子图（`[u16 w][u16 h][rle2 流]`），贴到 `0xA0000+box_pos`；`box_pos==0x9017`（下框）用 `rle2_blit_mirror` 镜像，否则 `rle2_blit` |
+| `dlg_scroll_text` | `0x16E24` | 上/下框（`0x728`/`0x9017`）文本区上滚：5 轮各把 `row[j+3]→row[j]`（208 B），再整体 `row[j+4]→row[j]`，末 3 行 `memset(0x4A)` |
+
+两个函数都读原全局 `dword_53C67`（框位置）；`dlg_blit_dato` 另读 `dword_53A85`（DATO 缓冲）。
+VGA 在 `0xA0000`，确认已被 `le_reserve_address_space()` 的 64 KiB 块预留/提交，测试可直接读写。
+
+### 29.2 对拍（`src/dlgcheck.c`）
+
+构造合成 DATO 资源（4 个子图，每子图随机 rle2 流）；随机框位置（`0x728`/`0x9017`/
+一个无效值测 no-op 分支）；VGA 先填哨兵、跑原版存结果、重置 VGA、跑转译版，**整帧 64000 字节对比**。
+
+```
+build\dlgcheck.exe  →  PASS: 800 cases, 0 failures
+```
+
+### 29.3 接入 + 新分组
+
+新增 `REPL_DLG` 分组（`--replace=...` 支持 `dlg`），2 个函数加入 `src/repl.c`（包装器从
+`0x53A85`/`0x53C67` 读全局后调 C 版）⇒ 接入数 **37 → 39**，mask `0x3F`。
+
+### 29.4 实测判据
+
+```
+regress.ps1 ALL PASS 8/8（repl: installed 39, mask 0x3F）
+rlecheck 1900/0  gfxcheck 1450/0  sprite24check 2100/0  utilcheck 2200/0
+pathcheck 1000/0  rescheck 160/0  tablescheck 4528/0  rle2check 1200/0  dlgcheck 800/0
+```
+
+### 29.5 下轮入口
+
+1. 继续 `sub_15F84` 的依赖：`sub_165AC`（开框 5 阶段，688 B，`malloc` 5×26668 + `sub_15E71/
+   15E9E` 快照 + `sub_168B6` 格网 + `delay`）、`sub_16B43`（收框，276 B）、`sub_16C57`（等键+
+   嘴型，461 B）、`sub_164E8`/`sub_16E24`（已转译）等。这些需要 VGA + `delay` + `malloc`，
+   可用同法对拍（VGA 已在地址空间；`delay`/`malloc` 走游戏 CRT，纯）。
+2. 之后即可整体转译 `sub_15F84`（词流解释器）并对拍 VGA。

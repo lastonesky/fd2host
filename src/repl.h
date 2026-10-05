@@ -28,7 +28,8 @@
 #define REPL_SPRITE24 0x04u
 #define REPL_UTIL     0x08u
 #define REPL_PATH     0x10u
-#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH)
+#define REPL_DLG      0x20u
+#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG)
 
 /* "all" | "none" | comma-separated group names -> mask */
 unsigned repl_parse(const char *spec);

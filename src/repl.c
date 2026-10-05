@@ -26,6 +26,7 @@
 #include "game/path.h"
 #include "game/tables.h"
 #include "game/rle2.h"
+#include "game/dlg.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -47,6 +48,17 @@ static uint32_t __cdecl rep_t61955(int i) { return tbl_u32((const void *)(uintpt
 static void    *__cdecl rep_t6188A(int i) { return tbl_ptr((void *)(uintptr_t)0x6188Au,  7, i,   0); }
 static void    *__cdecl rep_t61646(int i) { return tbl_ptr((void *)(uintptr_t)0x61646u, 20, i,   0); }
 static void    *__cdecl rep_t602AD(int i) { return tbl_ptr((void *)(uintptr_t)0x602ADu, 23, i,   0); }
+
+/* 0x16559 / 0x16E24 read the FD2 globals dword_53A85 / dword_53C67. */
+static void __cdecl rep_dlg_blit(int idx)
+{
+    dlg_blit_dato((const void *)(uintptr_t)(*(const uint32_t *)(uintptr_t)0x53A85u),
+                  (int)(*(const uint32_t *)(uintptr_t)0x53C67u), idx);
+}
+static void __cdecl rep_dlg_scroll(void)
+{
+    dlg_scroll_text((int)(*(const uint32_t *)(uintptr_t)0x53C67u));
+}
 
 struct repl_entry {
     uint32_t    addr;     /* linear address of the original function */
@@ -106,6 +118,10 @@ static const struct repl_entry g_repl[] = {
     /* --- movement range + path tracer (src/game/path.c) --------------- */
     { 0x4E390, "path_mark",           (void *)path_mark,           REPL_PATH },
     { 0x4E4F6, "path_find",           (void *)path_find,           REPL_PATH },
+
+    /* --- dialogue box helpers (src/game/dlg.c) ------------------------ */
+    { 0x16559, "dlg_blit_dato",       (void *)rep_dlg_blit,         REPL_DLG },
+    { 0x16E24, "dlg_scroll_text",     (void *)rep_dlg_scroll,       REPL_DLG },
 };
 
 unsigned repl_parse(const char *spec)
@@ -127,6 +143,7 @@ unsigned repl_parse(const char *spec)
         else if (!_stricmp(tok, "sprite24")) mask |= REPL_SPRITE24;
         else if (!_stricmp(tok, "util"))     mask |= REPL_UTIL;
         else if (!_stricmp(tok, "path"))     mask |= REPL_PATH;
+        else if (!_stricmp(tok, "dlg"))      mask |= REPL_DLG;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;
