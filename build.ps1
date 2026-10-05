@@ -29,13 +29,16 @@ $targets = @{
     probe2 = @{ srcs = @("probe2.c"); libs = @(); subsystem = "console" }
     probe3 = @{ srcs = @("probe3.c"); libs = @(); subsystem = "console" }
     probe4 = @{ srcs = @("probe4.c"); libs = @(); subsystem = "console" }
-    letest = @{ srcs = @("letest.c", "le.c"); libs = @(); subsystem = "console" }
+    letest = @{ srcs = @("letest.c", "le.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/rle.c (source translation) vs the original
     # machine code at 0x4E98D / 0x4E8D3 - see src/rlecheck.c
-    rlecheck = @{ srcs = @("rlecheck.c", "le.c", "game\rle.c"); libs = @(); subsystem = "console" }
+    rlecheck = @{ srcs = @("rlecheck.c", "le.c", "game\rle.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/gfx.c (graphics blitter helpers) vs the
     # original machine code at 0x4ECBF/0x4EC7C/0x4ED0B/0x4ED34/0x4ED7A/0x4EEE0
-    gfxcheck = @{ srcs = @("gfxcheck.c", "le.c", "game\gfx.c"); libs = @(); subsystem = "console" }
+    gfxcheck = @{ srcs = @("gfxcheck.c", "le.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    # differential test: src/game/sprite24.c (24x24 sprite RLE family) vs the
+    # original machine code at 0x4DF84/0x4E016/0x4E0A2/0x4E127/0x4E1A6/0x4E22A/0x4E29C
+    sprite24check = @{ srcs = @("sprite24check.c", "le.c", "game\sprite24.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";

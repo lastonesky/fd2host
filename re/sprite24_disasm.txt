@@ -1,0 +1,485 @@
+
+===== 0x4DF84 size 146 =====
+0004df84  55                     push    ebp
+0004df85  8b ec                  mov     ebp, esp
+0004df87  57                     push    edi
+0004df88  56                     push    esi
+0004df89  53                     push    ebx
+0004df8a  8b 75 08               mov     esi, [ebp+arg_0]
+0004df8d  8b 7d 0c               mov     edi, [ebp+arg_4]
+0004df90  8b 4d 10               mov     ecx, [ebp+arg_8]
+0004df93  83 e9 18               sub     ecx, 18h
+0004df96  8b 55 14               mov     edx, [ebp+arg_C]
+0004df99  8b 45 18               mov     eax, [ebp+arg_10]
+0004df9c  8a e0                  mov     ah, al
+0004df9e  b6 07                  mov     dh, 7
+0004dfa0  8b e9                  mov     ebp, ecx
+0004dfa2  33 c9                  xor     ecx, ecx
+0004dfa4  b3 18                  mov     bl, 18h
+0004dfa6  b7 18                  mov     bh, 18h
+0004dfa8  ac                     lodsb
+0004dfa9  8a c8                  mov     cl, al
+0004dfab  d0 e1                  shl     cl, 1
+0004dfad  72 34                  jb      short loc_4DFE3
+0004dfaf  d0 e1                  shl     cl, 1
+0004dfb1  72 16                  jb      short loc_4DFC9
+0004dfb3  c0 e9 02               shr     cl, 2
+0004dfb6  fe c1                  inc     cl
+0004dfb8  2a f9                  sub     bh, cl
+0004dfba  ac                     lodsb
+0004dfbb  02 c4                  add     al, ah
+0004dfbd  22 c6                  and     al, dh
+0004dfbf  02 c2                  add     al, dl
+0004dfc1  f3 aa                  rep stosb
+0004dfc3  0a ff                  or      bh, bh
+0004dfc5  75 e1                  jnz     short loc_4DFA8
+0004dfc7  eb 42                  jmp     short loc_4E00B
+0004dfc9  c0 e9 02               shr     cl, 2
+0004dfcc  fe c1                  inc     cl
+0004dfce  2a f9                  sub     bh, cl
+0004dfd0  2a f9                  sub     bh, cl
+0004dfd2  ac                     lodsb
+0004dfd3  02 c4                  add     al, ah
+0004dfd5  22 c6                  and     al, dh
+0004dfd7  02 c2                  add     al, dl
+0004dfd9  47                     inc     edi
+0004dfda  aa                     stosb
+0004dfdb  e2 fc                  loop    loc_4DFD9
+0004dfdd  0a ff                  or      bh, bh
+0004dfdf  75 c7                  jnz     short loc_4DFA8
+0004dfe1  eb 28                  jmp     short loc_4E00B
+0004dfe3  d0 e1                  shl     cl, 1
+0004dfe5  72 17                  jb      short loc_4DFFE
+0004dfe7  c0 e9 02               shr     cl, 2
+0004dfea  fe c1                  inc     cl
+0004dfec  2a f9                  sub     bh, cl
+0004dfee  ac                     lodsb
+0004dfef  02 c4                  add     al, ah
+0004dff1  22 c6                  and     al, dh
+0004dff3  02 c2                  add     al, dl
+0004dff5  aa                     stosb
+0004dff6  e2 f6                  loop    loc_4DFEE
+0004dff8  0a ff                  or      bh, bh
+0004dffa  75 ac                  jnz     short loc_4DFA8
+0004dffc  eb 0d                  jmp     short loc_4E00B
+0004dffe  c0 e9 02               shr     cl, 2
+0004e001  fe c1                  inc     cl
+0004e003  03 f9                  add     edi, ecx
+0004e005  2a f9                  sub     bh, cl
+0004e007  0a ff                  or      bh, bh
+0004e009  75 9d                  jnz     short loc_4DFA8
+0004e00b  03 fd                  add     edi, ebp
+0004e00d  fe cb                  dec     bl
+0004e00f  75 95                  jnz     short loc_4DFA6
+0004e011  5b                     pop     ebx
+0004e012  5e                     pop     esi
+0004e013  5f                     pop     edi
+0004e014  5d                     pop     ebp
+0004e015  c3                     retn
+
+===== 0x4E016 size 140 =====
+0004e016  55                     push    ebp
+0004e017  8b ec                  mov     ebp, esp
+0004e019  57                     push    edi
+0004e01a  56                     push    esi
+0004e01b  53                     push    ebx
+0004e01c  8b 75 08               mov     esi, [ebp+arg_0]
+0004e01f  8b 7d 0c               mov     edi, [ebp+arg_4]
+0004e022  8b 55 10               mov     edx, [ebp+arg_8]
+0004e025  8b 6d 14               mov     ebp, [ebp+arg_C]
+0004e028  83 ea 18               sub     edx, 18h
+0004e02b  33 c9                  xor     ecx, ecx
+0004e02d  33 c0                  xor     eax, eax
+0004e02f  b3 18                  mov     bl, 18h
+0004e031  b7 18                  mov     bh, 18h
+0004e033  ac                     lodsb
+0004e034  8a c8                  mov     cl, al
+0004e036  d0 e1                  shl     cl, 1
+0004e038  72 30                  jb      short loc_4E06A
+0004e03a  d0 e1                  shl     cl, 1
+0004e03c  72 14                  jb      short loc_4E052
+0004e03e  c0 e9 02               shr     cl, 2
+0004e041  fe c1                  inc     cl
+0004e043  2a f9                  sub     bh, cl
+0004e045  ac                     lodsb
+0004e046  8a 44 05 00            mov     al, [ebp+eax+var_s0]
+0004e04a  f3 aa                  rep stosb
+0004e04c  0a ff                  or      bh, bh
+0004e04e  75 e3                  jnz     short loc_4E033
+0004e050  eb 45                  jmp     short loc_4E097
+0004e052  c0 e9 02               shr     cl, 2
+0004e055  fe c1                  inc     cl
+0004e057  2a f9                  sub     bh, cl
+0004e059  2a f9                  sub     bh, cl
+0004e05b  ac                     lodsb
+0004e05c  8a 44 05 00            mov     al, [ebp+eax+var_s0]
+0004e060  47                     inc     edi
+0004e061  aa                     stosb
+0004e062  e2 fc                  loop    loc_4E060
+0004e064  0a ff                  or      bh, bh
+0004e066  75 cb                  jnz     short loc_4E033
+0004e068  eb 2d                  jmp     short loc_4E097
+0004e06a  d0 e1                  shl     cl, 1
+0004e06c  72 15                  jb      short loc_4E083
+0004e06e  c0 e9 02               shr     cl, 2
+0004e071  fe c1                  inc     cl
+0004e073  2a f9                  sub     bh, cl
+0004e075  ac                     lodsb
+0004e076  8a 44 05 00            mov     al, [ebp+eax+var_s0]
+0004e07a  aa                     stosb
+0004e07b  e2 f8                  loop    loc_4E075
+0004e07d  0a ff                  or      bh, bh
+0004e07f  75 b2                  jnz     short loc_4E033
+0004e081  eb 14                  jmp     short loc_4E097
+0004e083  c0 e9 02               shr     cl, 2
+0004e086  fe c1                  inc     cl
+0004e088  2a f9                  sub     bh, cl
+0004e08a  8a 07                  mov     al, [edi]
+0004e08c  8a 44 05 00            mov     al, [ebp+eax+var_s0]
+0004e090  aa                     stosb
+0004e091  e2 f7                  loop    loc_4E08A
+0004e093  0a ff                  or      bh, bh
+0004e095  75 9c                  jnz     short loc_4E033
+0004e097  03 fa                  add     edi, edx
+0004e099  fe cb                  dec     bl
+0004e09b  75 94                  jnz     short loc_4E031
+0004e09d  5b                     pop     ebx
+0004e09e  5e                     pop     esi
+0004e09f  5f                     pop     edi
+0004e0a0  5d                     pop     ebp
+0004e0a1  c3                     retn
+
+===== 0x4E0A2 size 133 =====
+0004e0a2  55                     push    ebp
+0004e0a3  8b ec                  mov     ebp, esp
+0004e0a5  57                     push    edi
+0004e0a6  56                     push    esi
+0004e0a7  53                     push    ebx
+0004e0a8  8b 75 08               mov     esi, [ebp+arg_0]
+0004e0ab  8b 7d 0c               mov     edi, [ebp+arg_4]
+0004e0ae  8b 55 10               mov     edx, [ebp+arg_8]
+0004e0b1  8b 6d 14               mov     ebp, [ebp+arg_C]
+0004e0b4  83 ea 18               sub     edx, 18h
+0004e0b7  33 c9                  xor     ecx, ecx
+0004e0b9  33 c0                  xor     eax, eax
+0004e0bb  b3 18                  mov     bl, 18h
+0004e0bd  b7 18                  mov     bh, 18h
+0004e0bf  ac                     lodsb
+0004e0c0  8a c8                  mov     cl, al
+0004e0c2  d0 e1                  shl     cl, 1
+0004e0c4  72 30                  jb      short loc_4E0F6
+0004e0c6  d0 e1                  shl     cl, 1
+0004e0c8  72 14                  jb      short loc_4E0DE
+0004e0ca  c0 e9 02               shr     cl, 2
+0004e0cd  fe c1                  inc     cl
+0004e0cf  2a f9                  sub     bh, cl
+0004e0d1  ac                     lodsb
+0004e0d2  8a 44 05 00            mov     al, [ebp+eax+var_s0]
+0004e0d6  f3 aa                  rep stosb
+0004e0d8  0a ff                  or      bh, bh
+0004e0da  75 e3                  jnz     short loc_4E0BF
+0004e0dc  eb 3e                  jmp     short loc_4E11C
+0004e0de  c0 e9 02               shr     cl, 2
+0004e0e1  fe c1                  inc     cl
+0004e0e3  2a f9                  sub     bh, cl
+0004e0e5  2a f9                  sub     bh, cl
+0004e0e7  ac                     lodsb
+0004e0e8  8a 44 05 00            mov     al, [ebp+eax+var_s0]
+0004e0ec  47                     inc     edi
+0004e0ed  aa                     stosb
+0004e0ee  e2 fc                  loop    loc_4E0EC
+0004e0f0  0a ff                  or      bh, bh
+0004e0f2  75 cb                  jnz     short loc_4E0BF
+0004e0f4  eb 26                  jmp     short loc_4E11C
+0004e0f6  d0 e1                  shl     cl, 1
+0004e0f8  72 15                  jb      short loc_4E10F
+0004e0fa  c0 e9 02               shr     cl, 2
+0004e0fd  fe c1                  inc     cl
+0004e0ff  2a f9                  sub     bh, cl
+0004e101  ac                     lodsb
+0004e102  8a 44 05 00            mov     al, [ebp+eax+var_s0]
+0004e106  aa                     stosb
+0004e107  e2 f8                  loop    loc_4E101
+0004e109  0a ff                  or      bh, bh
+0004e10b  75 b2                  jnz     short loc_4E0BF
+0004e10d  eb 0d                  jmp     short loc_4E11C
+0004e10f  c0 e9 02               shr     cl, 2
+0004e112  fe c1                  inc     cl
+0004e114  03 f9                  add     edi, ecx
+0004e116  2a f9                  sub     bh, cl
+0004e118  0a ff                  or      bh, bh
+0004e11a  75 a3                  jnz     short loc_4E0BF
+0004e11c  03 fa                  add     edi, edx
+0004e11e  fe cb                  dec     bl
+0004e120  75 9b                  jnz     short loc_4E0BD
+0004e122  5b                     pop     ebx
+0004e123  5e                     pop     esi
+0004e124  5f                     pop     edi
+0004e125  5d                     pop     ebp
+0004e126  c3                     retn
+
+===== 0x4E127 size 127 =====
+0004e127  55                     push    ebp
+0004e128  8b ec                  mov     ebp, esp
+0004e12a  57                     push    edi
+0004e12b  56                     push    esi
+0004e12c  53                     push    ebx
+0004e12d  8b 75 08               mov     esi, [ebp+arg_0]
+0004e130  8b 7d 0c               mov     edi, [ebp+arg_4]
+0004e133  8b 55 10               mov     edx, [ebp+arg_8]
+0004e136  83 ea 18               sub     edx, 18h
+0004e139  33 c9                  xor     ecx, ecx
+0004e13b  8b 45 10               mov     eax, [ebp+arg_8]
+0004e13e  8a e0                  mov     ah, al
+0004e140  b3 18                  mov     bl, 18h
+0004e142  b7 18                  mov     bh, 18h
+0004e144  ac                     lodsb
+0004e145  8a c8                  mov     cl, al
+0004e147  d0 e1                  shl     cl, 1
+0004e149  72 2c                  jb      short loc_4E177
+0004e14b  d0 e1                  shl     cl, 1
+0004e14d  72 12                  jb      short loc_4E161
+0004e14f  c0 e9 02               shr     cl, 2
+0004e152  fe c1                  inc     cl
+0004e154  2a f9                  sub     bh, cl
+0004e156  ac                     lodsb
+0004e157  8a c4                  mov     al, ah
+0004e159  f3 aa                  rep stosb
+0004e15b  0a ff                  or      bh, bh
+0004e15d  75 e5                  jnz     short loc_4E144
+0004e15f  eb 3a                  jmp     short loc_4E19B
+0004e161  c0 e9 02               shr     cl, 2
+0004e164  fe c1                  inc     cl
+0004e166  2a f9                  sub     bh, cl
+0004e168  2a f9                  sub     bh, cl
+0004e16a  ac                     lodsb
+0004e16b  8a c4                  mov     al, ah
+0004e16d  47                     inc     edi
+0004e16e  aa                     stosb
+0004e16f  e2 fc                  loop    loc_4E16D
+0004e171  0a ff                  or      bh, bh
+0004e173  75 cf                  jnz     short loc_4E144
+0004e175  eb 24                  jmp     short loc_4E19B
+0004e177  d0 e1                  shl     cl, 1
+0004e179  72 13                  jb      short loc_4E18E
+0004e17b  c0 e9 02               shr     cl, 2
+0004e17e  fe c1                  inc     cl
+0004e180  2a f9                  sub     bh, cl
+0004e182  ac                     lodsb
+0004e183  8a c4                  mov     al, ah
+0004e185  aa                     stosb
+0004e186  e2 fa                  loop    loc_4E182
+0004e188  0a ff                  or      bh, bh
+0004e18a  75 b8                  jnz     short loc_4E144
+0004e18c  eb 0d                  jmp     short loc_4E19B
+0004e18e  c0 e9 02               shr     cl, 2
+0004e191  fe c1                  inc     cl
+0004e193  03 f9                  add     edi, ecx
+0004e195  2a f9                  sub     bh, cl
+0004e197  0a ff                  or      bh, bh
+0004e199  75 a9                  jnz     short loc_4E144
+0004e19b  03 fa                  add     edi, edx
+0004e19d  fe cb                  dec     bl
+0004e19f  75 a1                  jnz     short loc_4E142
+0004e1a1  5b                     pop     ebx
+0004e1a2  5e                     pop     esi
+0004e1a3  5f                     pop     edi
+0004e1a4  5d                     pop     ebp
+0004e1a5  c3                     retn
+
+===== 0x4E1A6 size 132 =====
+0004e1a6  55                     push    ebp
+0004e1a7  8b ec                  mov     ebp, esp
+0004e1a9  57                     push    edi
+0004e1aa  56                     push    esi
+0004e1ab  53                     push    ebx
+0004e1ac  8b 75 08               mov     esi, [ebp+arg_0]
+0004e1af  8b 7d 0c               mov     edi, [ebp+arg_4]
+0004e1b2  8b 6d 10               mov     ebp, [ebp+arg_8]
+0004e1b5  83 ed 18               sub     ebp, 18h
+0004e1b8  33 c9                  xor     ecx, ecx
+0004e1ba  b4 07                  mov     ah, 7
+0004e1bc  b2 18                  mov     dl, 18h
+0004e1be  b3 18                  mov     bl, 18h
+0004e1c0  b7 18                  mov     bh, 18h
+0004e1c2  ac                     lodsb
+0004e1c3  8a c8                  mov     cl, al
+0004e1c5  d0 e1                  shl     cl, 1
+0004e1c7  72 30                  jb      short loc_4E1F9
+0004e1c9  d0 e1                  shl     cl, 1
+0004e1cb  72 14                  jb      short loc_4E1E1
+0004e1cd  c0 e9 02               shr     cl, 2
+0004e1d0  fe c1                  inc     cl
+0004e1d2  2a f9                  sub     bh, cl
+0004e1d4  ac                     lodsb
+0004e1d5  22 c4                  and     al, ah
+0004e1d7  02 c2                  add     al, dl
+0004e1d9  f3 aa                  rep stosb
+0004e1db  0a ff                  or      bh, bh
+0004e1dd  75 e3                  jnz     short loc_4E1C2
+0004e1df  eb 3e                  jmp     short loc_4E21F
+0004e1e1  c0 e9 02               shr     cl, 2
+0004e1e4  fe c1                  inc     cl
+0004e1e6  2a f9                  sub     bh, cl
+0004e1e8  2a f9                  sub     bh, cl
+0004e1ea  ac                     lodsb
+0004e1eb  22 c4                  and     al, ah
+0004e1ed  02 c2                  add     al, dl
+0004e1ef  47                     inc     edi
+0004e1f0  aa                     stosb
+0004e1f1  e2 fc                  loop    loc_4E1EF
+0004e1f3  0a ff                  or      bh, bh
+0004e1f5  75 cb                  jnz     short loc_4E1C2
+0004e1f7  eb 26                  jmp     short loc_4E21F
+0004e1f9  d0 e1                  shl     cl, 1
+0004e1fb  72 15                  jb      short loc_4E212
+0004e1fd  c0 e9 02               shr     cl, 2
+0004e200  fe c1                  inc     cl
+0004e202  2a f9                  sub     bh, cl
+0004e204  ac                     lodsb
+0004e205  22 c4                  and     al, ah
+0004e207  02 c2                  add     al, dl
+0004e209  aa                     stosb
+0004e20a  e2 f8                  loop    loc_4E204
+0004e20c  0a ff                  or      bh, bh
+0004e20e  75 b2                  jnz     short loc_4E1C2
+0004e210  eb 0d                  jmp     short loc_4E21F
+0004e212  c0 e9 02               shr     cl, 2
+0004e215  fe c1                  inc     cl
+0004e217  03 f9                  add     edi, ecx
+0004e219  2a f9                  sub     bh, cl
+0004e21b  0a ff                  or      bh, bh
+0004e21d  75 a3                  jnz     short loc_4E1C2
+0004e21f  03 fd                  add     edi, ebp
+0004e221  fe cb                  dec     bl
+0004e223  75 9b                  jnz     short loc_4E1C0
+0004e225  5b                     pop     ebx
+0004e226  5e                     pop     esi
+0004e227  5f                     pop     edi
+0004e228  5d                     pop     ebp
+0004e229  c3                     retn
+
+===== 0x4E22A size 114 =====
+0004e22a  55                     push    ebp
+0004e22b  8b ec                  mov     ebp, esp
+0004e22d  57                     push    edi
+0004e22e  56                     push    esi
+0004e22f  53                     push    ebx
+0004e230  8b 75 08               mov     esi, [ebp+arg_0]
+0004e233  8b 7d 0c               mov     edi, [ebp+arg_4]
+0004e236  8b 55 10               mov     edx, [ebp+arg_8]
+0004e239  83 ea 18               sub     edx, 18h
+0004e23c  33 c9                  xor     ecx, ecx
+0004e23e  b3 18                  mov     bl, 18h
+0004e240  b7 18                  mov     bh, 18h
+0004e242  ac                     lodsb
+0004e243  8a c8                  mov     cl, al
+0004e245  d0 e1                  shl     cl, 1
+0004e247  72 28                  jb      short loc_4E271
+0004e249  d0 e1                  shl     cl, 1
+0004e24b  72 10                  jb      short loc_4E25D
+0004e24d  c0 e9 02               shr     cl, 2
+0004e250  fe c1                  inc     cl
+0004e252  2a f9                  sub     bh, cl
+0004e254  ac                     lodsb
+0004e255  f3 aa                  rep stosb
+0004e257  0a ff                  or      bh, bh
+0004e259  75 e7                  jnz     short loc_4E242
+0004e25b  eb 34                  jmp     short loc_4E291
+0004e25d  c0 e9 02               shr     cl, 2
+0004e260  fe c1                  inc     cl
+0004e262  2a f9                  sub     bh, cl
+0004e264  2a f9                  sub     bh, cl
+0004e266  ac                     lodsb
+0004e267  47                     inc     edi
+0004e268  aa                     stosb
+0004e269  e2 fc                  loop    loc_4E267
+0004e26b  0a ff                  or      bh, bh
+0004e26d  75 d3                  jnz     short loc_4E242
+0004e26f  eb 20                  jmp     short loc_4E291
+0004e271  d0 e1                  shl     cl, 1
+0004e273  72 0f                  jb      short loc_4E284
+0004e275  c0 e9 02               shr     cl, 2
+0004e278  fe c1                  inc     cl
+0004e27a  2a f9                  sub     bh, cl
+0004e27c  f3 a4                  rep movsb
+0004e27e  0a ff                  or      bh, bh
+0004e280  75 c0                  jnz     short loc_4E242
+0004e282  eb 0d                  jmp     short loc_4E291
+0004e284  c0 e9 02               shr     cl, 2
+0004e287  fe c1                  inc     cl
+0004e289  03 f9                  add     edi, ecx
+0004e28b  2a f9                  sub     bh, cl
+0004e28d  0a ff                  or      bh, bh
+0004e28f  75 b1                  jnz     short loc_4E242
+0004e291  03 fa                  add     edi, edx
+0004e293  fe cb                  dec     bl
+0004e295  75 a9                  jnz     short loc_4E240
+0004e297  5b                     pop     ebx
+0004e298  5e                     pop     esi
+0004e299  5f                     pop     edi
+0004e29a  5d                     pop     ebp
+0004e29b  c3                     retn
+
+===== 0x4E29C size 116 =====
+0004e29c  55                     push    ebp
+0004e29d  8b ec                  mov     ebp, esp
+0004e29f  57                     push    edi
+0004e2a0  56                     push    esi
+0004e2a1  53                     push    ebx
+0004e2a2  8b 75 08               mov     esi, [ebp+arg_0]
+0004e2a5  8b 7d 0c               mov     edi, [ebp+arg_4]
+0004e2a8  8b 55 10               mov     edx, [ebp+arg_8]
+0004e2ab  83 ea 18               sub     edx, 18h
+0004e2ae  33 c9                  xor     ecx, ecx
+0004e2b0  b3 18                  mov     bl, 18h
+0004e2b2  b7 18                  mov     bh, 18h
+0004e2b4  ac                     lodsb
+0004e2b5  8a c8                  mov     cl, al
+0004e2b7  d0 e1                  shl     cl, 1
+0004e2b9  72 28                  jb      short loc_4E2E3
+0004e2bb  d0 e1                  shl     cl, 1
+0004e2bd  72 10                  jb      short loc_4E2CF
+0004e2bf  c0 e9 02               shr     cl, 2
+0004e2c2  fe c1                  inc     cl
+0004e2c4  2a f9                  sub     bh, cl
+0004e2c6  ac                     lodsb
+0004e2c7  f3 aa                  rep stosb
+0004e2c9  0a ff                  or      bh, bh
+0004e2cb  75 e7                  jnz     short loc_4E2B4
+0004e2cd  eb 36                  jmp     short loc_4E305
+0004e2cf  c0 e9 02               shr     cl, 2
+0004e2d2  fe c1                  inc     cl
+0004e2d4  2a f9                  sub     bh, cl
+0004e2d6  2a f9                  sub     bh, cl
+0004e2d8  ac                     lodsb
+0004e2d9  47                     inc     edi
+0004e2da  aa                     stosb
+0004e2db  e2 fc                  loop    loc_4E2D9
+0004e2dd  0a ff                  or      bh, bh
+0004e2df  75 d3                  jnz     short loc_4E2B4
+0004e2e1  eb 22                  jmp     short loc_4E305
+0004e2e3  d0 e1                  shl     cl, 1
+0004e2e5  72 0f                  jb      short loc_4E2F6
+0004e2e7  c0 e9 02               shr     cl, 2
+0004e2ea  fe c1                  inc     cl
+0004e2ec  2a f9                  sub     bh, cl
+0004e2ee  f3 a4                  rep movsb
+0004e2f0  0a ff                  or      bh, bh
+0004e2f2  75 c0                  jnz     short loc_4E2B4
+0004e2f4  eb 0f                  jmp     short loc_4E305
+0004e2f6  c0 e9 02               shr     cl, 2
+0004e2f9  fe c1                  inc     cl
+0004e2fb  2a f9                  sub     bh, cl
+0004e2fd  b0 49                  mov     al, 49h ; 'I'
+0004e2ff  f3 aa                  rep stosb
+0004e301  0a ff                  or      bh, bh
+0004e303  75 af                  jnz     short loc_4E2B4
+0004e305  03 fa                  add     edi, edx
+0004e307  fe cb                  dec     bl
+0004e309  75 a7                  jnz     short loc_4E2B2
+0004e30b  5b                     pop     ebx
+0004e30c  5e                     pop     esi
+0004e30d  5f                     pop     edi
+0004e30e  5d                     pop     ebp
+0004e30f  c3                     retn

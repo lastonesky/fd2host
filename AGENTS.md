@@ -84,6 +84,7 @@ Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -Wor
 # 源码转译对拍（原机器码 vs 转译 C，逐字节 + 副作用）
 pwsh -File E:\FD2\port\build.ps1 -Target rlecheck; & E:\FD2\port\build\rlecheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target gfxcheck; & E:\FD2\port\build\gfxcheck.exe
+pwsh -File E:\FD2\port\build.ps1 -Target sprite24check; & E:\FD2\port\build\sprite24check.exe
 
 # 一键回归（重建沙箱、删 FD2.TMP、autokey 走 continue、8 项断言）
 pwsh -File E:\FD2\port\regress.ps1
@@ -142,6 +143,9 @@ Start-Process E:\FD2\port\build\fd2host.exe `
   调色板 6 位 DAC + DIB 是 BGRA（§8-17）；DOS 的"写 0 字节 = 截断"在 Windows 是空操作（§8-31）。
 - `.gitignore` 两个陷阱（§13.5）：`*.dll`/`*.lib`/`x86/` 会挡住 vendored 三方库（需 `!vendor/**`）；
   `build/object*.bin`（letest 参考镜像）被 `*.bin` 忽略——新克隆需按 §2 方法从 Ghidra 重新导出。
+- **对拍 exe 自己被 ASLR 放进 guest 窗口**（§22.4）：新增任何走 `le.c` 的 console 对拍目标，
+  必须在 `build.ps1` 给它 `/link /BASE:0x60000000`；否则 exe 映像可能落在 `0x10000..0x6FFFF`，
+  `le_reserve_address_space()` 失败且报错信息会指向自己已预留的 0x10000（误导）。
 - 计划状态会过期：`PROGRESS.md` §7 的勾选项以正文实测为准；发现文档与代码不符，**当场修文档**。
 
 ## 7. 文档地图
@@ -154,4 +158,4 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 | `re/FDPS_MAP.md` | 逆向测绘地图（FDPS 炎龙外传）：90 条 AIL 入口表、定时器族、spawn FD.EXE 流程 |
 | `re/funcmap.csv` | 全量函数表（1359 行） |
 | `re/*.txt` / `re/*.c` | 静态扫描清单与关键函数反编译存档 |
-| 外部：github.com/wicanr2/fd2_re（`docs/`、`docs/knowledge-base/`） | 反编译踩坑与知识库（同游戏逆向资料）。**本地快照 `port/docs/`（`.gitignore` 已忽略，~28 MB）**：函数级语义/router 可用，但它是**另一个 FD2.EXE build**（md5 `b97caf22…`，非本项目 `a6e341a8…`）——地址/常量/指令一律以 `E:\FD2\FD2.EXE.i64` 复核（`PROGRESS.md` §21.1） |
+| 外部：github.com/wicanr2/fd2_re（`docs/`、`docs/knowledge-base/`） | 反编译踩坑与知识库（同游戏逆向资料）。**本地已 curate 快照 `port/docs/`（`.gitignore` 已忽略，约 9 MB/274 文件；取舍理由与清单见 `docs/KEEP.md`）**：保留 `knowledge-base/`、`data/ida/*.txt`、`data/exe_tables`、游戏数据 JSON；但它**是另一个 FD2.EXE build**（md5 `b97caf22…`，非本项目 `a6e341a8…`）——地址/常量/指令一律以 `E:\FD2\FD2.EXE.i64` 复核（`PROGRESS.md` §21.1） |

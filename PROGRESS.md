@@ -1763,3 +1763,80 @@ regress.ps1         →  ALL PASS 8/8（fd2host 未改，15 s）
    并释放旧指针）—— 可作下一个"叶子 + 对拍"目标，或直接接进宿主以替换原生 fopen 路径。
 3. 图形工具库剩余成员（0x4DED4..0x4E866 绘图/数学原语）继续分类转译。
 4. FDPS 相关工作仍冻结（§7.8）。
+
+---
+
+## 22. 第 22 轮：docs 知识库清理 + 24×24 精灵 RLE 族转译（2026-10-05）
+
+### 22.1 `docs/` 清理（28 MB / 845 文件 → 9 MB / 274 文件）
+
+按"对理解 FD2.EXE 是否有用"取舍（清单见 `docs/KEEP.md`）：
+
+| 保留 | 删除（上游重制运营产物，可重新 clone 恢复） |
+|---|---|
+| `knowledge-base/` 67 篇 + `scene-decode/`（格式、函数语义、逐章 RE 证据） | `SESSION-HANDOFF`、`91-worklist*`、`99-reflections`（历史）、`18/38/41/60/61/96`（重制工程） |
+| `data/ida/*.txt`（106 份原始 IDA 证据）+ `fd2_function_inventory.json`、`fd2_unknown_footprints.json` | `data/ida/*.json`（86 份逐章验证收据） |
+| `data/exe_tables/*.json`（EXE 抽出的数据表）、`data/*.txt`/`*.md`（原始反汇编） | `data/ui-traces/`、`data/parity-plans/`、`data/parity-slots/`、`data/chapter_beats/` |
+| `data/*.json` 21 份跨切面游戏数据（战斗事件/肖像/武器/商店/字形…） | `localization`/`video`/`schema`/`verification`、remake worklist/进度 JSON |
+
+### 22.2 转译：24×24 精灵 RLE 族（`src/game/sprite24.c`）
+
+obj0 里藏着**同一台 24×24 RLE 状态机的 7 份手写副本**（0x4DF84..0x4E29C），
+差别只在"流内颜色字节 → 像素"的映射和"透明 token（type 11）"的行为。本 build 的
+七个入口（RE_MAP §4 曾把它们笼统归为"24×24 图元"）：
+
+| 转译名 | 原地址 | 颜色映射 | type 11 |
+|---|---|---|---|
+| `sprite24_ramp` | `0x4DF84` | `base + ((rot + c) & 7)` | 跳过 |
+| `sprite24_pal_recolor` | `0x4E016` | `pal[c]` | **把目标已有像素经 pal 重新着色** |
+| `sprite24_pal` | `0x4E0A2` | `pal[c]` | 跳过 |
+| `sprite24_const` | `0x4E127` | `(u8)stride`（原版把 arg2 低字节当颜色！） | 跳过 |
+| `sprite24_ramp24` | `0x4E1A6` | `(c & 7) + 24` | 跳过 |
+| `sprite24_plain` | `0x4E22A` | `c` | 跳过 |
+| `sprite24_plain49` | `0x4E29C` | `c` | **填 0x49** |
+
+流格式与画面 RLE（`rle.c`）同构（`[2-bit type | 6-bit count-1]`），但固定 24×24、
+每行填满才 `dst += stride - 24`；type10 是"逐像素读 1 字节并经映射"（plain 模式即逐字节拷贝）。
+原版 7 份循环合并为一台引擎 + 模式结构体。原版入口都是 cdecl（无 usercall 寄存器参数），
+可直接经函数指针调用；`sprite24_const` 的颜色确实取自 stride 的低字节（callers 传 `stride|color` 打包值）。
+
+### 22.3 对拍（`src/sprite24check.c` + `build.ps1 -Target sprite24check`）
+
+与 `rlecheck`/`gfxcheck` 同一可信 LE 加载路径；每个模式 300 例随机合法流（每行精确填满、
+4 类 token 全覆盖）、随机 stride 24..300、随机 pal/base/rot；目标缓冲带哨兵余量逐字节比对
+（recolor 模式两边用相同初值）。
+
+```
+build\sprite24check.exe  →  PASS: 2100 cases, 0 failures（首轮即通过）
+```
+
+### 22.4 新坑：对拍 exe 自己被 ASLR 放进 guest 窗口 → 低地址预留失败
+
+`sprite24check.exe` 首次运行**必失败**：`le: cannot reserve object region @0x10000: 487`。
+真因不是 kernel32，而是**对拍 exe 自己的映像被加载到 `0x30000`**（落在 guest 窗口
+`0x10000..0x6FFFF` 内），于是 `le_reserve_address_space_early()` 的强制块被自己占掉。
+`gfxcheck`/`rlecheck` 当时映像恰好在高处，所以没暴露。
+
+- **诊断信息误导**：失败后打印的 `0x10000 ... PRIVATE prot=0x40` 是**我们自己已经成功预留的块**
+  （`MEM_COMMIT|PAGE_EXECUTE_READWRITE`），不是冲突源；真正冲突块可能在 0x20000..0x6FFFF。
+- **修复**：所有走 `le.c` 的 console 对拍目标（`letest`/`rlecheck`/`gfxcheck`/`sprite24check`）
+  在 `build.ps1` 加 `/link /BASE:0x60000000`（与 `fd2host` 同一手法）。这与 §8-48 签名 B
+  是同源问题；宿主另有 `regress.ps1` 自动重试兜底。
+
+### 22.5 实测判据
+
+```
+build\sprite24check.exe →  PASS: 2100 cases, 0 failures
+build\gfxcheck.exe      →  PASS: 1450 cases, 0 failures（回归）
+build\rlecheck.exe      →  PASS: 1900 cases, 0 failures（回归）
+regress.ps1             →  ALL PASS 8/8（fd2host 未改，15 s）
+```
+
+### 22.6 下轮入口
+
+1. obj0 工具库剩余：纯字节/调色板变换 `0x4DED4/0x4DEEC/0x4DF09/0x4DF28/0x4DF4C`、
+   表访问器 `0x4E7DD..0x4E8BC`、掩码重着色 `0x4E795`（都可续用对拍法）。
+2. 连通性/BFS 簇 `0x4E390..0x4E751`（`byte_60068/69` 网格、四方向递归、写回 `dword_60073`）——
+   **疑似战场移动范围/寻路**，价值高但有全局状态，转译前先归档数据布局。
+3. ★★★ 未动：资源加载器 `sub_111BA`（LMI 容器；内部走 Watcom CRT 的 `fopen/fread`，
+   独立对拍需先接宿主 `dos.c` 的文件服务，或改成对目录解析的纯函数）、文本/脚本渲染器 `sub_15F84`。
