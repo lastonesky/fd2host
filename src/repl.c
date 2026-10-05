@@ -10,8 +10,13 @@
  *     and the game frees those buffers with the same heap. Replacing it with
  *     a libc-malloc version would mix heaps. It goes in together with the
  *     CRT heap replacement.
+ *   - 0x15E71 (restore + free a VGA snapshot block) and 0x15E9E (save one):
+ *     same heap reasoning - 0x15E71 has callers outside the replaced set
+ *     that hand it Watcom-CRT buffers. dlg.c calls both at their original
+ *     addresses instead, which keeps one heap on every path.
  *
- * See repl.h for why this is safe. Groups: rle, gfx, sprite24, util, path.
+ * See repl.h for why this is safe. Groups: rle, gfx, sprite24, util, path,
+ * dlg.
  */
 #include <windows.h>
 #include <stdio.h>
@@ -122,6 +127,18 @@ static const struct repl_entry g_repl[] = {
     /* --- dialogue box helpers (src/game/dlg.c) ------------------------ */
     { 0x16559, "dlg_blit_dato",       (void *)rep_dlg_blit,         REPL_DLG },
     { 0x16E24, "dlg_scroll_text",     (void *)rep_dlg_scroll,       REPL_DLG },
+
+    /* --- box open/close animation (src/game/dlg.c) ---------------------
+     * App-level routines: the C reads/writes the original globals itself,
+     * so no wrapper is needed - the signature matches the machine code
+     * (cdecl stack args) one to one. Both ends of the CRT heap pairing are
+     * in this group (open allocates through 0x3706E, close frees through
+     * 0x15E71), so it can only be enabled as a whole - which repl_parse
+     * guarantees: the group is the unit. */
+    { 0x165AC, "dlg_open_box",        (void *)dlg_open_box,         REPL_DLG },
+    { 0x16B43, "dlg_close_box",       (void *)dlg_close_box,        REPL_DLG },
+    { 0x168B6, "dlg_box_stage",       (void *)dlg_box_stage,        REPL_DLG },
+    { 0x1685C, "dlg_frame_tile",      (void *)dlg_frame_tile,       REPL_DLG },
 };
 
 unsigned repl_parse(const char *spec)

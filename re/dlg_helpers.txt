@@ -1,0 +1,148 @@
+// ==== sub_1685C @ 0x1685C ====
+void __fastcall sub_1685C(__int32 a1, int a2, int a3, int a4, char *a5, int a6, int a7, int a8)
+{
+  sub_3702F(a1, a2, a3, a4, 20);
+  sub_4ED0B(a5, (_WORD *)(*(_DWORD *)(a7 + 4 * a8 + 6) + a7), a6);
+}
+
+
+// ==== sub_12CEA @ 0x12CEA ====
+void __usercall sub_12CEA(
+        __int32 a1@<eax>,
+        int a2@<edx>,
+        int a3@<ecx>,
+        int a4@<ebx>,
+        int a5@<edi>,
+        int a6@<esi>,
+        int a7,
+        int a8)
+{
+  int v8; // eax
+  int v9; // [esp-Ch] [ebp-Ch]
+  int v10; // [esp-8h] [ebp-8h]
+  int v11; // [esp-4h] [ebp-4h]
+
+  sub_3702F(a1, a2, a4, a3, 20);
+  v11 = a4;
+  v10 = a6;
+  v9 = a5;
+  v8 = sub_11CAC(0);
+  while ( a7 != (_DWORD)qword_53AB1 )
+  {
+    if ( a7 >= (int)qword_53AB1 )
+      sub_11BFA(v9, v10, v11);
+    else
+      sub_11C59(v8);
+    if ( dword_51A83 != 0 && dword_51A83 != 6 )
+      sub_17AA9(1);
+    LOWORD(v8) = sub_4E381();
+  }
+  while ( a8 != HIDWORD(qword_53AB1) )
+  {
+    if ( a8 >= SHIDWORD(qword_53AB1) )
+      sub_11B9B(v9, v10, v11);
+    else
+      sub_11B48(v8);
+    if ( dword_51A83 != 0 && dword_51A83 != 6 )
+      sub_17AA9(1);
+    LOWORD(v8) = sub_4E381();
+  }
+  JUMPOUT(0x12CE6);
+}
+
+
+// ==== sub_10620 @ 0x10620 ====
+bool __fastcall sub_10620(__int32 a1, int a2, int a3, int a4)
+{
+  sub_3702F(a1, a2, a3, a4, 8);
+  return MEMORY[0x41C] != MEMORY[0x41A];
+}
+
+
+// ==== sub_4E31C @ 0x4E31C ====
+void __spoils<> sub_4E31C()
+{
+  unsigned __int8 *v0; // esi
+  int v1; // ecx
+  unsigned __int8 v2; // ah
+  unsigned __int8 v3; // al
+  unsigned __int8 *v4; // esi
+  unsigned __int8 v5; // al
+  unsigned __int8 v6; // al
+
+  if ( (unsigned __int16)(sub_4E310() - word_60000) >= 2u )
+  {
+    if ( ++byte_60002 == 16 )
+      byte_60002 = 0;
+    v0 = (unsigned __int8 *)&unk_60003 + (unsigned __int16)(3 * (unsigned __int8)byte_60002);
+    v1 = 16;
+    v2 = 0xE0u;
+    do
+    {
+      __outbyte(0x3C8u, v2);
+      v3 = *v0;
+      v4 = v0 + 1;
+      __outbyte(0x3C9u, v3);
+      v5 = *v4++;
+      __outbyte(0x3C9u, v5);
+      v6 = *v4;
+      v0 = v4 + 1;
+      __outbyte(0x3C9u, v6);
+      ++v2;
+      --v1;
+    }
+    while ( v1 != 0 );
+    word_60000 = sub_4E310();
+  }
+}
+
+
+// ==== sub_4E381 @ 0x4E381 ====
+__int16 sub_4E381()
+{
+  MEMORY[0x41C] = MEMORY[0x41A];
+  return MEMORY[0x41A];
+}
+
+
+// ==== sub_164E8 @ 0x164E8 ====
+int __fastcall sub_164E8(__int32 a1, int a2, int a3, int a4)
+{
+  __int16 *v4; // eax
+  int v5; // edx
+  int v6; // ecx
+  __int32 v7; // eax
+
+  v4 = (__int16 *)sub_3702F(a1, a2, a3, a4, 16);
+  if ( ++dword_53A14 == 2 )
+  {
+    if ( ++dword_53A10 == 4 )
+      dword_53A10 = 0;
+    v7 = dword_53A10;
+    if ( dword_53A10 == 3 )
+      v7 = 1;
+    v4 = sub_16559(v7, v5, a3, v6, v7);
+    dword_53A14 = 0;
+  }
+  sub_25A96((__int32)v4, v5, a3, v6, dword_53EEC, 2, 1);
+  return sub_17AA9(1);
+}
+
+
+// ==== sub_17AA9 @ 0x17AA9 ====
+int __fastcall sub_17AA9(__int32 a1, int a2, int a3, int a4, int a5)
+{
+  int v5; // eax
+
+  sub_3702F(a1, a2, a3, a4, 4);
+  dword_53A2C = MEMORY[0x46C];
+  do
+  {
+    v5 = MEMORY[0x46C] - dword_53A2C;
+    if ( v5 < 0 )
+      v5 += (int)sub_10000;
+  }
+  while ( v5 < a5 );
+  dword_53A2C = MEMORY[0x46C];
+  return MEMORY[0x46C];
+}

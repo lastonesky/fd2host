@@ -53,7 +53,10 @@ $targets = @{
     # differential test: src/game/rle2.c (0xC0-range RLE blits) vs 0x4EBFF/0x4EC31/0x4EBAB
     rle2check = @{ srcs = @("rle2check.c", "le.c", "game\rle2.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/dlg.c (dialogue box helpers) vs 0x16559/0x16E24
-    dlgcheck = @{ srcs = @("dlgcheck.c", "le.c", "game\dlg.c", "game\rle2.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    dlgcheck = @{ srcs = @("dlgcheck.c", "le.c", "game\dlg.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    # differential test: src/game/dlg.c box animation vs 0x165AC/0x16B43/0x168B6/0x1685C,
+    # with the CRT heap / delay / BDA / portrait-glide services hooked to event-recording stubs
+    boxcheck = @{ srcs = @("boxcheck.c", "le.c", "game\dlg.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";

@@ -1,0 +1,182 @@
+// ==== sub_3702F @ 0x3702F ====
+int __fastcall sub_3702F(__int32 a1, int a2, int a3, int a4, int a5)
+{
+  sub_37042(_InterlockedExchange(&a5, a1));
+  return a5;
+}
+
+
+// ==== sub_3790A @ 0xFFFFFFFFFFFFFFFF ====
+None
+
+// ==== sub_3706E @ 0xFFFFFFFFFFFFFFFF ====
+None
+
+// ==== sub_12CEA @ 0x12CEA ====
+void __usercall sub_12CEA(
+        __int32 a1@<eax>,
+        int a2@<edx>,
+        int a3@<ecx>,
+        int a4@<ebx>,
+        int a5@<edi>,
+        int a6@<esi>,
+        int a7,
+        int a8)
+{
+  int v8; // eax
+  int v9; // [esp-Ch] [ebp-Ch]
+  int v10; // [esp-8h] [ebp-8h]
+  int v11; // [esp-4h] [ebp-4h]
+
+  sub_3702F(a1, a2, a4, a3, 20);
+  v11 = a4;
+  v10 = a6;
+  v9 = a5;
+  v8 = sub_11CAC(0);
+  while ( a7 != (_DWORD)qword_53AB1 )
+  {
+    if ( a7 >= (int)qword_53AB1 )
+      sub_11BFA(v9, v10, v11);
+    else
+      sub_11C59(v8);
+    if ( dword_51A83 != 0 && dword_51A83 != 6 )
+      sub_17AA9(1);
+    LOWORD(v8) = sub_4E381();
+  }
+  while ( a8 != HIDWORD(qword_53AB1) )
+  {
+    if ( a8 >= SHIDWORD(qword_53AB1) )
+      sub_11B9B(v9, v10, v11);
+    else
+      sub_11B48(v8);
+    if ( dword_51A83 != 0 && dword_51A83 != 6 )
+      sub_17AA9(1);
+    LOWORD(v8) = sub_4E381();
+  }
+  JUMPOUT(0x12CE6);
+}
+
+
+// ==== sub_11BFA @ 0x11BFA ====
+int __fastcall sub_11BFA(__int32 a1, int a2, int a3, int a4)
+{
+  int result; // eax
+
+  sub_3702F(a1, a2, a3, a4, 8);
+  result = dword_53AC1 - 1;
+  if ( dword_53AC1 - 1 != (_DWORD)qword_53AB1 )
+  {
+    if ( dword_53AB9 <= 10 || (result = dword_53AC1 - 13, dword_53AC1 - 13 == dword_53AA9) )
+    {
+      LODWORD(qword_53AB1) = qword_53AB1 + 1;
+      ++dword_53AB9;
+      if ( dword_51A83 == 0 )
+        return result;
+    }
+    else
+    {
+      LODWORD(qword_53AB1) = qword_53AB1 + 1;
+      ++dword_53AA9;
+    }
+  }
+  return sub_11CAC(0);
+}
+
+
+// ==== sub_11C59 @ 0x11C59 ====
+int __fastcall sub_11C59(__int32 a1, int a2, int a3, int a4)
+{
+  int result; // eax
+
+  result = sub_3702F(a1, a2, a3, a4, 8);
+  if ( (_DWORD)qword_53AB1 != 0 )
+  {
+    if ( dword_53AB9 < 2 && dword_53AA9 != 0 )
+    {
+      LODWORD(qword_53AB1) = qword_53AB1 - 1;
+      --dword_53AA9;
+    }
+    else
+    {
+      LODWORD(qword_53AB1) = qword_53AB1 - 1;
+      --dword_53AB9;
+      if ( dword_51A83 == 0 )
+        return result;
+    }
+  }
+  return sub_11CAC(0);
+}
+
+
+// ==== sub_11CAC @ 0x11CAC ====
+int __fastcall sub_11CAC(__int32 a1, int a2, int a3, int a4, int a5)
+{
+  int v5; // eax
+  int v6; // eax
+  int v7; // eax
+
+  v5 = sub_3702F(a1, a2, a3, a4, 32);
+  sub_1297D(v5);
+  if ( a5 == 0 )
+    sub_4E31C();
+  v6 = sub_11EEE(dword_53A49 + 32904, 456, 13, 8, dword_53AA9, dword_53AAD);
+  v7 = sub_122DC(v6);
+  sub_127A9(v7);
+  sub_1ACF3(dword_53A49 + 32904, 456);
+  return sub_11EB0(656644, 320, dword_53A49 + 32904, 456, 312, 192);
+}
+
+
+// ==== sub_11B9B @ 0x11B9B ====
+int __fastcall sub_11B9B(__int32 a1, int a2, int a3, int a4)
+{
+  int v4; // edx
+  int v5; // ecx
+  int result; // eax
+
+  sub_3702F(a1, a2, a3, a4, 8);
+  result = dword_53AC5 - 1;
+  if ( dword_53AC5 - 1 != HIDWORD(qword_53AB1) )
+  {
+    if ( dword_53ABD <= 5 || (result = dword_53AC5 - 8, dword_53AC5 - 8 == dword_53AAD) )
+    {
+      ++HIDWORD(qword_53AB1);
+      ++dword_53ABD;
+      if ( dword_51A83 == 0 )
+        return result;
+    }
+    else
+    {
+      ++HIDWORD(qword_53AB1);
+      ++dword_53AAD;
+    }
+  }
+  return sub_11CAC(result, v4, a3, v5, 0);
+}
+
+
+// ==== sub_11B48 @ 0x11B48 ====
+__int32 __fastcall sub_11B48(__int32 a1, int a2, int a3, int a4)
+{
+  __int32 result; // eax
+  int v5; // edx
+  int v6; // ecx
+
+  result = sub_3702F(a1, a2, a3, a4, 8);
+  if ( HIDWORD(qword_53AB1) != 0 )
+  {
+    if ( dword_53ABD < 2 && dword_53AAD != 0 )
+    {
+      --HIDWORD(qword_53AB1);
+      --dword_53AAD;
+    }
+    else
+    {
+      --HIDWORD(qword_53AB1);
+      --dword_53ABD;
+      if ( dword_51A83 == 0 )
+        return result;
+    }
+  }
+  return sub_11CAC(result, v5, a3, v6, 0);
+}

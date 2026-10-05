@@ -27,4 +27,45 @@ void dlg_blit_dato(const void *dato_buf, int box_pos, int idx);
 /* 0x16E24 - no-op unless box_pos is 0x728 (top) or 0x9017 (bottom) */
 void dlg_scroll_text(int box_pos);
 
+/* --- box open/close animation (round 30) -------------------------------
+ *
+ *   0x165AC  dlg_open_box    glide the speaker portrait in, then draw the
+ *                            box frame in five growing tile stages
+ *   0x16B43  dlg_close_box   restore the five stages in reverse, glide out
+ *   0x168B6  dlg_box_stage   draw one stage of the 310x86 box frame
+ *   0x1685C  dlg_frame_tile  blit tile `idx` of the frame resource
+ *
+ * Unlike the two pure helpers above, these are app-level routines: they
+ * live in the game's world and talk to the game's own data-segment
+ * globals (dword_51A83 / 53A18 / 53A81 / 53AB9 / 53ABD / 53C67) by their
+ * original addresses, exactly like the machine code does. The globals stay
+ * game-owned, so src/repl.c can hook these four entries with no glue at
+ * all. See the block comment in game/dlg.c for the services that are still
+ * original machine code (CRT heap / delay / BDA coupling).
+ *
+ * dlg_open_box(face_x, face_y, rows):
+ *   rows != 0  glide the portrait to (face_x, face_y) first (0x12CEA) and
+ *              sweep the portrait sprite over the VGA from its current
+ *              size (24*cols+4 x 24*rows+4) down to (5, rows);
+ *   rows == 0  default rows from the active box position (0x728 -> 2,
+ *              0x9017 -> 112, anything else stays 0).
+ *   Then five 26668-byte stage snapshots are allocated into the original
+ *   dword_53A18[5] array (returned) and the frame is drawn stage by stage.
+ *
+ * dlg_close_box(stages, rows): frees the five snapshots through 0x15E71
+ * (restore + free) in reverse order, then sweeps the portrait sprite back
+ * out to its full size when rows != 0. */
+void *dlg_open_box(int face_x, int face_y, int rows);
+void  dlg_close_box(void **stages, int rows);
+
+/* 0x168B6 - draw tile grid stage (cols x lines, 16 px cells + 3 px border)
+ * of the 310x86 box at surface + stride*y0 + x0. Tile art comes from the
+ * frame resource in the original global dword_53A81. */
+void dlg_box_stage(void *surface, int stride, int x0, int y0,
+                   int cols, int lines);
+
+/* 0x1685C - blit tile `idx` (offset table at table+6, dword offsets) of a
+ * header-prefixed frame resource onto dest with the given stride. */
+void dlg_frame_tile(void *dest, int stride, const void *table, int idx);
+
 #endif /* GAME_DLG_H */

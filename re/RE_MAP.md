@@ -188,6 +188,7 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 |   | ✅ **表访问器已完成**（第 27 轮）：`src/game/tables.c`（11 个）+ `tablescheck` 对拍 4528 例（PROGRESS §27） | 同 §19.4 |
 |   | ✅ **0xC0-RLE 文本 blit 已完成**（第 28 轮）：`src/game/rle2.c`（3 变体 + 共享解码器）+ `rle2check` 对拍 1200 例（PROGRESS §28） | 同 §19.4 |
 |   | ✅ **对话框辅助已完成**（第 29 轮）：`src/game/dlg.c`（`0x16559` 贴 DATO 子图 / `0x16E24` 文本上滚）+ `dlgcheck` 对拍 800 例（整帧 VGA 对比，PROGRESS §29） | 同 §19.4 |
+|   | ✅ **开框/收框动画已完成**（第 30 轮）：`src/game/dlg.c`（`0x165AC` 开框+人像滑入 / `0x16B43` 收框 / `0x168B6` 5 阶段贴框 / `0x1685C` 贴瓦片）+ `boxcheck` 对拍 240 例（VGA + 5 段快照 + 事件序列 + 每次 delay 抓帧，PROGRESS §30） | 同 §19.4；app-level 写法：全局留原地址、堆/时序服务留原机器码 |
 | 3 | 图形 blit/调色板（`gfx_A0000` 粗筛集，先精化名单） | fd2host 显示对拍 |
 | 4 | 主状态机 + 脚本 VM | 逐步替换法：机器码 vs 转译 C 逐函数对拍（**待确认**可行性） |
 | 5 | CRT/平台层 → Win32（`dos.c` 已有大半）+ AIL 打桩 | host.log 行为等价 |
@@ -252,9 +253,12 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 2. 提取 `main` 状态机两张函数指针表（`funcs_25E23`/`funcs_25E3A`）的真实地址与项。
 3. 精化 `gfx_A0000` 名单（当前是字节粗筛，含误报）。
 4. 全局状态区 `dword_53A00..0x53F00` 的结构还原（`main` 已见约 20 个成员）。
-5. **下一批源码转译目标**：★★★ `sub_15F84`（文本/脚本渲染器）：已补齐依赖 `rle2`、`dlg`（`0x16559/0x16E24`）；
-   仍需 `sub_165AC`（开框 5 阶段，`malloc`+快照+格网+delay）、`sub_16B43`（收框）、`sub_16C57`（等键+嘴型）、
-   `sub_164E8` 等；这些用 VGA + delay/malloc 同法对拍。之后整体转译 `sub_15F84` 对拍 VGA。
+5. **下一批源码转译目标**：★★★ `sub_15F84`（文本/脚本渲染器）：已补齐依赖 `rle2`、`dlg`
+   （`0x16559/0x16E24`）与**开框/收框动画**（第 30 轮：`0x165AC/0x16B43/0x168B6/0x1685C`，
+   `boxcheck` 240 例，PROGRESS §30）；仅剩 `sub_16C57`（等键+嘴型：BDA `0x46C` 计时 +
+   `int386(0x16)` 取键 + `sub_10620` 待键判断 + `sub_4E31C` 写 DAC 端口，对拍需 VEH 服务端口/
+   注键，方案见 PROGRESS §30.5-1）与 `sub_164E8`（小，已反编译，`re/dlg_deps.txt`）。
+   清掉后即可整体转译 `sub_15F84` 对拍 VGA。
 6. **官方逆向知识库**：`port/docs/`（已 curate 到 9 MB/274 文件，见 `docs/KEEP.md`）可作语义线索；
    但**它是另一个 FD2.EXE build**（md5 `b97caf22…`，非本项目 `a6e341a8…`），地址/常量/指令
    一律以 `E:\FD2\FD2.EXE.i64` 复核。详见 PROGRESS §21.1/§22.1。

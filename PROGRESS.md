@@ -382,8 +382,10 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
    `INT 33h`，`push 0x33` 都是标志位索引，运行期 `int 33` 调用数为 0；键盘侧已够用
    （片头走 BDA 轮询、菜单走 `INT 16h AH=10h`），`--autokey` 可做无人值守回归（§11.5）。
 4. **逐步源码化（路线 C 主体）**：从已理清的模块开始把机器码换成 C 源码 ——
-   资源加载（`sub_111BA`）、RLE 解压/blit（`sub_4E98D` ✅ **第 19 轮已转译 + 机器码对拍**，见 §19）、
-   脚本 VM（`sub_15F84`）、游戏工具库（0x4DED4..0x4EF29），最终产出可编译的 x86-64 引擎。
+   资源加载（`sub_111BA` ✅）、RLE 解压/blit（`sub_4E98D` ✅ 第 19 轮，见 §19）、
+   游戏工具库（0x4DED4..0x4EF29 ✅ 第 23/27 轮）、对话框（辅助 ✅ §29 + 开框/收框 ✅ §30）、
+   脚本 VM（`sub_15F84`，依赖仅剩 `sub_16C57`/`sub_164E8`，见 §30.5），
+   最终产出可编译的 x86-64 引擎。
    逆向工作台与测绘起点见 `port/re/RE_MAP.md` + `port/re/funcmap.csv`（§10）。
 5. **继续玩**：现在能进剧情画面了，下一批要验证的是战斗/地图等更深路径
    （`--autokey` 走不同的按键序列 + `--screenshot` 逐帧核对）。
@@ -680,6 +682,7 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
 | 游戏停在第一帧 / 端口操作数暴涨 | `0x3DA` 状态位没翻转（等回扫的经典写法死循环，§8-38）；端口操作数是正常量级的百倍/千倍即是此病 |
 | 崩溃现场新增字段 | AV 转储现在含 `RLE w/h (@0x627B4)`、`[ESI]` 源字节、`[ESP]` 返回地址、EBP 帧的 6 个参数 —— 定位"解压写飞"与"分配器越界"两类问题最快 |
 | 文件写入回归（一键） | `pwsh -File port\regress.ps1`：重建 `build\sandbox`（删掉 `FD2.TMP`）→ `--autokey` 走 continue → 对日志+文件系统断言 8 项，`ALL PASS` 为准（§12.4） |
+| **转译接入的 A/B 画面证据** | 同一 `--autokey` + 固定 `--shot-frame` 分别以 `--replace=none` / `all` 抓帧 → `pwsh -File port\framediff.ps1 -A <none.bmp> -B <all.bmp>`；差值必须 ≤ none↔none 基线（对话框帧的 autokey/帧号与实测数据见 §30.3） |
 | 手工复现 fresh install | 把数据文件拷到任意目录、**删掉 `FD2.TMP`**，再 `--gamedir <该目录> --autokey=5000:SPACE;2500:RETURN;2500:RETURN;2500:DOWN,RETURN` |
 | 查平台层还缺哪些服务 | ida MCP 裸扫 obj0 的 `CD xx` + 回看 `int 21h` 前的 `mov ah,imm`：产物 `re/int_sites_all.txt`、`re/int21_ah_used.txt`；宿主侧对照 `src/dos.c` 的 `switch (ah)` |
 
@@ -2248,3 +2251,113 @@ pathcheck 1000/0  rescheck 160/0  tablescheck 4528/0  rle2check 1200/0  dlgcheck
    嘴型，461 B）、`sub_164E8`/`sub_16E24`（已转译）等。这些需要 VGA + `delay` + `malloc`，
    可用同法对拍（VGA 已在地址空间；`delay`/`malloc` 走游戏 CRT，纯）。
 2. 之后即可整体转译 `sub_15F84`（词流解释器）并对拍 VGA。
+
+---
+
+## 30. 第 30 轮：开框/收框动画转译（0x165AC / 0x16B43 / 0x168B6 / 0x1685C）（2026-10-05）
+
+### 30.1 转译：app-level 写法 —— 全局留在原地址，服务留在原机器码
+
+`sub_15F84` 的两个大依赖（§29.5-1）已清掉，产物仍在 `src/game/dlg.c`：
+
+| 转译名 | 原地址 | 语义 |
+|---|---|---|
+| `dlg_open_box` | `0x165AC` | 人像滑入（`0x12CEA`）+ 人像精灵从当前尺寸 `24*AB9+4 × 24*ABD+4` 逐帧收到 `(5, rows)`（每帧 `0x15E9E` 存 VGA→贴精灵→`delay(10)`→冲键→`0x15E71` 还原）；`rows==0` 时按框位补默认（`0x728→2`、`0x9017→112`）；然后 `malloc` 5×26668 B 存进 `dword_53A18[5]`（返回该数组地址），按 `(4,2)(8,3)(12,4)(16,5)(19,5)` 五阶段"先存段再贴框"，段间 `delay(10)`，收尾冲键 |
+| `dlg_close_box` | `0x16B43` | 逆序还原 5 段（段间 `delay(10)`，第 0 段不延时），`rows!=0` 再把人像精灵从 `(5, rows)` 放大回全尺寸 |
+| `dlg_box_stage` | `0x168B6` | 310×86 框的一阶段格网：16 px 瓦片 `cols×lines` + 3 px 边框，角/边/中填/内填共 26 类瓦片按原序贴（顺序决定重叠像素，逐条对齐机器码） |
+| `dlg_frame_tile` | `0x1685C` | 从框资源偏移表（`table+6` 起的 dword 表）取第 `idx` 块贴到 `dest` |
+
+**写法决策（与 §19..§29 的"纯函数 + 参数"不同，本轮是第一批 app-level 转译）**：
+
+- **全局用原地址、IDA 名**（`dword_51A83/53A18/53A81/53AB9/53ABD/53C67` 宏定义在 `dlg.c` 顶部）。
+  ida xref 实证：`dword_53A18` **只被 `sub_165AC` 读写**（可自持），其余 5 个全局各有几十上百个
+  未替换调用点 —— C 必须读写**真正的原字**，否则状态分叉。好处：`repl.c` 里这 4 个条目
+  **零包装**（签名与机器码 cdecl 栈参一一对应），也消除了"包装器没被对拍覆盖"的盲区。
+- **服务留在原机器码**，`dlg.c` 直接按地址调用（头部注释写明）：
+  - `0x15E9E`（存快照+贴精灵）/`0x15E71`（还原+`free`）：**堆耦合**——`0x15E71` 还有
+    `sub_10010`/`sub_1A30B`/`sub_1E98C`/`sub_1EB05`/`sub_1F42D` 等**替换集合之外**的调用方，
+    它们递进来的块来自 Watcom CRT 堆，换成 libc `free` 会混堆 ⇒ 与 `res.c` 同一理由**暂不接入**
+    （`repl.c` 头注释已记）。开框用 `0x3706E`(CRT malloc) 分配、收框经 `0x15E71` 归还，全在一堆。
+  - `0x12CEA`（人像滑入）、`0x3790A`（delay）、`0x4E381`（BDA 冲键）：时机/BIOS 耦合，留原码。
+  - `0x4ECBF`/`0x4ED0B` 已转译 ⇒ C 里直接调 `gfx_save_rect`/`gfx_blit_block`。
+- **调用约定核实**（反汇编实证，`re/dlg_probe.txt` 等）：这 4 个函数全是**cdecl 栈参 + 调用方
+  `add esp`**；入口 `push N; call sub_3702F` 只是 Watcom 栈探针（`xchg eax,[esp+4]` 后探测并还原
+  EAX，寄存器参数全是幻影）；`sub_12CEA` 开头把两个**栈参**取进 ESI/EDI，寄存器参数只流进
+  `sub_11BFA/11C59/11B9B/11B48` —— 这 4 个函数体**一个参数都不用**（只过栈探针），所以从 C 调它
+  只需给对 2 个栈参，其余寄存器随意（原版调用点也确实没设）。
+
+### 30.2 对拍（`src/boxcheck.c`）：VGA + 快照 + 事件序列 + 每次 delay 抓帧
+
+服务被钩成**事件记录桩**（在 `le_map_and_relocate` 之后 jmp 覆盖 5 个入口）：
+
+| 钩点 | 桩行为 |
+|---|---|
+| `0x3706E` / `0x3776E` | libc `malloc/free`（两次跑同一堆），记录 `alloc(size, tag)` / `free(tag)` |
+| `0x3790A` delay | 记录事件 + **整帧 VGA 快照**（动画每一步的画面都在比较范围内） |
+| `0x4E381` 冲键 | 记录事件（BDA 时序不在本轮范围，两次跑同一桩） |
+| `0x12CEA` 人像滑入 | 记录事件（参数 + 调用瞬间的 `dword_51A83`） |
+
+钩桩是双重目的：既让两次跑看到**完全相同**的服务行为，又把每次调用变成
+**（类型, 参数, 当时的 flag）**元组 —— 于是对拍覆盖动画的**调用顺序/参数/状态**，不只是结果像素。
+
+每例先跑原机器码、复位世界（同种子重填 VGA + 重建框资源 + 重置 6 个全局）、再跑 C，比较：
+
+- 开框后：整帧 VGA 64000 B、**5 段快照各 26668 B**（含头 w/h/offset）、`dword_51A83`、
+  返回值必须是 `0x53A18`、事件序列、**每次 delay 时的整帧**；
+- 收框后：整帧 VGA、事件序列（累计）、每次 delay 的整帧、alloc/free 计数相等（无泄漏）。
+
+矩阵：框位 {`0x728`,`0x9017`,其他} × rows {0,2,7,112} × 人像尺寸 {(0,0),(1,1),(3,2),(6,4),(2,5)}
+= 60 组开框+收框；另 60 例 `dlg_box_stage`、120 例 `dlg_frame_tile` 直测 —— 直测用 **128 KiB
+scratch 面**（`cols<2`/`lines<2` 时原版会算出**负偏移**，真实代码不会这么调，但算术也得对齐，
+scratch 带余量吸收，避免越界访问违例）。框资源 18 块随机 `w,h`（底边框 5 块限制 `h≤4`，
+与真实美术一致，保证 rows=112 时不写穿 64 KiB VGA 窗口）。
+
+**踩坑（写进本节以免重犯）**：`free` 的 ptr→tag 归属查表最初从头找第一个匹配 ——
+libc 重用已释放地址时，两次跑的堆布局不同，同一指针可能命中不同的 tag，产生**假阴性**
+（`event 28 orig=free(6) ours=free(5)`）。改成**桩里根本不 free**：块全程存活 ⇒ 一次跑内指针唯一、
+归属确定；测试进程多漏 ~20 MB，可接受。
+
+```
+build\boxcheck.exe  →  PASS: 240 cases, 0 failures
+```
+
+### 30.3 接入 + A/B 实证
+
+`repl.c` 新增 4 条（`REPL_DLG` 分组内，**零包装**：签名一一对应）⇒ 接入数 **39 → 43**，
+mask `0x3F`。分组原子性：开框的 `0x3706E` 分配与收框的 `0x15E71` 释放在同组内，`repl_parse`
+按组开/关，不存在半开状态（`repl.c` 头注释记了这条约束）。
+
+宿主 A/B（新工具 `framediff.ps1`：两帧逐像素差，数量/百分比/最大通道差）。找到对话框帧的
+配方：`--autokey=5000:SPACE;2500:RETURN;2500:RETURN;2500:DOWN,RETURN;3000:RETURN×5` +
+`--shot-frame=1500`（画面：上框文本 + 人像 + 下方红框，`build/ab_probe.png`）：
+
+| 对比（同帧 1500） | 差异像素 |
+|---|---|
+| none vs none | 76 / 64000（0.1187%，帧定时噪声基线） |
+| **none vs all** | **0 / 64000（0.0000%）** |
+| 同配方帧 1620 none vs all | **0 / 64000** |
+
+⇒ 含对话框的两帧在装/不装 43 个转译时**逐像素相同**，且不超基线；结合 boxcheck 逐字节对拍，
+判定接入等价。两帧 PNG：`build/ab_s1500.png`（=none）、`build/ab_a1.png`/`ab_a2.png`（=all）。
+
+### 30.4 实测判据
+
+```
+boxcheck 240/0   dlgcheck 800/0   rlecheck 1900/0   gfxcheck 1450/0
+sprite24check 2100/0  utilcheck 2200/0  pathcheck 1000/0  rescheck 160/0
+tablescheck 4528/0    rle2check 1200/0
+regress.ps1 ALL PASS 8/8（repl: installed 43, mask 0x3F）
+framediff: frame1500 none↔all 0/64000（基线 none↔none 76/64000）、frame1620 none↔all 0/64000
+```
+
+### 30.5 下轮入口
+
+1. **`sub_16C57`（等键 + 嘴型，461 B）** —— `sub_15F84` 剩下的最后一个大依赖。它的服务面比
+   本轮宽：读 `BDA 0x46C` 计时（`mov edx,46Ch` 是可被 `dos_patch_lowmem_refs` 重定向的 imm32）、
+   `int386(0x16)` 取键（`word_53A8D`）、`sub_10620`（BDA `0x41A/0x41C` 待键判断）、
+   `sub_4E31C`（写 `0x3C8/0x3C9` DAC 端口 —— ring 3 会 #GP，对拍需 VEH 服务端口指令）、
+   以及已转译的 `sub_1685C`。对拍方案二选一：(a) 给 boxcheck 加 VEH（端口 + 慢速 tick 线程 +
+   注键），(b) 全部钩桩并记录事件（本轮手法的延伸，键/时序由桩注入保证两次一致）。
+2. 之后整体转译 `sub_15F84`（词流解释器）并对拍 VGA —— 它的其余依赖（`0x16559/0x16E24/0x164E8`、
+   rle2、gfx、`0x4ED7A`、`sub_111BA`）均已转译或已有对拍。
+3. 排期项（不阻塞）：CRT 堆 + 文件层整体替换后，`res.c`、`0x15E71/0x15E9E` 一起接入。

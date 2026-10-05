@@ -28,7 +28,7 @@ port/
 │   │   └── res.h/res.c   LMI 容器资源加载（原 0x111BA，PROGRESS §25）
 │   │   └── tables.h/tables.c 表访问器（原 0x4E7DD..0x4E8BC，PROGRESS §27）
 │   │   └── rle2.h/rle2.c 0xC0-RLE 文本 blit（原 0x4EBFF/0x4EC31/0x4EBAB，PROGRESS §28）
-│   │   └── dlg.h/dlg.c  对话框辅助（原 0x16559 贴 DATO 子图 / 0x16E24 文本上滚，PROGRESS §29）
+│   │   └── dlg.h/dlg.c  对话框辅助 + 开框/收框动画（原 0x16559/0x16E24/0x165AC/0x16B43/0x168B6/0x1685C，PROGRESS §29/§30）
 │   ├── rlecheck.c     转译对拍测试：随机 RLE 流 × 原机器码 vs 转译 C，逐字节比对
 │   ├── gfxcheck.c     转译对拍测试：图形 blit 工具族 × 原机器码 vs 转译 C，逐字节比对
 │   ├── sprite24check.c 转译对拍测试：24×24 精灵 RLE 族 × 原机器码 vs 转译 C，逐字节比对
@@ -38,6 +38,7 @@ port/
 │   ├── tablescheck.c  转译对拍测试：表访问器（11 个） × 原机器码 vs 转译 C
 │   ├── rle2check.c    转译对拍测试：0xC0-RLE 文本 blit × 原机器码 vs 转译 C
 │   ├── dlgcheck.c     转译对拍测试：对话框辅助 × 原机器码 vs 转译 C（整帧 VGA 比对）
+│   ├── boxcheck.c     转译对拍测试：开框/收框动画（VGA + 5 段快照 + 事件序列 + 每次 delay 抓帧）
 │   ├── ail.c          AIL 替换层：16 个 AIL_* 入口 → 宿主实现（数字音效走 WinMM waveOut）
 │   ├── xmidi.c        XMIDI 解析（FDMUS.DAT 的 XDIR/CAT/FORM XMID）→ 事件列表
 │   ├── synth.c        自带软件合成器：事件 → PCM → waveOut（音乐不依赖系统 MIDI）
@@ -65,6 +66,7 @@ pwsh -File port\build.ps1 -Target rescheck ; & port\build\rescheck.exe        # 
 pwsh -File port\build.ps1 -Target tablescheck ; & port\build\tablescheck.exe  # 4528 例
 pwsh -File port\build.ps1 -Target rle2check ; & port\build\rle2check.exe      # 1200 例
 pwsh -File port\build.ps1 -Target dlgcheck ; & port\build\dlgcheck.exe        # 800 例
+pwsh -File port\build.ps1 -Target boxcheck ; & port\build\boxcheck.exe        # 240 例
 
 # 跑别的 DOS/4GW(LE) 游戏（通用化见 PROGRESS.md §14，先做静态体检）
 python port\re\preflight.py "E:\Games\FDCollection\Game\FDPS\FDPS.EXE"
@@ -74,7 +76,7 @@ Start-Process port\build\fd2host.exe -ArgumentList `
 
 日志写入 `port/build/host.log`（宿主是 WINDOWS 子系统，不弹控制台窗口）。
 可用参数：`--gamedir <目录>`、`--exe <路径>`、`--exit-after <秒>`、`--trace=<n>`、`--headless`、
-`--replace=<none|all|rle,gfx,sprite24,util,path>`（默认 `all`：把已对拍的转译函数接入游戏；`none` = 原机器码，用于 A/B）
+`--replace=<none|all|rle,gfx,sprite24,util,path,dlg>`（默认 `all`：把已对拍的转译函数接入游戏；`none` = 原机器码，用于 A/B）
 **所有带值的参数都同时支持 `--opt value` 与 `--opt=value` 两种写法**（`host_init()` 统一归一化，
 另一种写法不再静默回退到默认值，见 `PROGRESS.md` §8-32/§8-33）、
 `--exit-when-file=<路径>:<字节数>`（文件写满且 autokey 跑完 → 提前干净退出 + 2 s 缓冲，
@@ -165,6 +167,7 @@ LE 加载 + 7937 条 fixup 应用
 → 第 27 轮：**表访问器转译** —— `0x4E7DD..0x4E8BC`（11 个）→ `src/game/tables.c`，对拍 **4528 例逐字节一致**；接入数 **23 → 34**，**obj0 工具库 0x4DED4..0x4EEE0 全部转译完成**
 → 第 28 轮：**0xC0-RLE 文本 blit 转译** —— `0x4EBFF/0x4EC31/0x4EBAB` → `src/game/rle2.c`（含镜像、透明变体），对拍 **1200 例逐字节一致**；接入数 **34 → 37**；修正 regress 的环境重试判据
 → 第 29 轮：**对话框辅助转译** —— `0x16559`（贴 DATO 子图）/`0x16E24`（文本上滚）→ `src/game/dlg.c`，对拍 **800 例逐字节一致**（整帧 VGA）；接入数 **37 → 39**（新增 `--replace=dlg`）
+→ 第 30 轮：**开框/收框动画转译** —— `0x165AC`（开框+人像滑入）/`0x16B43`（收框）/`0x168B6`（5 阶段贴框）/`0x1685C`（贴瓦片）→ `src/game/dlg.c`，对拍 **240 例逐字节一致**（VGA + 5 段快照 + 事件序列 + 每次 delay 抓帧，服务用桩：CRT 堆/delay/BDA/人像滑入）；接入数 **39 → 43**；宿主 A/B 固定帧 1500/1620（含对话框）**0 px 差**，新工具 `framediff.ps1`
 ```
 
 ## 当前状态与下一步
@@ -197,9 +200,10 @@ LE 加载 + 7937 条 fixup 应用
    + "存档变小"时的截断对拍。可复现回归：`pwsh -File port\regress.ps1`。
 6. **逐步源码化（路线 C 主体）**：按 `re/RE_MAP.md` 的模块顺序把机器码替换为 C 源码，
    最终形成可编译 x86-64 的引擎。**obj0 工具库 0x4DED4..0x4EEE0 已全部转译**，另有 0xC0-RLE
-   文本 blit 与对话框辅助：RLE（1900）、gfx（1450）、sprite24（2100）、util（2200）、path（1000）、
-   tables（4528）、rle2（1200）、res（160）、dlg（800）；**其中 39 个经 `src/repl.c` 接入运行中的游戏**
-   （`--replace=all` 默认开）；下一批：`sub_15F84` 文本/脚本渲染器（多轮），以及 CRT 堆/文件层替换。
+   文本 blit 与对话框（辅助 + 开框/收框动画）：RLE（1900）、gfx（1450）、sprite24（2100）、util（2200）、
+   path（1000）、tables（4528）、rle2（1200）、res（160）、dlg（800 + box 240）；**其中 43 个经
+   `src/repl.c` 接入运行中的游戏**（`--replace=all` 默认开）；下一批：`sub_16C57`（等键+喘型）→
+   `sub_15F84` 文本/脚本渲染器，以及 CRT 堆/文件层替换。
 7. **跨平台**：单代码库 + 后端选择（**不用 git 分支**）。已抽出的是 `render.h`/`host.h` +
    入口层 `main_win32.c`（第 1 步完成）；`audio.h` 随**第 3 步**（sokol_audio 替换 waveOut）抽，
    `platform.h`（OS 适配：内存/线程/文件/异常）随**第 4 步** POSIX 一起抽（届时才引入
@@ -222,6 +226,11 @@ LE 加载 + 7937 条 fixup 应用
 - `utilcheck.exe`：字节/调色板 6 函数的对拍（2200 例，含返回值与 `word_6017B` 断言）；
   `0x4DF09` 不守 ABI，测试用 asm 保存/恢复 EBX（PROGRESS §23.2）。
 - `pathcheck.exe`：地形代价洪泛/寻路的对拍（1000 例，比较 map 全量 + 输出缓冲 + 最优长度）（PROGRESS §24）。
+- `boxcheck.exe`：开框/收框动画的对拍（240 例）。除整帧 VGA + 5 段 26668 B 快照外，还把
+  CRT 堆/delay/BDA 冲键/人像滑入四个服务钩成**事件记录桩**（参数 + 当时的 `dword_51A83` +
+  每次 delay 的整帧快照），因此连动画**调用顺序**都能逐项对拍（PROGRESS §30.2）。
+- `framediff.ps1`：两个 `--screenshot` BMP 的逐像素差（数量/百分比/最大通道差），
+  用于 repl 的 A/B 证据——同帧 `--replace=none` vs `all` 的差必须不超过 none vs none 的基线噪声。
 - `rescheck.exe`：资源加载器的对拍（160 例）。它先把游戏 CRT 的 `fopen/fclose/fseek/fread/malloc/free`
   入口改成 jmp 到宿主 libc，再调**原版 `0x111BA`**——这套"CRT 重定向"术可测试任何依赖
   文件/内存的游戏函数（PROGRESS §25.2）。

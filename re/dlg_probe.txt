@@ -1,0 +1,60 @@
+==== sub_3702F @0x3702F .. 0x3703F ====
+  0x3702F  xchg    )!eax!)	,	 *	[	!esp!	+	arg_0	]	*
+  0x37033  call    )(0000000000037042sub_37042)
+  0x37038  mov     )!eax!)	,	 *	[	!esp!	+	arg_0	]	*
+  0x3703C  retn    )4)
+==== sub_37042 @0x37042 .. 0x3705F ====
+  0x37042  cmp     )!eax!)	,	 *!esp!*
+  0x37044  jnb      short  )(0000000000037053loc_37053)
+  0x37046  sub     )!eax!)	,	 *!esp!*
+  0x37048  neg     )!eax!)
+  0x3704A  cmp     )!eax!)	,	 *(0000000000052814dword_52814*
+  0x37050  jbe      short  )(0000000000037053loc_37053)
+  0x37052  retn
+  0x37053  mov     )!eax!)	,	 *!ss!*
+  0x37055  cmp     )!ax!)	,	 *(0000000000052794word_52794*
+  0x3705C  jz       short  )(000000000003705Fsub_3705F)
+  0x3705E  retn
+==== sub_12CEA @0x12CEA .. 0x12D7B ====
+  0x12CEA  push    )14h)
+  0x12CEF  call    )(000000000003702Fsub_3702F)
+  0x12CF4  push    )!ebx!)
+  0x12CF5  push    )!esi!)
+  0x12CF6  push    )!edi!)
+  0x12CF7  mov     )!esi!)	,	 *	[	!esp!	+	0Ch	+	arg_0	]	*
+  0x12CFB  mov     )!edi!)	,	 *	[	!esp!	+	0Ch	+	arg_4	]	*
+  0x12CFF  push    )0)
+  0x12D01  call    )(0000000000011CACsub_11CAC)
+  0x12D06  add     )!esp!)	,	 *4*
+  0x12D09  cmp     )!esi!)	,	 * dword ptr  (0000000000053AB1qword_53AB1*
+  0x12D0F  jz       short  )(0000000000012D42loc_12D42)
+  0x12D11  jge      short  )(0000000000012D1Aloc_12D1A)
+  0x12D13  call    )(0000000000011C59sub_11C59)
+  0x12D18  jmp      short  )(0000000000012D1Floc_12D1F)
+  0x12D1A  call    )(0000000000011BFAsub_11BFA)
+  0x12D1F  cmp     )(0000000000051A83dword_51A83)	,	 *0*
+  0x12D26  jz       short  )(0000000000012D3Bloc_12D3B)
+  0x12D28  cmp     )(0000000000051A83dword_51A83)	,	 *6*
+  0x12D2F  jz       short  )(0000000000012D3Bloc_12D3B)
+  0x12D31  push    )1)
+  0x12D33  call    )(0000000000017AA9sub_17AA9)
+  0x12D38  add     )!esp!)	,	 *4*
+  0x12D3B  call    )(000000000004E381sub_4E381)
+  0x12D40  jmp      short  )(0000000000012D09loc_12D09)
+  0x12D42  cmp     )!edi!)	,	 * dword ptr  (0000000000053AB1qword_53AB1	+	4*
+  0x12D48  jz       short  )(0000000000012CE6loc_12CE6)
+  0x12D4A  jge      short  )(0000000000012D53loc_12D53)
+  0x12D4C  call    )(0000000000011B48sub_11B48)
+  0x12D51  jmp      short  )(0000000000012D58loc_12D58)
+  0x12D53  call    )(0000000000011B9Bsub_11B9B)
+  0x12D58  cmp     )(0000000000051A83dword_51A83)	,	 *0*
+  0x12D5F  jz       short  )(0000000000012D74loc_12D74)
+  0x12D61  cmp     )(0000000000051A83dword_51A83)	,	 *6*
+  0x12D68  jz       short  )(0000000000012D74loc_12D74)
+  0x12D6A  push    )1)
+  0x12D6C  call    )(0000000000017AA9sub_17AA9)
+  0x12D71  add     )!esp!)	,	 *4*
+  0x12D74  call    )(000000000004E381sub_4E381)
+  0x12D79  jmp      short  )(0000000000012D42loc_12D42)
+==== j___delay @0x3790A .. 0x3790F ====
+  0x3790A  jmp     )(000000000003E01D__delay)
