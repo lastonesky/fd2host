@@ -16,7 +16,7 @@
  *     addresses instead, which keeps one heap on every path.
  *
  * See repl.h for why this is safe. Groups: rle, gfx, sprite24, util, path,
- * dlg.
+ * dlg, rec.
  */
 #include <windows.h>
 #include <stdio.h>
@@ -32,6 +32,7 @@
 #include "game/tables.h"
 #include "game/rle2.h"
 #include "game/dlg.h"
+#include "game/rec.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -140,6 +141,12 @@ static const struct repl_entry g_repl[] = {
     { 0x168B6, "dlg_box_stage",       (void *)dlg_box_stage,        REPL_DLG },
     { 0x1685C, "dlg_frame_tile",      (void *)dlg_frame_tile,       REPL_DLG },
     { 0x16C57, "dlg_wait_key",        (void *)dlg_wait_key,         REPL_DLG },
+
+    /* --- character record table (src/game/rec.c) -----------------------
+     * Both entries read/write the game data segment directly, so the C
+     * signature matches the machine code one to one (cdecl, one stack arg). */
+    { 0x34894, "rec_flag",            (void *)rec_flag,             REPL_REC },
+    { 0x12C60, "rec_find",            (void *)rec_find,             REPL_REC },
 };
 
 unsigned repl_parse(const char *spec)
@@ -162,6 +169,7 @@ unsigned repl_parse(const char *spec)
         else if (!_stricmp(tok, "util"))     mask |= REPL_UTIL;
         else if (!_stricmp(tok, "path"))     mask |= REPL_PATH;
         else if (!_stricmp(tok, "dlg"))      mask |= REPL_DLG;
+        else if (!_stricmp(tok, "rec"))      mask |= REPL_REC;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

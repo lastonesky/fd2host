@@ -61,7 +61,9 @@ $targets = @{
     # operand redirect (like the host), palette hook drives a deterministic
     # tick, int386 hook scripts the key
     keycheck = @{ srcs = @("keycheck.c", "le.c", "game\dlg.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
-    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c");
+    # differential test: src/game/rec.c (80-byte record table) vs 0x34894/0x12C60
+    reccheck = @{ srcs = @("reccheck.c", "le.c", "game\rec.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";
                  # ASLR must stay on (with /DYNAMICBASE:NO Windows reserves the
