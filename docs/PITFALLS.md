@@ -460,3 +460,12 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     同一事实的另一面：**一切穿过 `dos_ctx` 的指针都必须 < 4 GiB** —— `doscheck` 把字符串、
     缓冲区和执行 `int 0x21` 的代码桩都放进 `0x30000000` 的固定低页（与游戏同一规则），
     否则 64 位主机的栈/`.rodata` 地址一进 `Edx` 就被截断（当场抓到过一次：`open` 收到 `0x8198C01C`）。
+64. **VK 的值域与 ASCII 字母区间重叠；`MapVirtualKeyA` 对 PRINT/PAUSE 没有可用 make code**（第 46 轮）：
+    便携键表 `src/keys.c` 首次对拍（`keyscheck`）当场抓到两个"看起来对、其实错"的点：
+    - `fr_key_from_vk()` 若把"字母/数字直接映射成 VK"放在查表**之前**，
+      `VK_F1=0x70='p'`、`VK_MULTIPLY=0x6A='j'`、`VK_NUMPAD7=0x67='g'` 会被当成字母，
+      F1-F12 与整个小键盘静默映射错。**先查特殊 VK 表，再走字母/数字范围**。
+    - `MapVirtualKeyA(VK_SNAPSHOT, VK_TO_VSC)` 实测返回 **0x54**、
+      `MapVirtualKeyA(VK_PAUSE, VK_TO_VSC)` 返回 **0**（本机参考机），都不是 BIOS make code；
+      而 guest 收不到这两个键 ⇒ 表里不放（放进去只会让对拍失败或给 guest 喂垃圾扫描码）。
+    **判据**：`build\keyscheck.exe` → `102 keys pinned … PASS`；`--dump` 是 Linux 侧的唯一参考表。

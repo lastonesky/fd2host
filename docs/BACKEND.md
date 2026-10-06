@@ -284,3 +284,51 @@ Win32 消息泵 + `SetTimer`，二者不能链进同一个二进制。要做运�
 
 **GDI 的位置**：只为这一次对照临时 `-Render gdi` 编过一回，之后立即切回默认 sokol；
 日常循环（构建/回归/抓帧）不再涉及 GDI，它只在需要"参考实现"时按需重建。
+
+### 13.11 Linux 窗口系统：**X11（经 XWayland）** —— Wayland 原生不在 sokol 里（2026-10-07，第 46 轮）
+
+**问题**（用户提问）：描述里写的是 X11，Wayland 到底支不支持？X11 能不能在 Wayland 里用？
+
+**结论**（三句话）：
+
+1. **pin 住的 sokol 没有 Wayland 后端**：`vendor/sokol/sokol_app.h`（commit `2e75443`）在
+   `_SAPP_LINUX` 下只 `#include <X11/Xlib.h>`、`XInput2`、`Xcursor`，全文件
+   **0 处** `wayland` / `wl_display` / `wl_surface` ⇒ 我们的 Linux 宿主是**纯 X11 客户端**。
+2. **X11 客户端在 Wayland 桌面照常跑**，因为桌面会起 **XWayland**（X 服务器兼容层，集成在
+   GNOME/KDE/Sway 等会话里；**WSLg 也是**）。代价只有缩放/延迟这类边缘问题，功能不受影响；
+   只有**没装 XWayland 的极简 Wayland 会话**（裸 sway 之类）才起不来。
+3. **要 Wayland 原生就得换后端**（SDL3 是 Wayland 一等公民，见 §13.3）——本轮**不做**：
+   sokol 的 X11 后端已经把我们要的东西（布局无关键码 + `XLookupString` 的字符）都做好了
+   （见下），换库的收益不抵成本。**记录为"accepted limitation"**。
+
+**实测证据**（本机 WSLg，探针 `build/x11probe.c`，命令 `cc -std=gnu11 -o build/x11probe
+build/x11probe.c -lX11 -lGL && ./build/x11probe`；探针是 build/ 下的临时产物、不入库）：
+
+```
+server vendor   : The X.Org Foundation
+protocol version: 11.0
+screens         : 1  default 1920x1080 depth 24
+extensions      : XWAYLAND=yes GLX=yes XInput=yes XKEYBOARD=yes
+=> served by XWayland (an X11 client under a Wayland compositor)
+GLX version     : 1.4
+GLX RGBA/dbuf   : yes (a visual is available)
+```
+
+⇒ `DISPLAY=:0` 走 `/tmp/.X11-unix/X0` 连到 **WSLg 的 XWayland**（`XWAYLAND` 扩展在 = 这是
+XWayland 而不是真 Xorg）；`SOKOL_GLCORE` 要的 GLX 1.4 + RGBA 双缓冲 visual 都在。
+
+**对入口层的直接影响：不用自己写 X11 代码**（这是本次探查最大的收获）。sokol_app 的 X11 后端已经：
+
+| 我们要的 | sokol_app 给什么 | 代码位置 |
+|---|---|---|
+| 布局无关的物理键 | `sapp_event.key_code`（`SAPP_KEYCODE_*`，XKB key name 表生成，GLFW 同法） | `_sapp_x11_init_keytable()` |
+| ASCII/字符 | **`SAPP_EVENTTYPE_CHAR`**（内部就是 `XLookupString` + keysym→unicode 表） | `_sapp_x11_handle_keypress()` |
+| 修饰键 | `sapp_event.modifiers`（`SAPP_MODIFIER_*`） | `_sapp_x11_mods()` |
+
+所以 Linux 入口层要写的只有**一张 `SAPP_KEYCODE_*` → BIOS 扫描码表**（外加 `0xE0` 规则），
+**不是** `XLookupString`/keysym 表——`docs/rounds/13-portability.md` §43.5 第 3 项的原计划
+（"`ToAscii` 的 ASCII 生成 → X11 `XLookupString`/keysym 表"）据此**收敛**为：
+"`SAPP_KEYCODE` → 便携键 id → BIOS 扫描码；字符用 `SAPP_EVENTTYPE_CHAR`"。
+
+**依赖**：X11 侧编译/链接已具备（`libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev`，
+`-std=gnu11 -DSOKOL_GLCORE`，见 §13.6 第 4 步 / `rounds/13` §43.6）。

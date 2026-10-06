@@ -73,6 +73,9 @@ $targets = @{
     # operand redirect (like the host), palette hook drives a deterministic
     # tick, int386 hook scripts the key
     keycheck = @{ srcs = @("keycheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    # portable key table (src/keys.c) pinned against MapVirtualKeyA - the
+    # Windows reference the entry layers use; see src/keyscheck.c
+    keyscheck = @{ srcs = @("keyscheck.c", "keys.c", "keys_win32.c"); libs = @("user32.lib"); subsystem = "console"; link = "" }
     # differential test: src/game/rec.c (80-byte record table) vs 0x34894/0x12C60
     reccheck = @{ srcs = @("reccheck.c", "le.c", "game\rec.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: dlg_type_step (0x164E8) plus the two services it ends

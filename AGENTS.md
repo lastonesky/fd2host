@@ -122,6 +122,7 @@ pwsh -File E:\FD2\port\build.ps1 -Target rle2check; & E:\FD2\port\build\rle2chec
 pwsh -File E:\FD2\port\build.ps1 -Target dlgcheck; & E:\FD2\port\build\dlgcheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target boxcheck; & E:\FD2\port\build\boxcheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target keycheck; & E:\FD2\port\build\keycheck.exe
+pwsh -File E:\FD2\port\build.ps1 -Target keyscheck; & E:\FD2\port\build\keyscheck.exe   # 便携键表 vs MapVirtualKeyA（--dump 打全表）
 pwsh -File E:\FD2\port\build.ps1 -Target reccheck; & E:\FD2\port\build\reccheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target typecheck; & E:\FD2\port\build\typecheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target vmcheck; & E:\FD2\port\build\vmcheck.exe
