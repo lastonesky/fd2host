@@ -38,6 +38,9 @@ $targets = @{
     probe3 = @{ srcs = @("probe3.c"); libs = @(); subsystem = "console" }
     probe4 = @{ srcs = @("probe4.c"); libs = @(); subsystem = "console" }
     letest = @{ srcs = @("letest.c", "le.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    # platform self-test: reserve the guest window and touch every object
+    # range (the portable successor of probe.c)
+    platprobe = @{ srcs = @("platprobe.c", "le.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/rle.c (source translation) vs the original
     # machine code at 0x4E98D / 0x4E8D3 - see src/rlecheck.c
     rlecheck = @{ srcs = @("rlecheck.c", "le.c", "game\rle.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
@@ -90,6 +93,16 @@ $targets = @{
                  # game once turned into the host's own image base and the CPU
                  # jumped into our .text. Push the preferred base far away.
                  link = "/ENTRY:fd2_entry /BASE:0x60000000 /MAP:fd2host.map" }
+}
+
+# Anything that links le.c needs the Windows side of the OS seam too
+# (src/platform.h): the loader no longer talks to kernel32 directly, so the
+# wrappers live in their own translation unit - the POSIX build links
+# src/platform_posix.c instead (Makefile.linux).
+foreach ($k in @($targets.Keys)) {
+    if ($targets[$k].srcs -contains "le.c") {
+        $targets[$k].srcs = $targets[$k].srcs + @("platform_win32.c")
+    }
 }
 
 # --- render backend selection (docs/BACKEND.md §13.1) ---------------------------

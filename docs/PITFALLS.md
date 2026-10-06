@@ -394,3 +394,22 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     - **录制手动会话时不能开它**（会挡住你自己的键）⇒ 录之前**等窗口出现再动手**；
       混进来的早期键在日志里一眼可见（`host: key @1xx ms …`），删掉那几行即可。
     - **判据**：同一命令连录两次，一次有人在打字（多出启动瞬间的键）、一次没有（只有注入的键）。
+
+58. **把 RWX 编成"第三个状态"，POSIX 就只给了 `PROT_EXEC`**（第 43 轮）：
+    `platform.h` 最初定义 `PLAT_PROT_RO=1 / RW=2 / RWX=4` 三个**互斥**值，
+    `platform_posix.c` 的 `to_prot()` 于是 `if (prot & PLAT_PROT_RWX) p |= PROT_EXEC;`
+    —— 结果 `plat_commit(..., PLAT_PROT_RWX)` 建出 **`--xp`（不可读不可写）**的映射，
+    紧接着的 `memset` 直接 **Segmentation fault**；Windows 侧因为 `to_page()` 是查表
+    返回 `PAGE_EXECUTE_READWRITE` 而**完全正常**，所以两边必须各自跑一遍才会暴露。
+    - **修法**：权限是**可组合的 bit**（`PLAT_PROT_R/W/X`，`RWX = R|W|X`），
+      POSIX 1:1 映射到 `PROT_*`，Win32 翻译 `PAGE_*` 组合。
+    - **判据**：`platprobe` 打印 `prot=0x7`（= rwx）且"分块 commit + 触碰"成功；
+      别只看"编译通过、进程没崩"——这个 bug 的第一次表现是**崩**，第二次（我修完
+      查询语义后）是**静默地用错权限**。
+59. **`le.c` 里藏着 MSVC 专属的 `__asm { mov sel, ds }`**（第 43 轮）：
+    `0x02`（段字）fixup 要写"本进程的平坦数据选择子"（`PITFALLS` §8-49），原代码直接用
+    MSVC 内联汇编 —— gcc 编译到一半才报 `expected declaration or statement at end of input`，
+    把真正的错误（后面的函数）全遮住了。收进 `plat_data_selector()`：
+    Win32 用 `__asm`，POSIX 用 `mov %%ds, %0`；**Linux64 返回 0**（长模式 DS=0），
+    与 Windows 的 `0x2B` 不同 ⇒ FDPS 那唯一一条 `0x02` fixup 在 Linux 上**待确认**
+    （FD2 没有这种 fixup，哈希不受影响）。

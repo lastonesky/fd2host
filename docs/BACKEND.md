@@ -151,7 +151,11 @@ probe = `sokol_app`（`SOKOL_WIN32_FORCE_MAIN`，建 960×600 窗口）+ `sokol_
    并补上可测量的音频判据 `--audio-dump`。详见 `docs/AUDIO.md` §11.10、`docs/rounds/11-audio-mixer.md`。
    **验收**：设备每进程只开 1 次；`audio: mixed …` 每 10 s 单调前进；music/sfx 分声道峰值均 > 0；
    `--audio-dump` 逐秒 RMS 连续、`--volume` 10→100 实测 10.3×；`ail: play 16`/`(cut) 0`；回归 8/8。
-4. **POSIX + `platform.h`**：抽 OS 适配层（内存/线程/文件/异常），Win32 实现进
+4. ✅ **POSIX + `platform.h`（第 1 刀已完成，§43）**：`platform.h` + `platform_win32.c` +
+   `platform_posix.c` 已抽出**内存**这一层，`le.c` 零 Win32 依赖，`letest` 在
+   Windows/Linux **三个对象哈希完全一致**（`Makefile.linux`）。剩下的三刀与门槛
+   （`dos.c` 的 VEH/文件服务、入口层键码与截图、**`-m32` 才能执行 32 位游戏代码**）
+   见 `docs/rounds/13-portability.md` §43.5。原计划：抽 OS 适配层（内存/线程/文件/异常），Win32 实现进
    `platform_win32.c`（VEH 暂时仍留 `dos.c`，语义转换见下），POSIX 实现进 `platform_posix.c`
    （`sigaction`/`mmap`/`pthread`）；Linux 侧需要 `libX11-dev` + sokol GL 后端。
    `int NN`/`in out` 的信号语义用 `probe4.c` 的方法在目标机重测 → 首个非 Windows 产物。

@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "platform.h"
 
 #define LE_MAX_OBJECTS 64
 #define LE_PAGE_SIZE   0x1000
@@ -85,7 +86,8 @@ int  le_map_flat(le_image *le, const char *path);
  * ERROR_INVALID_ADDRESS (487) even when every page is already committed -
  * which is what happened after the early reservation was split into per-64KiB
  * blocks. Free sub-blocks (the loader may own a neighbour) are reserved first.
- * Returns 0 on success. kernel32 only, so it is safe before CRT init. */
+ * `prot` is a PLAT_PROT_* value (platform.h). Returns 0 on success, and
+ * it is safe to call before CRT init. */
 int  le_commit_range(uint32_t base, uint32_t size, int prot, const char *what);
 
 void le_close(le_image *le);

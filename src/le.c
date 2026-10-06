@@ -1,13 +1,10 @@
 /* le.c - Linear Executable loader (see le.h for the established layout). */
 
 #include "le.h"
-#include <windows.h>
+#include "platform.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-
-/* kernel32 export (Win7+): names a file mapping for the failure report below.
- * Declared here instead of pulling in psapi.h. */
-BOOL WINAPI K32GetMappedFileNameA(HANDLE, LPVOID, LPSTR, DWORD);
 
 /* Guest window: everything below 1 MiB - the LE objects (including foreign
  * ones such as FDPS's obj2 at 0x70000), the low-memory mirror, the real-mode
@@ -94,11 +91,10 @@ int le_open(le_image *le, const char *path)
                 continue;
             if (b >= FD2_OBJ_REGION_BASE && b + span <= FD2_LOW_LIMIT)
                 continue;                 /* covered by the early reservation */
-            if (!VirtualAlloc((void *)(uintptr_t)b, span, MEM_RESERVE,
-                              PAGE_NOACCESS)) {
+            if (!plat_reserve((uintptr_t)b, span)) {
                 /* not fatal: map_at() retries and reports if it really fails */
-                fprintf(stderr, "le: cannot reserve object %u @0x%X+%X (%lu)\n",
-                        k, b, span, GetLastError());
+                fprintf(stderr, "le: cannot reserve object %u @0x%X+%X (%u)\n",
+                        k, b, span, plat_error());
             } else {
                 printf("le: reserved foreign object %u @0x%X+%X\n", k, b, span);
             }
@@ -256,7 +252,7 @@ static int apply_fixups(le_image *le, int *applied)
                     pos += 5;
                     continue;
                 }
-                __asm { mov sel, ds }
+                sel = (uint16_t)plat_data_selector();
                 *(uint16_t *)(uintptr_t)(page_base + srcoff) = sel;
                 total++;
                 pos += 5;
@@ -304,10 +300,12 @@ static int apply_fixups(le_image *le, int *applied)
     return 0;
 }
 
-static void *map_at(uint32_t base, uint32_t size, DWORD prot, const char *what)
+static void *map_at(uint32_t base, uint32_t size, unsigned prot,
+                    const char *what)
 {
-    /* Commit region by region: a single MEM_COMMIT spanning several of the
-     * early reservation's blocks fails with 487 (see le_commit_range). */
+    /* Commit region by region: a single request spanning several of the
+     * early reservation's blocks fails (ERROR_INVALID_ADDRESS on Windows,
+     * see le_commit_range). */
     if (le_commit_range(base, size, (int)prot, what) != 0)
         return NULL;
     return (void *)(uintptr_t)base;
@@ -321,40 +319,40 @@ int le_commit_range(uint32_t base, uint32_t size, int prot, const char *what)
     if (size == 0)
         return 0;
     while (done < size) {
-        MEMORY_BASIC_INFORMATION q;
+        plat_region q;
         uint32_t addr = base + done;
         uint32_t rend, chunk;
+        char     why[128];
 
-        if (!VirtualQuery((void *)(uintptr_t)addr, &q, sizeof q) ||
-            q.RegionSize == 0) {
-            fprintf(stderr, "le: %s: VirtualQuery failed @0x%X (%lu)\n",
-                    what, addr, GetLastError());
-            return -1;
-        }
-        rend = (uint32_t)(uintptr_t)q.BaseAddress + (uint32_t)q.RegionSize;
-
-        if (q.State == MEM_FREE) {
-            /* not reserved here - take a block (64 KiB is the granularity) */
+        plat_query(addr, &q);              /* -1 == free, which is a valid
+                                            * answer here, not an error */
+        if (!q.size && q.is_free) {
+            /* not reserved here - take a block (64 KiB is the granularity
+             * on Windows; on POSIX the anonymous map granularity) */
             uint32_t take = (addr + 0x10000u <= end) ? 0x10000u : (end - addr);
-            if (!VirtualAlloc((void *)(uintptr_t)addr, take,
-                              MEM_RESERVE | MEM_COMMIT, (DWORD)prot)) {
-                fprintf(stderr, "le: %s: cannot reserve @0x%X+%X (%lu)\n",
-                        what, addr, take, GetLastError());
+            if (!plat_commit((uintptr_t)addr, take, (unsigned)prot)) {
+                unsigned err = plat_error();
+                plat_error_text(err, why, sizeof why);
+                fprintf(stderr, "le: %s: cannot reserve @0x%X+%X (%u: %s)\n",
+                        what, addr, take, err, why);
                 return -1;
             }
             chunk = take;
         } else {
+            rend = (uint32_t)q.base + (uint32_t)q.size;
             chunk = (rend < end ? rend : end) - addr;
-            if (chunk == 0) {
-                fprintf(stderr, "le: %s: degenerate region at 0x%X\n", what, addr);
+            if (chunk == 0 || rend <= addr) {
+                fprintf(stderr, "le: %s: degenerate region at 0x%X\n", what,
+                        addr);
                 return -1;
             }
-            if (!VirtualAlloc((void *)(uintptr_t)addr, chunk, MEM_COMMIT,
-                              (DWORD)prot)) {
-                fprintf(stderr, "le: %s: cannot commit @0x%X+%X (%lu) "
-                        "state=0x%lX prot=0x%lX\n",
-                        what, addr, chunk, GetLastError(),
-                        (unsigned long)q.State, (unsigned long)q.Protect);
+            if (!plat_commit((uintptr_t)addr, chunk, (unsigned)prot)) {
+                unsigned err = plat_error();
+                plat_error_text(err, why, sizeof why);
+                fprintf(stderr, "le: %s: cannot commit @0x%X+%X (%u: %s) "
+                        "prot=0x%X region=0x%lX\n",
+                        what, addr, chunk, err, why, q.prot,
+                        (unsigned long)q.size);
                 return -1;
             }
         }
@@ -384,8 +382,7 @@ int le_reserve_address_space_early(void)
     int critical_ok = 1;
 
     for (a = FD2_OBJ_REGION_BASE; a < FD2_LOW_LIMIT; a += 0x10000u) {
-        if (VirtualAlloc((void *)(uintptr_t)a, 0x10000u,
-                         MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE))
+        if (plat_commit((uintptr_t)a, 0x10000u, PLAT_PROT_RWX))
             continue;
         g_early_failed_mask |= 1u << ((a - FD2_OBJ_REGION_BASE) / 0x10000u);
         if (a < 0x00070000u)                 /* objects live here: mandatory */
@@ -410,43 +407,20 @@ int le_reserve_address_space(void)
     if (!le_reserve_address_space_early())
         return 0;
     {
-        MEMORY_BASIC_INFORMATION mbi;
-        DWORD err = GetLastError();
-        ULONG_PTR img = (ULONG_PTR)GetModuleHandleA(NULL);
-        fprintf(stderr, "le: cannot reserve object region @0x%X: %lu\n",
+        /* Same report as before the platform split (docs/PITFALLS.md -8-48
+         * quotes these lines as the retry signature): the code, our own
+         * image base, and one line saying who owns the address. */
+        unsigned err = plat_error();
+        char why[128], desc[512];
+
+        fprintf(stderr, "le: cannot reserve object region @0x%X: %u\n",
                 FD2_OBJ_REGION_BASE, err);
-        fprintf(stderr, "    this image is loaded at 0x%p\n", (void *)img);
-        if (VirtualQuery((void *)(uintptr_t)FD2_OBJ_REGION_BASE, &mbi,
-                         sizeof mbi)) {
-            fprintf(stderr,
-                    "    0x%X is %s%s%s type=%s prot=0x%lX region=0x%zX\n",
-                    FD2_OBJ_REGION_BASE,
-                    (mbi.State & MEM_COMMIT) ? "COMMIT " : "",
-                    (mbi.State & MEM_RESERVE) ? "RESERVE " : "",
-                    (mbi.State & MEM_FREE) ? "FREE" : "",
-                    (mbi.Type == MEM_IMAGE) ? "IMAGE" :
-                    (mbi.Type == MEM_MAPPED) ? "MAPPED" :
-                    (mbi.Type == MEM_PRIVATE) ? "PRIVATE" : "-",
-                    mbi.Protect, mbi.RegionSize);
-            fprintf(stderr, "    allocation base = 0x%p\n", mbi.AllocationBase);
-            /* Who put it there? The reservation runs in fd2_entry, i.e. after
-             * every DLL's DllMain but before our own CRT - so a data mapping
-             * created during process init can win the race for 0x10000 (seen
-             * once in a host spawned by INT 21h AH=4B: 0x3000, MAPPED,
-             * read-only). Naming it turns "cannot reserve" into something
-             * fixable. K32GetMappedFileNameA is a kernel32 export. */
-            {
-                char nm[MAX_PATH];
-                DWORD n = K32GetMappedFileNameA(GetCurrentProcess(),
-                                                mbi.AllocationBase,
-                                                nm, MAX_PATH);
-                if (n)
-                    fprintf(stderr, "    mapping: %s\n", nm);
-                else
-                    fprintf(stderr, "    mapping: <name unavailable, %lu>\n",
-                            GetLastError());
-            }
-        }
+        fprintf(stderr, "    this image is loaded at 0x%p\n",
+                plat_image_base());
+        plat_error_text(err, why, sizeof why);
+        fprintf(stderr, "    %s\n", why);
+        plat_describe((uintptr_t)FD2_OBJ_REGION_BASE, desc, sizeof desc);
+        fprintf(stderr, "    %s\n", desc);
         return -1;
     }
 }
@@ -509,7 +483,7 @@ int le_map_and_relocate(le_image *le, int *fixups_applied)
         /* map whole pages: fixups may write a dword that starts inside the
          * last valid page but extends past vsize */
         uint32_t span = o->page_count * LE_PAGE_SIZE;
-        void *p = map_at(o->base, span, PAGE_EXECUTE_READWRITE, "object");
+        void *p = map_at(o->base, span, PLAT_PROT_RWX, "object");
         if (!p) return -1;
         memset(p, 0, span);
     }
@@ -552,7 +526,7 @@ int le_map_flat(le_image *le, const char *path)
     if (!f) { fprintf(stderr, "le: cannot open flat image %s\n", path); return -1; }
     for (i = 0; i < le->object_count; i++ ) {
         const le_object *o = &le->objects[i];
-        void *p = map_at(o->base, o->vsize, PAGE_EXECUTE_READWRITE, "flat");
+        void *p = map_at(o->base, o->vsize, PLAT_PROT_RWX, "flat");
         if (!p) { fclose(f); return -1; }
         if (fread(p, 1, o->vsize, f) != o->vsize) {
             fprintf(stderr, "le: short flat image for object %u\n", i);

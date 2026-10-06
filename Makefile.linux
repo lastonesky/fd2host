@@ -1,0 +1,37 @@
+# Makefile.linux - POSIX build of the parts that are already portable.
+#
+#   make -f Makefile.linux        -> build/letest-linux + build/platprobe-linux
+#   make -f Makefile.linux run    -> ... and run it against the game
+#
+# Same usage as the Windows letest.exe:
+#   build/letest-linux <FD2.EXE> <reference-image-dir>
+#
+# Only the loader has crossed over so far: le.c no longer talks to kernel32
+# (it goes through src/platform.h, POSIX side platform_posix.c). Everything
+# else still needs the VEH, the Win32 file services and the entry layers -
+# docs/rounds/13-portability.md.
+
+CC      ?= cc
+CFLAGS  ?= -O2 -g -std=c11 -Wall
+SRC     := src
+OUT     := build
+GAME    ?= /mnt/e/FD2/FD2.EXE
+REFDIR  ?= /mnt/e/FD2/port/build
+
+all: $(OUT)/letest-linux $(OUT)/platprobe-linux
+
+$(OUT)/platprobe-linux: $(SRC)/platprobe.c $(SRC)/le.c $(SRC)/platform_posix.c $(SRC)/le.h $(SRC)/platform.h
+	@mkdir -p $(OUT)
+	$(CC) $(CFLAGS) -I$(SRC) -o $@ $(SRC)/platprobe.c $(SRC)/le.c $(SRC)/platform_posix.c
+
+$(OUT)/letest-linux: $(SRC)/letest.c $(SRC)/le.c $(SRC)/platform_posix.c $(SRC)/le.h $(SRC)/platform.h
+	@mkdir -p $(OUT)
+	$(CC) $(CFLAGS) -I$(SRC) -o $@ $(SRC)/letest.c $(SRC)/le.c $(SRC)/platform_posix.c
+
+run: $(OUT)/letest-linux
+	$(OUT)/letest-linux $(GAME) $(REFDIR)
+
+clean:
+	rm -f $(OUT)/letest-linux $(OUT)/platprobe-linux
+
+.PHONY: all run clean

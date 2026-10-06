@@ -327,7 +327,7 @@ static uint8_t *map_low(uint32_t base, uint32_t size, const char *what)
 {
     /* Region by region: a single MEM_COMMIT spanning the early reservation's
      * separate 64 KiB blocks fails with 487 (see le_commit_range). */
-    if (le_commit_range(base, size, PAGE_READWRITE, what) != 0)
+    if (le_commit_range(base, size, PLAT_PROT_RW, what) != 0)
         return NULL;
     return (uint8_t *)(uintptr_t)base;
 }

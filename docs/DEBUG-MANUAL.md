@@ -43,6 +43,8 @@
 | `keycheck` / `typecheck` | 低内存镜像 + **确定性时钟** | 原机器码与转译 C 共用同一个时钟桩（每读一次 tick 加一） |
 | `vmcheck` | 脚本 VM `0x15F84`：**完整事件序列**（12 个被调函数全桩化）+ 全局 + 返回值 | 词流由合法生成器产生；`VMONLY=<id>` `VMTRACE=1` 取单例现场（定位崩溃/差异用） |
 | `framediff.ps1` | 两个 `--screenshot` BMP 的逐像素差 | repl A/B：差值必须 ≤ none↔none 基线噪声 |
+| 跨平台（加载器）判据 | 同一份 `letest` 在两个平台跑：**三个对象的 `fnv1a` 必须逐字相同**（Windows `build.ps1 -Target letest` / Linux `make -f Makefile.linux`）；有参考镜像时再逐字节比，**只分两类已知差异**（页边界的跨页 fixup、页数之外的 BSS 尾），分类外差异 → `FAIL` + 退出码 1（`rounds/13-portability.md` §43.4） |
+| 平台层自检 | `platprobe`（Win：`-Target platprobe`；Linux：`make -f Makefile.linux` 后 `./build/platprobe-linux`）：预留对象窗 → 分块 commit → 逐段触碰 → 整窗，两平台都必须 exit 0 且 `prot=0x7` |
 | `re/preflight.py` / `re/fixup_scan.py` | 不运行的静态体检（LE/对象布局/与预留区冲突/AIL 特征；fixup 要 `bad=0 leftover=0`） | 换游戏先跑这个 |
 | `tools/xmi_cc7.py` | 扫 XMIDI `EVNT`，按声道统计 CC7（`--ail-dump` 或直接切 `FDMUS.DAT` 的 FORM/XMID） | 判定“原版 `AIL_set_sequence_volume` 的淡变覆盖哪些声道”——原版只乘 CC7（§35.2④） |
 
