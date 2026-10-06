@@ -73,6 +73,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 | §33 | 10-06 | 打字机 + 系统服务 | `svc.c` + `dlg_type_step`（1176 例，确定性时钟 + 变异验证），接入 46→**49**；顺带定位 SFX 爆音 | `docs/rounds/05-rec-and-services.md` |
 | §34 | 10-06 | 抓帧触发改判 + sokol 实测 | sokol **能编能跑**（D3D11 / 159 fps）；验收标准“同帧”是错的 → 加 `--shot-time`，再收紧为 **`--shot-tick`**（按游戏 BIOS tick，跨后端同状态）；SFX 爆音按“常驻设备 + 3 ms 起停斜坡”修完 | `docs/rounds/05-rec-and-services.md` §34、`docs/BACKEND.md` §13.8、`docs/AUDIO.md` §11.6 |
 | §35 | 10-06 | 音量“先小后大”排查 | **不是回归**：是游戏 `play_bgm` 自己的 `set(0,0)+set(127,2000)` 2 秒淡入，原版 AIL（`sub_449E0`/`sub_43270`/`sub_42980`）照实现，15 首曲子全声道有 CC7 ⇒ 覆盖等价；顺带修掉移植侧**起播 371 ms 抢跑旧增益**（起播闸门，`gain 0.000` 判据） | `docs/rounds/06-audio-fade.md`、`docs/AUDIO.md` §11.9、`docs/PITFALLS.md` §8-52 |
+| §36 | 10-06 | sokol 显示层验收 | 同 tick **基线 0 px**、GDI vs sokol **31 px（0.0484%）**且全在一块 14×4 动画元素上 ⇒ **第 2 步收口**；取样点必须选静止画面（片头转场同后端自比都能差 60%，`§8-53`） | `docs/rounds/07-sokol-acceptance.md`、`docs/BACKEND.md` §13.10 |
 
 ## 4. 下一步计划（按优先级）
 
@@ -82,9 +83,10 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
    已完成：资源加载器 ✅、RLE/blit ✅、obj0 工具库 ✅、对话框系列 ✅、角色记录 ✅、系统服务 ✅。
 2. **补 autokey 配方**：当前标准配方到帧 1500 是静态等键态，只证明"无回归"，没证明
    `dlg_type_step` 在宿主里真的跑过（需要能进"打字进行中"画面的按键序列）。
-3. **显示层换 sokol**：代码已完成且实测可跑（§34），剩下的是**验收**——标准已从"同帧"改判为
-   **同一 guest tick**（`--shot-tick`），两张对照 BMP 已生成，跑一条 `framediff.ps1` 即可收口；
-   `--render=gdi` 继续留作调试基准。详见 `docs/BACKEND.md` §13.8。
+3. ~~显示层换 sokol~~ **已验收（§36，2026-10-06）**：同 tick **基线 0 px**、GDI vs sokol **31 px（0.0484%）**，
+   差异全在一块 14×4 的动画元素相位上；取样点定为 **`--shot-tick=600` 静止画面**（片头转场同后端
+   自比都能差 60% ⇒ 先验基线再比跨后端，`docs/BACKEND.md` §13.10、`docs/PITFALLS.md` §8-53）。
+   `--render=gdi` 不进日常循环，只在需要参考实现时按需重建。
 4. **音频治本**：SFX 爆音已按"常驻设备 + 3 ms 起停斜坡"修完（`docs/AUDIO.md` §11.6）；
    剩下的是**软件混音**（sokol_audio 统一音乐 + 音效、设备只开一次），它同时消掉音乐循环点的
    `Sleep(200)` 静音阶跃与重触发硬切。

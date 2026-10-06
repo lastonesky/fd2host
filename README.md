@@ -22,7 +22,7 @@ port/
 ├── src/
 │   ├── le.c/.h      LE 加载器：对象/页/fixup 重定位、地址空间预留
 │   ├── dos.c/.h     平台层：VEH、int/端口接管、DOS/DPMI/BIOS 服务、低内存镜像
-│   ├── render.h + render_gdi.c   渲染后端接口 + GDI 实现（对拍基准）；render_sokol.c = 第 2 步
+│   ├── render.h + render_gdi.c   渲染后端接口 + GDI 实现（对拍基准）；render_sokol.c = 默认后端
 │   ├── host.h/.c    内核：参数、LE/DOS/AIL 启动、游戏线程、调色板→BGRA、抓帧、watchdog/autokey
 │   ├── main_win32.c 入口层：fd2_entry、窗口/消息泵、Win32→BIOS 键盘
 │   ├── repl.c/.h    源码接入层：已对拍的转译函数入口改成 5 字节 jmp 指向 C（默认全开）
@@ -76,12 +76,14 @@ pwsh -File E:\FD2\port\regress.ps1
 ## 下一步（摘要，完整版见 `PROGRESS.md`）
 
 1. **源码化继续**：下一个目标是 `sub_15F84` 脚本 VM（方法、依赖、判据见 `docs/TRANSLATION.md`）。
-2. **显示层换 sokol**（0 DLL、各平台原生 GPU 前后端）：**已设为默认后端**（`build.ps1 -Render`
-   默认 `sokol`，D3D11 / 155 fps），GDI 降为 `-Render gdi` 对拍基准。剩下的是验收——标准已从
-   "同帧"改判为**同一 guest tick**（`--shot-tick`）。详见 `docs/BACKEND.md` §13.9。
+2. ~~显示层换 sokol~~ **已验收（§36）**：默认后端就是 `sokol`（D3D11 / 155 fps），GDI 降为
+   `-Render gdi` 对拍基准（不进日常循环）。同 guest tick 下**同后端基线 0 px**、
+   GDI vs sokol **31 px（0.0484%）**；取样点定为静止画面 `--shot-tick=600`（片头转场同后端
+   自比都能差 60% ⇒ **先验基线再比跨后端**）。详见 `docs/BACKEND.md` §13.10。
 3. **音频治本**：SFX 爆音已按"设备常驻 + 3 ms 起停斜坡"修完；背景音乐已改成**流式合成**
    （原版 AIL 的增量渲染架构）并补上 `AIL_set_sequence_volume` 的 `ms` 渐变，
-   进商店/剧情切换时的淡出淡入不再丢失。剩下的是软件混音
+   进商店/剧情切换时的淡出淡入不再丢失；**每首曲子开头 2 秒小声 = 原作自己的淡入**
+   （四段证据链见 `docs/AUDIO.md` §11.9）。剩下的是软件混音
    （sokol_audio 统一音乐 + 音效），见 `docs/AUDIO.md` §11.6 / §11.8。
 4. 稳定性长跑 / 首次存档路径实测；跨平台走"单代码库 + 后端选择"，不用 git 分支。
 
