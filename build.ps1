@@ -80,7 +80,7 @@ $targets = @{
     # service is hooked to a recording stub so both sides see one world
     # (see src/vmcheck.c)
     vmcheck = @{ srcs = @("vmcheck.c", "le.c", "game\vm.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
-    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c", "game\svc.c", "game\vm.c");
+    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "audio_sokol.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c", "game\svc.c", "game\vm.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";
                  # ASLR must stay on (with /DYNAMICBASE:NO Windows reserves the
@@ -108,12 +108,15 @@ foreach ($f in $renderSrcs) {
 }
 if ($targets.ContainsKey("fd2host")) {
     $targets["fd2host"].srcs = $targets["fd2host"].srcs + $renderSrcs
+    # audio_sokol.c includes sokol_audio.h in *both* render backends: the
+    # mixer is renderer-independent (WASAPI needs no window), so the include
+    # path belongs to the target, not to -Render.
+    $targets["fd2host"].inc  = "/I `"$(Join-Path $root 'vendor\sokol')`""
     if ($Render -eq "sokol") {
         # sokol_gfx: D3D11 on Windows (system built-in, no extra DLL); the
         # HLSL compiler is loaded at runtime by d3dcompiler_47.dll.
         $targets["fd2host"].libs = $targets["fd2host"].libs +
             @("d3d11.lib", "dxgi.lib", "shell32.lib", "ole32.lib")
-        $targets["fd2host"].inc  = "/I `"$(Join-Path $root 'vendor\sokol')`""
     }
     $targets["fd2host"].defs = "/D FD2_RENDER_$($Render.ToUpperInvariant())"
 }

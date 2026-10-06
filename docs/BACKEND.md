@@ -145,8 +145,12 @@ probe = `sokol_app`（`SOKOL_WIN32_FORCE_MAIN`，建 960×600 窗口）+ `sokol_
    每帧 `sg_update_image` + **手写 HLSL textured quad** + `swap_interval=1`（顺带解掉 32 fps）；
    键码 `SAPP_KEYCODE_*` → BIOS 扫描码表（~60 行）。`--render=sokol` 默认，`gdi` 保底对拍。
    **验收**：GDI vs sokol 同帧截图逐像素一致。
-3. **`audio_sokol.c` + 抽出 `audio.h`**：sokol_audio 回调流式替换 `waveOut + Sleep(200)` 轮询，
-   让 `ail.c`/`synth.c` 只见接口；并修 §12 提到的“音量在 synth 后端不生效 / 渐变未实现”。
+3. ✅ **`audio_sokol.c` + 抽出 `audio.h`**（完成 2026-10-06，§41）：sokol_audio（WASAPI）
+   pull 回调做软件混音，`ail.c`/`synth.c` 只见 `audio.h` 接口，音乐与音效**共用一个设备**；
+   “音量在 synth 后端不生效 / 渐变未实现”早已在 §11.8/§11.9 修掉，本轮是**换承载点**、
+   并补上可测量的音频判据 `--audio-dump`。详见 `docs/AUDIO.md` §11.10、`docs/rounds/11-audio-mixer.md`。
+   **验收**：设备每进程只开 1 次；`audio: mixed …` 每 10 s 单调前进；music/sfx 分声道峰值均 > 0；
+   `--audio-dump` 逐秒 RMS 连续、`--volume` 10→100 实测 10.3×；`ail: play 16`/`(cut) 0`；回归 8/8。
 4. **POSIX + `platform.h`**：抽 OS 适配层（内存/线程/文件/异常），Win32 实现进
    `platform_win32.c`（VEH 暂时仍留 `dos.c`，语义转换见下），POSIX 实现进 `platform_posix.c`
    （`sigaction`/`mmap`/`pthread`）；Linux 侧需要 `libX11-dev` + sokol GL 后端。

@@ -22,7 +22,8 @@ void xmidi_set_tick_rate(int ticks_per_second);
 void xmidi_set_test(int on);
 
 /* 0 = play through the Windows MIDI Mapper, 1 (default) = render with the
- * built-in software synthesiser in synth.c and play via waveOut. */
+ * built-in software synthesiser in synth.c and stream it into the software
+ * mixer (src/audio.h). */
 void xmidi_set_backend(int backend);
 int  xmidi_is_playing(void);
 

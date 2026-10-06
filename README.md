@@ -67,7 +67,7 @@ pwsh -File E:\FD2\port\regress.ps1
 | 服务语义 | `AH=42` 是 CX:DX 入参 / DX:AX 出参、`AH=48` 返回线性地址且要读完整 EBX、`AH=FF` 必须非 0… | `docs/HOST-DESIGN.md` §4.4 |
 | 显示 | VGA DAC 是 **6 位/通道**（要 `(v<<2)\|(v>>4)`）、32bpp `BI_RGB` 内存序是 **BGRA** | `docs/PITFALLS.md` §8-17 |
 | 键盘 | 菜单走 `INT 16h`、片头轮询 BDA；**游戏不用鼠标**（静态 + 运行期双证） | `docs/PITFALLS.md` §8-22 / `docs/rounds/01-platform-and-tooling.md` §12.3 |
-| 音频 | 16 个 AIL 入口替换；音乐自带合成器 + 解析 `gm.dls`（不依赖系统 MIDI） | `docs/AUDIO.md` |
+| 音频 | 16 个 AIL 入口替换；音乐自带合成器 + 解析 `gm.dls`（不依赖系统 MIDI）；**音乐+音效一个软件混音器、一个设备**（`audio.h`/`audio_sokol.c`），`--audio-dump` 可离线量化 | `docs/AUDIO.md` |
 | 转译 | 51 个函数经 `src/repl.c` 接入运行中的游戏，全部逐字节对拍通过 | `docs/TRANSLATION.md` |
 
 > 以上每条背后都有硬判据（`host.log` 行 / `letest` 逐字节 / 抓帧 / `*check` 用例数），
@@ -80,12 +80,14 @@ pwsh -File E:\FD2\port\regress.ps1
    `-Render gdi` 对拍基准（不进日常循环）。同 guest tick 下**同后端基线 0 px**、
    GDI vs sokol **31 px（0.0484%）**；取样点定为静止画面 `--shot-tick=600`（片头转场同后端
    自比都能差 60% ⇒ **先验基线再比跨后端**）。详见 `docs/BACKEND.md` §13.10。
-3. **音频治本**：SFX 爆音已按"设备常驻 + 3 ms 起停斜坡"修完；背景音乐已改成**流式合成**
-   （原版 AIL 的增量渲染架构）并补上 `AIL_set_sequence_volume` 的 `ms` 渐变，
-   进商店/剧情切换时的淡出淡入不再丢失；**每首曲子开头 2 秒小声 = 原作自己的淡入**
-   （四段证据链见 `docs/AUDIO.md` §11.9）。剩下的是软件混音
-   （sokol_audio 统一音乐 + 音效），见 `docs/AUDIO.md` §11.6 / §11.8。
-4. 稳定性长跑 / 首次存档路径实测；跨平台走"单代码库 + 后端选择"，不用 git 分支。
+3. ~~**音频治本**~~ **已完成（§41）**：音乐与音效收进 `src/audio.h` + `src/audio_sokol.c`
+   （sokol_audio/WASAPI，**一个设备**、一个回调里相加），`synth.c` 不再有流线程与缓冲队列
+   （回调按需拉 ⇒ 音量/渐变零延迟），`ail.c` 不再有每句柄设备；**增益仍在上游烘焙**，
+   §11.6~§11.9 的音量语义（含 `--volume`、3 ms 斜坡、`ms` 渐变、起播闸门）逐位不变。
+   新增 **`--audio-dump=<wav>`** 把“混音器交给设备的样本”录下来，音频判据从此可测量
+   （逐秒 RMS、分声道峰值、`--volume` 10→100 实测 10.3×）。见 `docs/AUDIO.md` §11.10。
+4. 稳定性长跑 / 首次存档路径实测（只在沙箱）；跨平台走"单代码库 + 后端选择"，不用 git 分支
+   —— `audio.h` 已是纯接口，sokol_audio 在 Linux 是 ALSA ✓。
 
 ## 文档地图（`docs/`）
 

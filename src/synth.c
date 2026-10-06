@@ -8,10 +8,11 @@
  * needs the gm.dls sound bank, and midiOutShortMsg failures are easy to miss.
  * When it is silent there is nothing the game can do about it.
  *
- * The sound effects already prove that waveOut works, so the music is rendered
- * here instead: the parsed MIDI events drive a small wavetable/FM-ish
- * synthesiser, the result is mixed to 16-bit mono PCM once, and that buffer is
- * handed to waveOut (optionally resubmitted to loop). No system MIDI involved.
+ * The sound effects already prove that a waveOut-free path can make noise,
+ * so the music is rendered here: the parsed MIDI events drive a small
+ * wavetable/FM-ish synthesiser and src/audio.h pulls one slice at a time from
+ * the software mixer's callback - there is one device for music and effects
+ * together (docs/AUDIO.md §11.10). No system MIDI involved.
  *
  * Sound model: one voice per MIDI channel (the game uses 11 of them), a sine
  * with two harmonics as the waveform, a linear attack/decay/sustain/release
@@ -26,6 +27,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "synth.h"
+#include "audio.h"
 #include "dls.h"
 
 #define PI              3.14159265358979
@@ -74,10 +76,7 @@ static int          g_channel_expr[16];      /* CC11 */
 static long         g_sampled_notes;         /* note-ons that found a sample */
 static long         g_drum_notes;            /* note-ons on the percussion channel */
 
-static HWAVEOUT     g_dev;
 static uint32_t     g_rate = 22050;
-static HANDLE       g_thread;
-static volatile LONG g_stop_flag;
 static int          g_loop;
 static long         g_notes;
 static int          g_peak_voices;
@@ -471,17 +470,15 @@ static int render(const synth_event *ev, int count, double tick_rate,
     return 1;
 }
 
-/* ------------------------------------------------------------ waveOut ---- */
+/* ------------------------------------------------------------- mixer ----- */
 
-/* Several small buffers are queued and refilled as the driver finishes them,
- * so the synthesiser only ever runs a couple of slices ahead of what is
- * audible. Volume is applied per slice, which is what makes
- * AIL_set_sequence_volume(seq, vol, ms) audible at all. */
-#define STREAM_SLICE    2048            /* samples per buffer (~93 ms @22050) */
-#define STREAM_BUFFERS  4
-
-static WAVEHDR  g_hdrs[STREAM_BUFFERS];
-static int16_t *g_slices[STREAM_BUFFERS];
+/* The music half of src/audio.h: the device callback pulls one slice at a
+ * time through synth_music_fill() and plays it straight away, so the level
+ * in force *now* is what reaches the device - which is what makes
+ * AIL_set_sequence_volume(seq, vol, ms) audible at all (docs/AUDIO.md §11.8).
+ * There is no queue of pre-rendered slices any more, so a volume change can
+ * never be baked into audio that is already waiting to be played, and there
+ * is no stream thread to keep in step with it. */
 
 /* Sequence volume ramp - AIL_set_sequence_volume's `ms` argument. Stored in
  * the AIL 0..127 domain and interpolated in wall-clock time. */
@@ -490,25 +487,15 @@ static double   g_seq_to   = 127.0;
 static DWORD    g_ramp_t0;
 static int      g_ramp_ms;
 
-/* Start-of-stream gate.
- *
- * The game states the level *after* AIL_start_sequence returns: play_bgm
- * (0x25977) does set(seq,0,0) then set(seq,127,2000) within microseconds.
- * synth_play used to fill and waveOutWrite the whole first queue inside that
- * window, so up to STREAM_BUFFERS x STREAM_SLICE = 371 ms of the new track
- * were baked at whatever level the *previous* track left behind (normally
- * 127/127): a full-volume burst, then a drop, then the game's own fade-in.
- * The original AIL renders from timer interrupts, so nothing is audible in
- * that window - it mutes before the first sample reaches the device.
- *
- * Holding the first write until the first volume request closes the gap.
- * play_bgm always issues one immediately, so the delay is microseconds;
- * STREAM_ARM_MS is only a safety net for a caller that never asks. */
-#define STREAM_ARM_MS   200
-static volatile LONG g_arm;
-static DWORD         g_arm_t0;
-static int           g_queued[STREAM_BUFFERS];   /* has reached waveOutWrite */
-static unsigned long g_slices_written;           /* for the heartbeat         */
+/* Start-of-stream gate (docs/PITFALLS.md §8-52): the game states the level
+ * *after* AIL_start_sequence returns - play_bgm (0x25977) does set(seq,0,0)
+ * then set(seq,127,2000) within microseconds. Anything rendered before that
+ * would carry the *previous* track's level for its whole lifetime (a
+ * full-volume burst, then a drop, then the game's own fade-in - round 35).
+ * synth_play arms the gate through audio_hold_music(); the first
+ * synth_set_sequence_volume opens it. The stamp only exists so the log can
+ * say how long the silence lasted. */
+static DWORD g_arm_t0;
 
 static double seq_volume_now(void)
 {
@@ -524,18 +511,27 @@ static double seq_volume_now(void)
 
 static double stream_gain(void);
 
-static void stream_free_buffers(void)
+/* Called from the audio device callback whenever it wants more music: render
+ * one slice at the level the game asks for *now*, which is exactly what
+ * gets heard. The running fade is logged from here because it is otherwise
+ * only audible - "did the ramp actually happen" is the whole point. */
+static unsigned synth_music_fill(int16_t *dst, unsigned nframes)
 {
-    int i;
+    DWORD now;
+    static DWORD last_fade_log;
 
-    for (i = 0; i < STREAM_BUFFERS; i++) {
-        if (g_slices[i]) {
-            free(g_slices[i]);
-            g_slices[i] = NULL;
-        }
-        memset(&g_hdrs[i], 0, sizeof g_hdrs[i]);
-        g_queued[i] = 0;
+    stream_fill(dst, (uint32_t)nframes, stream_gain());
+
+    now = GetTickCount();
+    if (g_ramp_ms > 0 && now - g_ramp_t0 < (DWORD)g_ramp_ms &&
+        now - last_fade_log >= 500) {
+        last_fade_log = now;
+        printf("synth: fading %.0f -> %.0f over %d ms: now %.1f/127 "
+               "(%lu ms in)\n",
+               g_seq_from, g_seq_to, g_ramp_ms, seq_volume_now(),
+               (unsigned long)(now - g_ramp_t0));
     }
+    return nframes;
 }
 
 void synth_set_sequence_volume(int volume, int ms)
@@ -551,100 +547,20 @@ void synth_set_sequence_volume(int volume, int ms)
     g_ramp_ms  = ms > 0 ? ms : 0;
     g_ramp_t0  = GetTickCount();
 
-    /* First request for a freshly started stream: let it queue now, at this
-     * level, instead of at the stale one it armed with. */
-    if (InterlockedExchange(&g_arm, 0))
+    /* First request for a freshly started stream: open the gate so the mixer
+     * starts pulling - at this level, not at the stale one it armed with. */
+    if (audio_music_held()) {
+        audio_release_music();
         printf("synth: stream released after %lu ms -> sequence volume %.0f/127, "
                "gain %.3f\n",
                (unsigned long)(GetTickCount() - g_arm_t0),
                seq_volume_now(), stream_gain());
+    }
 }
 
 static double stream_gain(void)
 {
     return seq_volume_now() / 127.0 * (double)g_master / 100.0;
-}
-
-static DWORD WINAPI stream_thread(LPVOID param)
-{
-    int i;
-    DWORD now, last_fade_log = 0, last_heart = 0;
-    int ramp_active = 0;
-
-    (void)param;
-    for (;;) {
-        int idle = 1;
-
-        if (InterlockedCompareExchange(&g_stop_flag, 0, 0))
-            break;
-        if (InterlockedCompareExchange(&g_arm, 0, 0)) {
-            /* Held at the gate: no volume request for this stream yet. */
-            if (GetTickCount() - g_arm_t0 < STREAM_ARM_MS) {
-                Sleep(2);
-                continue;
-            }
-            printf("synth: no volume request after %d ms - starting at sequence "
-                   "volume %.0f/127\n", STREAM_ARM_MS, seq_volume_now());
-            InterlockedExchange(&g_arm, 0);
-        }
-        for (i = 0; i < STREAM_BUFFERS; i++) {
-            /* Ready = the driver is done with it. A header that never reached
-             * waveOutWrite (still at the gate) is ours, not the driver's:
-             * waveOutPrepareHeader sets only WHDR_PREPARED, never WHDR_DONE,
-             * so requiring DONE there would wait forever and nothing would
-             * ever be queued - music gone, SFX fine. */
-            if (g_queued[i] && !(g_hdrs[i].dwFlags & WHDR_DONE))
-                continue;
-            waveOutUnprepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
-            stream_fill(g_slices[i], STREAM_SLICE, stream_gain());
-            waveOutPrepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
-            if (waveOutWrite(g_dev, &g_hdrs[i], sizeof g_hdrs[i]) == MMSYSERR_NOERROR) {
-                g_queued[i] = 1;
-                g_slices_written++;
-            } else {
-                printf("synth: waveOutWrite failed (buffer %d)\n", i);
-            }
-            idle = 0;
-        }
-        /* Heartbeat: proves data is reaching the device (position advances)
-         * and at what level - a silent stream is otherwise indistinguishable
-         * from a working one by logs alone. */
-        now = GetTickCount();
-        if (g_slices_written > 0 && now - last_heart >= 10000) {
-            MMTIME mt;
-            int    k, peak = 0;
-            memset(&mt, 0, sizeof mt);
-            mt.wType = TIME_MS;
-            if (waveOutGetPosition(g_dev, &mt, sizeof mt) == MMSYSERR_NOERROR) {
-                /* what is actually queued right now: level of the oldest slice
-                 * still in flight (a running copy is harmless for a diagnostic) */
-                for (k = 0; k < STREAM_SLICE; k++) {
-                    int v = g_slices[0][k];
-                    if (v < 0) v = -v;
-                    if (v > peak) peak = v;
-                }
-                printf("synth: stream alive - %lu slices, pos %lu (type %u), "
-                       "gain %.3f, queued peak %d/32767\n",
-                       g_slices_written, (unsigned long)mt.u.ms,
-                       (unsigned)mt.wType, stream_gain(), peak);
-            }
-            last_heart = now;
-        }
-        /* Make a running fade visible in the log: it is otherwise only
-         * audible, and "did the ramp actually happen" is the whole point. */
-        now = GetTickCount();
-        ramp_active = (g_ramp_ms > 0) &&
-                      (now - g_ramp_t0 < (DWORD)g_ramp_ms);
-        if (ramp_active && now - last_fade_log >= 500) {
-            last_fade_log = now;
-            printf("synth: fading %.0f -> %.0f over %d ms: now %.1f/127 "
-                   "(%lu ms in)\n",
-                   g_seq_from, g_seq_to, g_ramp_ms, seq_volume_now(),
-                   (unsigned long)(now - g_ramp_t0));
-        }
-        Sleep(idle ? 5 : 0);
-    }
-    return 0;
 }
 
 static const char *g_dump_wav_path;
@@ -705,11 +621,9 @@ static void dump_wav(const char *path, const int16_t *pcm, uint32_t samples,
 int synth_play(const synth_event *ev, int count, double tick_rate,
                uint32_t sample_rate, int loop)
 {
-    WAVEFORMATEX wf;
     int16_t *pcm = NULL;
     uint32_t samples = 0;
     DWORD t0;
-    int i;
 
     synth_stop();
     if (!ev || count <= 0 || tick_rate <= 0.0)
@@ -759,62 +673,20 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
     free(pcm);
     pcm = NULL;
 
-    memset(&wf, 0, sizeof wf);
-    wf.wFormatTag      = WAVE_FORMAT_PCM;
-    wf.nChannels       = 1;
-    wf.nSamplesPerSec  = sample_rate;
-    wf.wBitsPerSample  = 16;
-    wf.nBlockAlign     = 2;
-    wf.nAvgBytesPerSec = sample_rate * 2;
-    if (waveOutOpen(&g_dev, WAVE_MAPPER, &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
-        printf("synth: waveOutOpen(%u Hz) failed\n", (unsigned)sample_rate);
-        g_dev = NULL;
-        return 0;
-    }
-
-    /* Streamed playback: the thread fills and queues slice by slice, so the
-     * gain in force at submission time is what the listener hears. The first
-     * queue is held back until the game has stated this stream's volume - see
-     * the gate above; nothing is filled at arm time, so no stale level can
-     * reach the device. */
+    /* Hand the music to the one mixer in src/audio.h. Detach first (a source
+     * can still be installed from a track nobody stopped), build the fresh
+     * stream, then hold the gate *before* publishing the source - the mixer
+     * must not pull a slice before the game has stated this track's level
+     * (docs/PITFALLS.md §8-52). */
+    audio_set_music(NULL);
     g_loop = loop;
     stream_init(ev, count, tick_rate, sample_rate);
-    for (i = 0; i < STREAM_BUFFERS; i++) {
-        g_slices[i] = (int16_t *)malloc(STREAM_SLICE * sizeof(int16_t));
-        if (!g_slices[i]) {
-            printf("synth: cannot allocate the stream buffers\n");
-            break;
-        }
-        memset(&g_hdrs[i], 0, sizeof g_hdrs[i]);
-        g_hdrs[i].lpData         = (LPSTR)g_slices[i];
-        g_hdrs[i].dwBufferLength = STREAM_SLICE * 2;
-        if (waveOutPrepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]) != MMSYSERR_NOERROR) {
-            printf("synth: waveOutPrepareHeader failed (buffer %d)\n", i);
-            break;
-        }
-    }
-    if (i < STREAM_BUFFERS) {
-        /* Could not prepare every buffer: stop the device and report failure. */
-        waveOutReset(g_dev);
-        waveOutClose(g_dev);
-        g_dev = NULL;
-        stream_free_buffers();
-        return 0;
-    }
-
-    InterlockedExchange(&g_stop_flag, 0);
     g_arm_t0 = GetTickCount();
-    InterlockedExchange(&g_arm, 1);
-    g_slices_written = 0;
-    g_thread = CreateThread(NULL, 0, stream_thread, NULL, 0, NULL);
-    printf("synth: streaming %u x %u-sample slices (%u ms each, %u ms queued), "
-           "sequence volume %.0f/127, first queue held for the volume request "
-           "(hdr flags 0x%X)\n",
-           STREAM_BUFFERS, STREAM_SLICE,
-           (unsigned)((double)STREAM_SLICE * 1000.0 / (double)sample_rate),
-           (unsigned)((double)STREAM_SLICE * STREAM_BUFFERS * 1000.0 /
-                      (double)sample_rate),
-           seq_volume_now(), (unsigned)g_hdrs[0].dwFlags);
+    audio_hold_music();
+    audio_set_music(synth_music_fill);
+    printf("synth: music source installed (%u Hz, loop=%d), gate held until "
+           "the game states the level (sequence volume %.0f/127)\n",
+           sample_rate, loop, seq_volume_now());
     return 1;
 }
 
@@ -825,41 +697,17 @@ void synth_set_bank_path(const char *path)
 
 void synth_stop(void)
 {
-    InterlockedExchange(&g_arm, 0);
-    if (g_thread) {
-        InterlockedExchange(&g_stop_flag, 1);
-        WaitForSingleObject(g_thread, 1000);
-        CloseHandle(g_thread);
-        g_thread = NULL;
-    }
-    if (g_dev) {
-        int i, tries = 0;
-        waveOutReset(g_dev);
-        /* The driver may still own a buffer; never free one before its header
-         * is no longer playing. */
-        for (i = 0; i < STREAM_BUFFERS; i++) {
-            if (!g_slices[i])
-                continue;
-            /* A buffer that never reached waveOutWrite (still at the gate) is
-             * not owned by the driver and never gets WHDR_DONE - waiting for
-             * it would stall synth_stop for a second per slice. */
-            if (g_queued[i]) {
-                tries = 0;
-                while (!(g_hdrs[i].dwFlags & WHDR_DONE) && tries++ < 100)
-                    Sleep(10);
-            }
-            if (g_hdrs[i].dwFlags & WHDR_PREPARED)
-                waveOutUnprepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
-        }
-        waveOutClose(g_dev);
-        g_dev = NULL;
-    }
-    stream_free_buffers();
+    /* Detach first: once the pointer is gone the mixer pulls nothing, and
+     * audio_set_music() takes the same lock the callback mixes under, so no
+     * slice is ever rendered from state that is about to be rebuilt. There
+     * is no device buffer to drain any more - the hard cut is now "the next
+     * mix contains no music", which is what AIL_stop_sequence asked for. */
+    audio_set_music(NULL);
 }
 
 int synth_is_playing(void)
 {
-    return g_dev != NULL;
+    return audio_music_src() != NULL;
 }
 
 long synth_rendered_notes(void)

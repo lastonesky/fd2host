@@ -373,3 +373,14 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
       格式**（产物头 `BM`），文件名 `.png` 骗过文件名骗不过看图器 = 花屏。用
       `python tools\bmp2png.py in.bmp out.png`，或 `.Save(p, [System.Drawing.Imaging.ImageFormat]::Png)`。
     配方与完整判据见 `docs/rounds/10-typewriter-recipe.md` §40。
+
+56. **`--exit-after`/`--exit-when-file` 的退出路径直接 `ExitProcess(0)`，不跑 `host_shutdown`**
+    （第 41 轮）：到点的是独立的 watchdog 线程，它在 `src/host.c` 里
+    `dos_terminate_child(); dos_dump_stats(); ExitProcess(0);` —— 打印"watchdog fired"后
+    你**再也看不到** `host: shutting down`。
+    - **症状**：凡是必须在关闭时补一刀的收尾全丢。第 41 轮是 `--audio-dump` 的 WAV 头拿不到
+      最终长度 ⇒ 文件头写着 0 字节数据（设备/波形其实是好的，只是文件坏了）。
+    - **判据**：跑一次带 `--exit-after` 的抓取，看日志**有没有** `host: shutting down`；
+      没有 = 这条路径被绕过了，收尾得另外挂。
+    - **修法**：在 `ExitProcess(0)` 之前补 `audio_close()`；以后新增"关闭时要补"的资源
+      （dump、句柄、锁）都得同时挂在 `host_shutdown()` **和** 这条 watchdog 路径上。

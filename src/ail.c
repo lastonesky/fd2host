@@ -26,11 +26,12 @@
  * (arguments on the stack, caller cleans up, return value in EAX), so the
  * patched calls are compatible without any thunking.
  *
- * Digital audio is played with WinMM waveOut: the game hands AIL a pointer and
- * length into its own memory (AIL_set_sample_address), and we copy that block
- * and submit it to the sound device. MIDI sequences are accepted and recorded
- * (the data pointer identifies the XMIDI blob inside FDMUS.DAT) but not yet
- * synthesised - that needs an XMIDI player and is the next step.
+ * Digital audio goes through the one software mixer in src/audio.h: the game
+ * hands AIL a pointer and length into its own memory (AIL_set_sample_address),
+ * we copy that block, bake in the gain and the start/stop ramp, and hand it to
+ * the mixer as a one-shot voice. MIDI sequences are parsed (xmidi.c) and
+ * synthesised by synth.c into the same mixer, so music and effects share one
+ * device (docs/AUDIO.md §11.10).
  */
 
 #include <windows.h>
@@ -41,6 +42,7 @@
 #include "ail.h"
 #include "xmidi.h"
 #include "synth.h"
+#include "audio.h"
 
 #define AIL_OBJ0_BASE    0x00010000u
 /* FDPS asks for 8 sample handles in one go (sub_30270 loops 8 times), FD2 for 2. */
@@ -62,9 +64,7 @@ typedef struct {
     int        bits;
     int32_t    playing;
     int        dumped;        /* sample bytes already written to dump_dir */
-    HWAVEOUT   dev;           /* opened lazily on the first play            */
-    WAVEHDR    hdr;
-    uint8_t   *pcm;           /* host copy: waveOut reads it asynchronously */
+    uint8_t   *pcm;           /* host copy: handed to the mixer on play    */
 } ail_sample;
 
 typedef struct {
@@ -446,83 +446,34 @@ static ail_seq *seq_of(void *handle)
     return s->used ? s : NULL;
 }
 
-/* ------------------------------------------------------------- waveOut --- */
+/* ------------------------------------------------------------- mixer ----- */
 
-/* Unprepare + free the submitted buffer. The driver owns a WAVEHDR until it
- * is marked WHDR_DONE, so this waits for that flag (bounded, same guard as
- * synth_stop) - it must never free memory the driver is still reading. */
-static void sample_release_buffer(ail_sample *s)
+/* A sample handle owns no device: src/audio.h has the only output device,
+ * shared with the music, and it takes the host copy we build here (gain +
+ * 3 ms ramp already baked in) as a one-shot voice it frees when the voice
+ * runs out. So "stop" is "drop the voice", and a voice that was still
+ * sounding is a real cut - counted, not silent (docs/AUDIO.md §11.6). */
+
+static int sample_index(const ail_sample *s)
 {
-    if (s->dev && (s->hdr.dwFlags & WHDR_PREPARED)) {
-        int guard = 0;
-        while (!(s->hdr.dwFlags & WHDR_DONE) && guard++ < 200)
-            Sleep(1);
-        waveOutUnprepareHeader(s->dev, &s->hdr, sizeof s->hdr);
-    }
-    memset(&s->hdr, 0, sizeof s->hdr);
-    if (s->pcm) {
+    return (int)(s - g_samples);
+}
+
+static void sample_stop(ail_sample *s)
+{
+    if (audio_sfx_stop(sample_index(s)))
+        g_sample_cuts++;                /* a real cut: documented, not silent */
+    if (s->pcm) {                       /* a copy play() never handed over     */
         free(s->pcm);
         s->pcm = NULL;
     }
-}
-
-/* Stop playback but *keep the device open*.
- *
- * This used to be waveOutClose + waveOutOpen on every single sound effect
- * (AIL_stop_sample -> close, AIL_start_sample -> open, and AIL_init_sample
- * closed it once more), i.e. the whole audio device was torn down and
- * rebuilt a couple of times a second. Besides being slow, each teardown
- * pops. The device is now opened once per sample and closed only when the
- * format changes or in ail_shutdown (docs/AUDIO.md, round 33 33.7). */
-static void sample_stop(ail_sample *s)
-{
-    if (s->dev && (s->hdr.dwFlags & WHDR_PREPARED) &&
-        !(s->hdr.dwFlags & WHDR_DONE)) {
-        waveOutReset(s->dev);           /* only if it is still playing */
-        g_sample_cuts++;                /* a real cut: documented, not silent */
-    }
-    sample_release_buffer(s);
     s->playing = 0;
 }
 
-static void sample_close_device(ail_sample *s)
-{
-    sample_stop(s);
-    if (s->dev) {
-        waveOutClose(s->dev);
-        s->dev = NULL;
-    }
-}
-
-static int sample_open_device(ail_sample *s)
-{
-    WAVEFORMATEX wf;
-    if (s->dev)
-        return 1;
-    /* Per-sample format: AIL_set_sample_type / _playback_rate fill it in
-     * (FDPS derives both from the WAV header it is about to play); samples
-     * that never get those calls keep the AIL defaults captured at
-     * allocation time, which is what FD2 relies on. */
-    memset(&wf, 0, sizeof wf);
-    wf.wFormatTag      = WAVE_FORMAT_PCM;
-    wf.nChannels       = (WORD)(s->channels ? s->channels : (g_stereo ? 2 : 1));
-    wf.nSamplesPerSec  = s->rate ? s->rate : g_rate;
-    wf.wBitsPerSample  = (WORD)(s->bits ? s->bits : g_bits);
-    wf.nBlockAlign     = (WORD)(wf.nChannels * wf.wBitsPerSample / 8);
-    wf.nAvgBytesPerSec = wf.nSamplesPerSec * wf.nBlockAlign;
-    if (waveOutOpen(&s->dev, WAVE_MAPPER, &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
-        printf("ail: waveOutOpen(%u Hz, %d-bit, %d ch) failed\n",
-               (unsigned)wf.nSamplesPerSec, (int)wf.wBitsPerSample, (int)wf.nChannels);
-        s->dev = NULL;
-        return 0;
-    }
-    return 1;
-}
-
 /* Master output volume (host --volume, 0..100, default 100 = no attenuation,
- * the game's own level): attenuates what actually reaches waveOut, nothing
+ * the game's own level): attenuates what actually reaches the mixer, nothing
  * else. The pipeline above it - AIL volume tracking, the copy of the guest
- * PCM, waveOut submission - is untouched, so audio bugs still show up at any
+ * PCM handed to the mixer - is untouched, so audio bugs still show up at any
  * volume. Debug runs pass --volume=10 to stay quiet. */
 static int g_master_volume = 100;
 
@@ -534,11 +485,11 @@ void ail_set_master_volume(int percent)
         percent = 100;
     g_master_volume = percent;
     synth_set_master_volume(percent);
-    printf("ail: master output volume = %d%% (music + SFX scaled at waveOut)\n",
+    printf("ail: master output volume = %d%% (music + SFX scaled in the mixer)\n",
            percent);
 }
 
-/* Scale a host-side PCM copy by `g` (0..1). 8-bit waveOut PCM is unsigned,
+/* Scale a host-side PCM copy by `g` (0..1). 8-bit PCM is unsigned,
  * 16-bit is signed little-endian; channels are interleaved and all share the
  * same gain, so the loop is per sample either way. */
 static void pcm_apply_gain(uint8_t *pcm, uint32_t bytes, int bits, double g)
@@ -564,12 +515,12 @@ static void pcm_apply_gain(uint8_t *pcm, uint32_t bytes, int bits, double g)
 
 /* Fade the first and last few milliseconds of a PCM copy to silence.
  *
- * A one-shot waveOutWrite starts and stops wherever the waveform happens to
- * be: an 8-bit buffer that begins at, say, 200 instead of the 128 silence
- * level steps the output the instant the device starts, and the same step
- * happens again when the device goes idle at the end. Those two steps are
- * the "click" (docs/AUDIO.md). The DOS hardware fed the same waveform to a
- * Sound Blaster, which was far more forgiving; waveOut is not.
+ * A one-shot voice starts and stops wherever the waveform happens to be: an
+ * 8-bit buffer that begins at, say, 200 instead of the 128 silence level
+ * steps the output the instant the voice starts, and the same step happens
+ * again when it ends. Those two steps are the "click" (docs/AUDIO.md). The
+ * DOS hardware fed the same waveform to a Sound Blaster, which was far more
+ * forgiving; a resampling mixer is not.
  *
  * 3 ms is below the threshold where a level change is audible as such, but
  * it turns both steps into ramps. Applied to the host copy only - guest
@@ -615,16 +566,16 @@ static void sample_play(ail_sample *s)
     uint32_t played;
     int      bits;
     int      cut;
+    int      idx;
 
     if (!s->addr || !s->len)
         return;
-    if (!sample_open_device(s))
-        return;
+    idx = sample_index(s);
 
-    /* The driver owns the submitted header until it is WHDR_DONE, so release
-     * it before the copy is rebuilt. Only reset when the previous sound is
-     * genuinely still running - a finished sample needs no cut at all. */
-    cut = (s->hdr.dwFlags & WHDR_PREPARED) && !(s->hdr.dwFlags & WHDR_DONE);
+    /* Retrigger: only a voice that is genuinely still sounding is a cut -
+     * a finished sample needs no cut at all (same test the old "header not
+     * WHDR_DONE" check made). */
+    cut = audio_sfx_active(idx);
     sample_stop(s);
 
     s->pcm = (uint8_t *)malloc(s->len);
@@ -643,16 +594,20 @@ static void sample_play(ail_sample *s)
     pcm_apply_ramp(s->pcm, s->len, bits,
                    s->rate ? s->rate : g_rate, s->channels);
 
-    s->hdr.lpData         = (LPSTR)s->pcm;
-    s->hdr.dwBufferLength = s->len;
-    if (waveOutPrepareHeader(s->dev, &s->hdr, sizeof s->hdr) != MMSYSERR_NOERROR)
-        return;
-    if (waveOutWrite(s->dev, &s->hdr, sizeof s->hdr) == MMSYSERR_NOERROR) {
+    /* The mixer takes ownership of the copy - converted to mono float there,
+     * resampled from the sample's rate to the device rate, freed at the end. */
+    if (audio_sfx_play(idx, s->pcm, s->len,
+                       s->rate ? s->rate : g_rate,
+                       s->channels ? s->channels : (g_stereo ? 2 : 1),
+                       (unsigned)bits)) {
+        s->pcm = NULL;                  /* owned by the mixer now */
         s->playing = 1;
         played = s->len;
         printf("ail: play %u bytes (%.2f s @ %u Hz, loop=%d)%s\n",
                (unsigned)played, (double)played / (g_rate * (g_stereo ? 2 : 1) * (g_bits / 8)),
                (unsigned)g_rate, (int)s->loop_count, cut ? " (cut)" : "");
+    } else {
+        printf("ail: play %u bytes - mixer refused the copy\n", (unsigned)s->len);
     }
 }
 
@@ -673,7 +628,7 @@ static void host_AIL_shutdown(void)
     xmidi_stop();
     for (i = 0; i < AIL_MAX_SAMPLES; i++) {
         if (g_samples[i].used) {
-            sample_close_device(&g_samples[i]);
+            sample_stop(&g_samples[i]);
             if (g_samples[i].pcm) free(g_samples[i].pcm);
             memset(&g_samples[i], 0, sizeof g_samples[i]);  /* FDPS re-inits audio in-process */
         }
@@ -743,9 +698,11 @@ static void host_AIL_init_sample(void *h)
     s->addr = NULL;
     s->loop_count = 1;
     s->type = 0;                            /* DIG_F_MONO_8 */
-    /* Stop, but do NOT tear the device down: AIL_init_sample is called on
-     * every single sound effect (svc_play_sfx: init/addr/loop/start), so
-     * closing here was one waveOutClose per effect (round 33 33.7). */
+    /* Stop, but do not leave a voice running: AIL_init_sample is called on
+     * every single sound effect (svc_play_sfx: init/addr/loop/start), and
+     * stopping a voice that already finished must not count as a cut - it
+     * does not, sample_stop only counts a voice that was still sounding
+     * (round 33 33.7 counted the same thing through waveOutReset). */
     sample_stop(s);
 }
 
@@ -784,14 +741,14 @@ static void host_AIL_stop_sample(void *h)
     ail_sample *s = sample_of(h);
     if (!s)
         return;
-    sample_close_device(s);
+    sample_stop(s);
     printf("ail: stop_sample\n");
 }
 
 /* AIL_set_sample_type(handle, type, flags) - type encodes channels+bits
  * (0=mono/8, 1=mono/16, 2=stereo/8, 3=stereo/16). FDPS computes it from the
- * WAV header it is about to play, so this is what decides the waveOut format
- * here; FD2 never calls it and keeps the AIL defaults. */
+ * WAV header it is about to play, so this is what decides the format the
+ * mixer is given; FD2 never calls it and keeps the AIL defaults. */
 static int32_t host_AIL_set_sample_type(void *h, int32_t type, int32_t flags)
 {
     ail_sample *s = sample_of(h);
@@ -802,7 +759,7 @@ static int32_t host_AIL_set_sample_type(void *h, int32_t type, int32_t flags)
     s->channels = (type == 2 || type == 3) ? 2 : 1;
     s->bits = (type == 1 || type == 3) ? 16 : 8;
     if (s->playing)
-        sample_close_device(s);        /* format changed: reopen on next play */
+        sample_stop(s);                 /* format changed: the copy is stale  */
     printf("ail: set_sample_type(%d ch, %d-bit)\n", s->channels, s->bits);
     return 1;
 }
@@ -815,7 +772,7 @@ static int32_t host_AIL_set_sample_playback_rate(void *h, int32_t rate)
     if (rate >= 4000 && rate <= 192000)
         s->rate = (uint32_t)rate;
     if (s->playing)
-        sample_close_device(s);
+        sample_stop(s);
     printf("ail: set_sample_playback_rate(%d)\n", (int)rate);
     return 1;
 }
@@ -848,7 +805,7 @@ static int32_t host_AIL_sample_status(void *h)
 
     if (!s)
         return 4;
-    if (s->playing && (!s->dev || (s->hdr.dwFlags & WHDR_DONE))) {
+    if (s->playing && !audio_sfx_active(sample_index(s))) {
         if (s->loop_count) {
             sample_play(s);            /* keep a looping sample going */
         } else {

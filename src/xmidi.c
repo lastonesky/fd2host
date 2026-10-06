@@ -38,6 +38,7 @@
 #include <stdlib.h>
 #include "xmidi.h"
 #include "synth.h"
+#include "audio.h"
 
 #define XMIDI_TICKS_PER_BEAT 60          /* XMI's fixed resolution */
 #define XMIDI_DEFAULT_TEMPO  500000u     /* microseconds per beat (120 BPM) */
@@ -402,12 +403,15 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
     InterlockedExchange(&g_stop_flag, 0);
 
     /* Default path: render the sequence with our own synthesiser and play it
-     * through waveOut - the same backend the sound effects use, which is known
-     * to work on this machine. The Windows MIDI Mapper stays available with
-     * --midi-backend=winmidi. */
+     * through the software mixer (src/audio.h) - one device shared with the
+     * sound effects, known to work on this machine. The Windows MIDI Mapper
+     * stays available with --midi-backend=winmidi. The music is rendered at
+     * the *device* rate so the mixer never has to resample it. */
     if (g_backend == 1) {
+        unsigned dev_rate = audio_rate();
         if (synth_play((const synth_event *)g_events, g_count,
-                       effective_tick_rate(), 22050, g_loop_count == 0))
+                       effective_tick_rate(), dev_rate ? dev_rate : 22050,
+                       g_loop_count == 0))
             return 1;
         printf("xmidi: built-in synth failed, falling back to the MIDI Mapper\n");
     }

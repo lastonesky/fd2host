@@ -317,3 +317,40 @@ synth: streaming 4 x 2048-sample slices (92 ms each, 371 ms queued), sequence vo
 N/pos 前进 = 设备在消费、peak>0 = 内容非静音）。**光看 `gain 0.000` / `fading` 行是不够的**
 —— 上一版正是这样漏掉了"音乐根本没出声"。详见 `rounds/06-audio-fade.md` §35.7、
 `PITFALLS.md` §8-54。
+
+### 11.10 治本：一个设备、一个软件混音器（`audio.h` + `audio_sokol.c`，2026-10-06）
+
+§13.6 第 3 步收口。此前**音乐与音效各开各的 waveOut**：每次设备启停都是潜在爆音源、
+`--volume` 与斜坡要在两边各做一遍、"还有声音吗"没有统一观测点，而且 `waveOut` 是
+Windows 专用（跨平台绕不开）。现在：
+
+```
+ synth.c 音乐分片 ┐
+                  ├→  mix_cb()  WASAPI 回调一次 2048 帧   →  out = music + Σ sfx voices
+ ail.c   音效人声 ┘   （src/audio.h 唯一接口、一把递归锁）
+```
+
+| 要点 | 说明 |
+|---|---|
+| 后端 | sokol_audio（Windows=WASAPI），**不依赖渲染后端** ⇒ GDI/sokol 两套入口共用；`AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM` 让 22050 Hz 也能被共享模式接受 |
+| 音乐 | `synth_music_fill()` **按需拉取**（没有队列、没有流线程），增益在拉的那一刻算 ⇒ 音量/渐变零延迟；采样率取 `audio_rate()` ⇒ 混音器不必重采样音乐 |
+| 音效 | `sample_play` 把烘焙好（`--volume` × AIL 音量 + 3 ms 斜坡）的副本交给混音器，它转单声道 float、线性重采样到设备速率、播完释放；`sample_stop` = 丢人声（仍在响才计 `(cut)`） |
+| 增益位置 | **仍在上游烘焙**（音乐=序列音量×`--volume`，音效=`--volume`×AIL 音量），混音器只相加 ⇒ §11.6/§11.7/§11.8/§11.9 的音量语义逐位不变 |
+| 约束 | `saudio_setup()` 每进程只能调一次 ⇒ 采样率用 `--audio-rate=` 指定（默认 22050） |
+
+**判据（音频第一次可测量）**：
+
+| 层 | 证据 |
+|---|---|
+| 设备只开一次 | `audio: device up - WASAPI via sokol_audio, 22050 Hz, mono, 2048 frames/buffer (opened once…)` 每进程 **1 次** |
+| 数据在流动 | `audio: mixed 225280 → 446464 → 667648 …` 每 10 s 一行，**单调前进** |
+| 两路都出声 | 同行拆成 `music=on peak 1149/1380/32767` 与 `sfx voices=… peak 255/32767` |
+| **离线量化** | `--audio-dump=<wav>` 录下"混音器交给设备的样本"：30.1 s / 663552 帧；逐秒 RMS **0–1 s = 0**（起播闸门+从 0 淡入）、2 s 起连续非零、稳态 1.2% FS @`--volume=10` |
+| 音量语义 | 同段 `--volume=100` 再录：稳态 RMS 396 → **4081 = 10.3×** ✓ |
+| 音效语义 | `ail: play 16` / `(cut) 0`（与 §11.6、§11.9 判据一致） |
+| 回归 / 像素 | `regress` **8/8**、`FD2.TMP=207360`；`--replace=none` vs `all` 同 tick **0 px** |
+
+**没动的**：`--midi-dump` 与 `synth: rendered …` 仍走离线 `render()`（满量程、`gain=1.0`），
+判据数字不变；起播闸门、`ms` 渐变、3 ms 斜坡、`(cut)` 计数全部保留语义，只换了承载点。
+**新坑**：watchdog 的 `--exit-after` 路径直接 `ExitProcess`（不跑 `host_shutdown`）⇒
+`--audio-dump` 的 WAV 头要在那条路径上补（`PITFALLS` §8-56）。

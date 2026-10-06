@@ -35,6 +35,7 @@
 #include "repl.h"
 #include "xmidi.h"
 #include "synth.h"
+#include "audio.h"
 #include "render.h"
 #include "host.h"
 
@@ -109,6 +110,8 @@ static int          g_midi_backend = 1; /* 1 = built-in synth (default)    */
 static const char  *g_gm_bank;          /* --gm-bank=<path>                */
 static const char  *g_autokey;          /* --autokey=<schedule>            */
 static const char  *g_midi_dump;        /* --midi-dump=<file.wav>          */
+static int          g_audio_rate = 22050; /* --audio-rate=<Hz> (mixer rate) */
+static const char  *g_audio_dump;       /* --audio-dump=<file.wav>         */
 static const char  *g_cmdtail;          /* --cmdtail=<tail> -> PSP:0x80    */
 static int          g_exit_after_secs;  /* --exit-after, for spawned children */
 static char         g_exit_when_path[MAX_PATH]; /* --exit-when-file=path:minbytes */
@@ -292,6 +295,9 @@ static DWORD WINAPI watchdog(LPVOID param)
         Sleep(200);
     }
     dos_terminate_child();        /* a P_WAIT child must not outlive us */
+    audio_close();                /* the watchdog exits straight from here:
+                                   * without this the --audio-dump header
+                                   * would never get its final sizes */
     dos_dump_stats();
     ExitProcess(0);
     return 0;
@@ -688,6 +694,14 @@ int host_init(int argc, char **argv)
         else if (!strncmp(argv[i], "--midi-dump=", 12)) {
             g_midi_dump = argv[i] + 12;
         }
+        else if (!strncmp(argv[i], "--audio-rate=", 13)) {
+            g_audio_rate = atoi(argv[i] + 13);
+            if (g_audio_rate < 8000 || g_audio_rate > 192000)
+                g_audio_rate = 22050;
+        }
+        else if (!strncmp(argv[i], "--audio-dump=", 13)) {
+            g_audio_dump = argv[i] + 13;
+        }
         else if (!strcmp(argv[i], "--volume") && i + 1 < argc) {
             g_volume = atoi(argv[++i]);
         }
@@ -806,6 +820,15 @@ int host_init(int argc, char **argv)
                          g_replace_mask);
     }
 
+    /* One output device and one software mixer for music + sound effects
+     * (docs/AUDIO.md §11.10). It has to exist before the game thread can
+     * reach any AIL entry point; if there is no device the host still runs
+     * and says so in the log. */
+    if (audio_init((unsigned)g_audio_rate)) {
+        if (g_audio_dump && g_audio_dump[0])
+            audio_dump_open(g_audio_dump);
+    }
+
     return 0;
 }
 
@@ -845,6 +868,7 @@ void host_request_quit(void)
 void host_shutdown(void)
 {
     printf("host: shutting down (%d frames drawn)\n", g_frames);
+    audio_close();
     dos_dump_stats();
 }
 

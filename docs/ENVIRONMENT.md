@@ -51,7 +51,9 @@ Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -Wor
 | `--cmdtail=<尾巴>` | 写进 `PSP:0x80` 的命令行；`INT 21h AH=4B` 拉起子进程时自动传递 |
 | `--log=<路径>` | 换日志文件；子进程各用各的 `host.<pid>.log`，否则会截掉父日志（§8-47） |
 | 音频：`--ail-dump=<dir>` / `--ail-rate=<Hz>` / `--ail-bits=<8\|16>` / `--ail-stereo` | 导出音效样本与 XMIDI 原始数据、指定格式（见 `AUDIO.md`） |
-| **`--volume=<0..100>`** | 总输出音量（音乐 + 音效，在送 `waveOut` 前衰减）。**默认 `100` = 游戏自己的电平、不衰减**，这就是加 `--volume` 之前的听感；调试/回归时显式压低，例如 `--volume=10`（`regress.ps1` 已内置）。`0` 仍会跑完整条音频流水线，只是静音 |
+| **`--volume=<0..100>`** | 总输出音量（音乐 + 音效，**在送进混音器前衰减**）。**默认 `100` = 游戏自己的电平、不衰减**，这就是加 `--volume` 之前的听感；调试/回归时显式压低，例如 `--volume=10`（`regress.ps1` 已内置）。`0` 仍会跑完整条音频流水线，只是静音（实测 `--audio-dump` 稳态 RMS 396 → 4081 = 10.3×） |
+| **`--audio-rate=<Hz>`** | 混音器设备采样率，默认 **22050**（= 音乐原生采样率，音乐就不必重采样）；`audio.h` 的设备只能开一次（`saudio_setup` 有 assert），所以采样率不能“试几个”，要用它指定 |
+| **`--audio-dump=<wav>`** | 把**混音器交给设备的那串样本**录成 WAV（音乐+音效混合后、实音量），用于离线量化音频（逐秒 RMS / 音量语义 / 音效突发）—— 音频判据不再靠耳朵 |
 
 **一键回归**：`pwsh -File E:\FD2\port\regress.ps1`（重建沙箱 → autokey → 8 项断言，见
 `rounds/01-platform-and-tooling.md` §12.4）。

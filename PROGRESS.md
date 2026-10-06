@@ -78,6 +78,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 | §38 | 10-06 | 起播闸门返工（音乐哑了） | §35 的闸门**把音乐整个堵死**（`stream_thread` 等 `WHDR_DONE`，而 `PrepareHeader` 只置 `0x2` ⇒ 4 个缓冲一个都没进 waveOut；音效另一条路所以照常）；就绪判据改成“没进过队列的就是我们的”，**判据升级到设备层**（`stream alive … pos/peak` 每 10 s 一行） | `docs/rounds/06-audio-fade.md` §35.7、`docs/PITFALLS.md` §8-54 |
 | §39 | 10-06 | **脚本 VM 转译（主线）** | `0x15F84` 词流解释器 → `game/vm.c`：`case -1` 是与 `sub_15055` 共享的尾声 ⇒ `return cur`；12 个被调函数全部桩化对拍，**5512 例 0 失败**（当场抓到 `mode` 未写回、`dword_53C67` 无条件清零两个真 bug）；接入 50→**51**，A/B 三组 **0 px**，回归 8/8 | `docs/rounds/09-vm.md`、`docs/TRANSLATION.md` §4/§5 |
 | §40 | 10-06 | 打字进行中配方 | 进一步证明 `vm_run`+`dlg_type_step` 在宿主里真跑过：`--shot-tick=326..334` 抓到**逐字画面**，框区差异 455→327→325→0，**15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽；顺带修快流程（抓完即退 60 s→**22 s**）与 BMP→PNG 错误写法 | `docs/rounds/10-typewriter-recipe.md`、`docs/PITFALLS.md` §8-55 |
+| §41 | 10-06 | **音频治本：软件混音器** | 音乐+音效收进 `audio.h` + `audio_sokol.c`（WASAPI，**设备每进程只开 1 次**）；增益仍在上游烘焙 ⇒ §11.6~§11.9 音量语义逐位不变；**新增 `--audio-dump` 可测判据**：逐秒 RMS 连续、`--volume` 10→100 实测 **10.3×**、`play 16`/`cut 0`、回归 8/8、A/B 0 px | `docs/rounds/11-audio-mixer.md`、`docs/AUDIO.md` §11.10、`docs/PITFALLS.md` §8-56 |
 
 ## 4. 下一步计划（按优先级）
 
@@ -94,9 +95,11 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
    差异全在一块 14×4 的动画元素相位上；取样点定为 **`--shot-tick=600` 静止画面**（片头转场同后端
    自比都能差 60% ⇒ 先验基线再比跨后端，`docs/BACKEND.md` §13.10、`docs/PITFALLS.md` §8-53）。
    `--render=gdi` 不进日常循环，只在需要参考实现时按需重建。
-4. **音频治本**：SFX 爆音已按"常驻设备 + 3 ms 起停斜坡"修完（`docs/AUDIO.md` §11.6）；
-   剩下的是**软件混音**（sokol_audio 统一音乐 + 音效、设备只开一次），它同时消掉音乐循环点的
-   `Sleep(200)` 静音阶跃与重触发硬切。
+4. ~~**音频治本**~~ **已完成（§41，2026-10-06）**：音乐与音效收进 `src/audio.h` +
+   `src/audio_sokol.c`（sokol_audio/WASAPI，**一个设备、一把递归锁、一个回调里相加**），
+   `synth.c` 不再有流线程/缓冲队列（回调按需拉 ⇒ 音量零延迟），`ail.c` 不再有每句柄设备。
+   **增益仍在上游烘焙**，§11.6~§11.9 音量语义逐位不变；`--volume` 实测 10.3×。
+   新增 **`--audio-dump=<wav>`** 让音频判据可测量（逐秒 RMS、分声道峰值）。详见 `docs/AUDIO.md` §11.10。
 5. **稳定性长跑**：连续 5 分钟以上与反复重启（退出路径已验）。
 6. **存档路径实测**：`FD2.SAV` 从无到有的创建路径、存档变小后的截断对拍；
    `AH=49/4A` 仍是空操作（账本只增不减）。
