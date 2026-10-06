@@ -413,3 +413,18 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     Win32 用 `__asm`，POSIX 用 `mov %%ds, %0`；**Linux64 返回 0**（长模式 DS=0），
     与 Windows 的 `0x2B` 不同 ⇒ FDPS 那唯一一条 `0x02` fixup 在 Linux 上**待确认**
     （FD2 没有这种 fixup，哈希不受影响）。
+
+60. **"fixup 跨页记录" 是两类，不能一起跳**（第 44 轮，细化 §8-11）：
+    `le.c` 会跳过 `src + 4 > 0x1000` 的 `0x07` 记录，FD2 有 **22 条**，实为两分：
+    - **11 条 `src ∈ [0xFFD,0xFFF]`**：操作数**起始于本页**、尾巴伸进下一页。同对象的页在
+      进程里连续，写进去正好等于 Ghidra/IDA 的位置 ⇒ **必须写**。跳过它们 = 留下 11 个
+      **没被重定位的指针**（文件占位字节 `00/02/03` vs 目标 `05/03/04`），两家反汇编器与
+      我们不一致就是这么来的（`fixups applied` 7937 → 7948）。
+    - **11 条 `src > 0xFFF`**：源偏移根本不在本页（page2 `src=0xFFFF` → `0x20FFF`，已越出
+      `0x11000..0x11FFF`）。Ghidra/IDA 也不写；写它会**覆盖无关代码** —— §8-11 当年
+      "崩在 0x3E000"的是这一半。
+    - **判据**：`le: fixups applied=N, out-of-page sources=M, boundary writes refused=K`；
+      然后 `letest` 必须是 `reference check OK, exact match`（Ghidra 参考），
+      跨页写只有在**下一页属于同一对象**时才允许（跨对象边界邻居的基址不同）。
+    - **方法教训**：差异先归类再放过 = 自我安慰；用**第三家独立实现**复核
+      （`python tools/ghidra_objects.py` 重导参考镜像，`tools/fixup_dump.py` 按地址查记录）。

@@ -43,6 +43,8 @@
 | `keycheck` / `typecheck` | 低内存镜像 + **确定性时钟** | 原机器码与转译 C 共用同一个时钟桩（每读一次 tick 加一） |
 | `vmcheck` | 脚本 VM `0x15F84`：**完整事件序列**（12 个被调函数全桩化）+ 全局 + 返回值 | 词流由合法生成器产生；`VMONLY=<id>` `VMTRACE=1` 取单例现场（定位崩溃/差异用） |
 | `framediff.ps1` | 两个 `--screenshot` BMP 的逐像素差 | repl A/B：差值必须 ≤ none↔none 基线噪声 |
+| **Ghidra 参考镜像** | `python tools/ghidra_objects.py`：从本地桥（`docs/ENVIRONMENT.md`）把三个 object 区间重导成 `build/object1.bin..3`（参考文件是 gitignored 的，丢了就这么恢复）；导完跑 `letest`，应当 `reference check OK, exact match` |
+| 查某条 fixup 记录 | `python tools/fixup_dump.py [FD2.EXE] [地址]`：按 `le.c` 的语法走 fixup 表，不带地址时列出**所有会被跳过的记录**（跨页/越界源，`rounds/14` §44.2） |
 | 跨平台（加载器）判据 | 同一份 `letest` 在两个平台跑：**三个对象的 `fnv1a` 必须逐字相同**（Windows `build.ps1 -Target letest` / Linux `make -f Makefile.linux`）；有参考镜像时再逐字节比，**只分两类已知差异**（页边界的跨页 fixup、页数之外的 BSS 尾），分类外差异 → `FAIL` + 退出码 1（`rounds/13-portability.md` §43.4） |
 | 平台层自检 | `platprobe`（Win：`-Target platprobe`；Linux：`make -f Makefile.linux` 后 `./build/platprobe-linux`）：预留对象窗 → 分块 commit → 逐段触碰 → 整窗，两平台都必须 exit 0 且 `prot=0x7` |
 | `re/preflight.py` / `re/fixup_scan.py` | 不运行的静态体检（LE/对象布局/与预留区冲突/AIL 特征；fixup 要 `bad=0 leftover=0`） | 换游戏先跑这个 |

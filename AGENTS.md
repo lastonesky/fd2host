@@ -186,10 +186,11 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 - 命令行参数写法不匹配 = 静默用默认值（§8-32）；特权指令模拟要返回**指令长度**（§8-13）；
   调色板 6 位 DAC + DIB 是 BGRA（§8-17）；DOS 的"写 0 字节 = 截断"在 Windows 是空操作（§8-31）。
 - `.gitignore` 两个陷阱（§13.5）：`*.dll`/`*.lib`/`x86/` 会挡住 vendored 三方库（需 `!vendor/**`）；
-  `build/object*.bin`（letest 参考镜像）被 `*.bin` 忽略——新克隆需按 §2 方法从 Ghidra 重新导出；
-  Ghidra 桥不可用时可用 ida MCP 从 IDA 的独立映射导出（两类已知差异见
-  `docs/rounds/13-portability.md` §43.4）。**没有参考文件也能判**：`letest` 会打印三个对象的
-  `fnv1a`，两个平台哈希相同即证明加载器一致。
+  `build/object*.bin`（letest 参考镜像）被 `*.bin` 忽略——新克隆用 **`python tools/ghidra_objects.py`**
+  从本地 Ghidra 桥一键重导（或按 §2 方法手动导出）。**没有参考文件也能判**：`letest` 会打印
+  三个对象的 `fnv1a`，两个平台哈希相同即证明加载器一致；有参考时应为
+  `reference check OK, exact match`（出现 `explained differences only` 就是有真分歧，
+  用 `tools/fixup_dump.py` 查 fixup，见 `docs/rounds/14-fixup-boundary.md`）。
 - **对拍 exe 自己被 ASLR 放进 guest 窗口**（§22.4）：新增任何走 `le.c` 的 console 对拍目标，
   必须在 `build.ps1` 给它 `/link /BASE:0x60000000`；否则 exe 映像可能落在 `0x10000..0x6FFFF`，
   `le_reserve_address_space()` 失败且报错信息会指向自己已预留的 0x10000（误导）。

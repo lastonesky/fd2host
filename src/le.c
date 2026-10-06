@@ -186,6 +186,7 @@ static int apply_fixups(le_image *le, int *applied)
     const uint8_t *rt;
     uint32_t page;
     int total = 0, unknown = 0, failed_pages = 0, cross_page = 0;
+    int bad_source = 0;                     /* src offset outside its page */
 
     if (le->fixup_page_table == 0 || le->fixup_record_table == 0) {
         printf("le: no fixup tables (raw image assumed)\n");
@@ -273,16 +274,44 @@ static int apply_fixups(le_image *le, int *applied)
 
             if (tobj == 0 || tobj > le->object_count) { unknown++; break; }
 
-            /* The page is the relocation unit and the linker never places an
-             * address operand so that it runs off the end of a page. Records
-             * claiming a source near the page tail (0xFFFD..0xFFFF) are stray
-             * bytes that parse as a record; applying them would overwrite the
-             * first bytes of the following page - which is exactly what
-             * Ghidra's loader also refuses to do. */
-            if ((uint32_t)srcoff + 4u > LE_PAGE_SIZE) {
-                cross_page++;
+            /* Source offsets come in two flavours (the record grammar is
+             * fixed, so both look the same on paper):
+             *
+             *   src <= 0xFFFC the operand sits fully inside this page - always
+             *                fine (the write happens below).
+             *   0xFFD..0xFFF the operand *starts* here and runs into the next
+             *                page. That is legal: the object's pages are
+             *                contiguous in our mapping, so writing at
+             *                page_base+srcoff lands exactly where Ghidra and
+             *                IDA put it. FD2 has 15 of these and 11 of them
+             *                change bytes - the raw file holds a placeholder
+             *                where the target's high byte goes, so skipping
+             *                them left 11 *unrelocated* pointers in the image
+             *                (why letest disagreed with both tools).
+             *   src > 0xFFF the source is not in this page at all. Ghidra and
+             *                IDA leave those alone too - no difference shows
+             *                up at the address such a write would hit - and
+             *                honouring one scribbles over unrelated code.
+             *                That is the half of "fixup 跨页记录必须跳过"
+             *                (docs/PITFALLS.md §8-11) that was crashing: the
+             *                legal straddles were being skipped with them.
+             *
+             * A straddling write may only cross into the next page when that
+             * page belongs to the same object - across an object boundary the
+             * neighbour has a different base and the operand is its business. */
+            if ((uint32_t)srcoff >= LE_PAGE_SIZE) {
+                bad_source++;
                 pos += 5 + tsize;
                 continue;
+            }
+            if ((uint32_t)srcoff + 4u > LE_PAGE_SIZE) {
+                uint32_t next_page = page + 1;
+                if (!o || next_page < o->page_index ||
+                    next_page >= o->page_index + o->page_count) {
+                    cross_page++;
+                    pos += 5 + tsize;
+                    continue;
+                }
             }
 
             *(uint32_t *)(uintptr_t)(page_base + srcoff) =
@@ -293,9 +322,9 @@ static int apply_fixups(le_image *le, int *applied)
         if (pos != end) failed_pages++;
     }
 
-    printf("le: fixups applied=%d, cross-page records skipped=%d, "
-           "pages with leftover data=%d, bad records=%d\n",
-           total, cross_page, failed_pages, unknown);
+    printf("le: fixups applied=%d, out-of-page sources=%d, boundary writes "
+           "refused=%d, pages with leftover data=%d, bad records=%d\n",
+           total, bad_source, cross_page, failed_pages, unknown);
     *applied = total;
     return 0;
 }

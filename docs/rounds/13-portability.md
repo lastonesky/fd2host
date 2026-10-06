@@ -76,7 +76,10 @@ POSIX 侧 1:1 映射到 `PROT_*`，Win32 侧翻译成 `PAGE_*` 组合（它没�
 | **跨平台一致** | `obj0 fnv1a=0xCB737A9DC0F6653E`<br>`obj1 fnv1a=0x3C879E6011769348`<br>`obj2 fnv1a=0xB45FE50C6829E13B` | **三个哈希完全相同**；`fixups applied=7937, cross-page skipped=22, bad=0`、`entry=0x3CCB4` 也全同 |
 | 回归 | `regress.ps1` **ALL PASS（8/8）**、`FD2.TMP=207360` | —（宿主尚未移植，见 §43.5） |
 
-> **参考镜像的现状**（`build/object*.bin` 被 `.gitignore` 忽略，本机没有）：本轮由 **IDA 独立映射**
+> **参考镜像的现状**（`build/object*.bin` 被 `.gitignore` 忽略，本机没有）：⚠ 下表是本轮当时
+> 用 **IDA** 导出的对照结果，**随后用户开 Ghidra 桥复核，结论被推翻** —— obj0 那 11 个
+> "页边界差异"其实是**漏掉的 11 处重定位**，已修（`docs/rounds/14-fixup-boundary.md` §44）。
+> 对 Ghidra 参考现在是 **0 差异**，下表的"两类差异"只对 IDA 参考成立。本轮由 **IDA 独立映射**
 > 导出一份做逐字节对照，差异**全部可解释**，因此 `letest` 新增了差异分类：
 >
 > | 对象 | 差异 | 类别 |

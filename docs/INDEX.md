@@ -40,6 +40,7 @@
 | `rounds/11-audio-mixer.md` | 明细 | **音频治本**：`audio.h` + `audio_sokol.c` 软件混音器（一个设备）、`--audio-dump` 可测判据 | §41 |
 | `rounds/12-keylog.md` | 明细 | **按键录制/回放**（`--keylog`/`--keyplay`，独立模块 `src/keylog.c`）+ 启动抢焦点混入杂键 | §42 |
 | `rounds/13-portability.md` | 明细 | **跨平台第 1 刀**：`platform.h` 内存层、`le.c` 零 Win32、Win32/Linux 哈希一致、全仓 Win32 依赖面测绘 | §43 |
+| `rounds/14-fixup-boundary.md` | 明细 | **跨页 fixup 两类之辨**：补回 11 处漏掉的重定位，三对象与 Ghidra 逐字节一致 | §44 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。
