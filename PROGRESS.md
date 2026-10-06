@@ -71,7 +71,8 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 | §31 | 10-05 | 等键 + 动画 | `0x16C57` 低内存镜像 + 确定性时钟（100 例），接入 43→44；`--volume` | `docs/rounds/04-dialog-and-ui.md` |
 | §32 | 10-05 | 角色记录表 | `rec_flag`/`rec_find` → `game/rec.c`（28739 例），接入 44→46 | `docs/rounds/05-rec-and-services.md` |
 | §33 | 10-06 | 打字机 + 系统服务 | `svc.c` + `dlg_type_step`（1176 例，确定性时钟 + 变异验证），接入 46→**49**；顺带定位 SFX 爆音 | `docs/rounds/05-rec-and-services.md` |
-| §34 | 10-06 | 抓帧触发改判 + sokol 实测 | sokol **能编能跑**（D3D11 / 159 fps）；验收标准"同帧"是错的 → 加 `--shot-time`，再收紧为 **`--shot-tick`**（按游戏 BIOS tick，跨后端同状态）；SFX 爆音按"常驻设备 + 3 ms 起停斜坡"修完 | `docs/rounds/05-rec-and-services.md` §34、`docs/BACKEND.md` §13.8、`docs/AUDIO.md` §11.6 |
+| §34 | 10-06 | 抓帧触发改判 + sokol 实测 | sokol **能编能跑**（D3D11 / 159 fps）；验收标准“同帧”是错的 → 加 `--shot-time`，再收紧为 **`--shot-tick`**（按游戏 BIOS tick，跨后端同状态）；SFX 爆音按“常驻设备 + 3 ms 起停斜坡”修完 | `docs/rounds/05-rec-and-services.md` §34、`docs/BACKEND.md` §13.8、`docs/AUDIO.md` §11.6 |
+| §35 | 10-06 | 音量“先小后大”排查 | **不是回归**：是游戏 `play_bgm` 自己的 `set(0,0)+set(127,2000)` 2 秒淡入，原版 AIL（`sub_449E0`/`sub_43270`/`sub_42980`）照实现，15 首曲子全声道有 CC7 ⇒ 覆盖等价；顺带修掉移植侧**起播 371 ms 抢跑旧增益**（起播闸门，`gain 0.000` 判据） | `docs/rounds/06-audio-fade.md`、`docs/AUDIO.md` §11.9、`docs/PITFALLS.md` §8-52 |
 
 ## 4. 下一步计划（按优先级）
 

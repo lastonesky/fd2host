@@ -318,3 +318,17 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
 51. **游戏自己挂了 INT9 就不能再写 BIOS 环形队列**（第 18 轮）：真机上游戏替换了 BIOS 的键盘
     处理器且不链回 ⇒ `0x41E` 环是空的；宿主两条路都写 = **一次按键给两次**，菜单多走一格后
     跳进没填好的表（`EIP=0x1FFFC`）。`dos_deliver_key()` 返回“游戏已接管”时 `host_key` 直接 return。
+
+52. **在"提交时"烘焙增益的流式播放，预排队缓冲会吃到过期音量**（第 35 轮）：
+    `synth_play` 原来在 `AIL_start_sequence` **内部**就填满 4 × 2048 样本（371 ms）并
+    `waveOutWrite`，而游戏是在 `start` 返回后微秒级才 `set(seq,0,0)` + `set(seq,127,2000)`
+    ⇒ 新曲开头 371 ms 是**上一首留下的电平**（满音量爆一下再掉进淡入），原版 AIL 由定时器
+    驱动、`set(0,0)` 抢在第一个样本进设备之前，没有这个窗口。
+    - **判据**：`--midi-dump` 离线渲染看第 1 个音的时刻与前 371 ms 峰值
+      （标题曲：0.2 ms / 峰值 17709 ⇒ 不是静音）；运行日志
+      `synth: stream released after 0 ms -> … gain 0.000` = 首队列按游戏要求的电平填。
+    - **修法**：起播闸门 —— `synth_play` 只 `PrepareHeader`，`stream_thread` 停在
+      `g_arm`，第一条 `synth_set_sequence_volume` 放行（200 ms 超时兜底）。
+    - **连带坑**：闸门期间**从未 `waveOutWrite` 过**的 header 永远不会置 `WHDR_DONE`，
+      `synth_stop()` 里"等 DONE（100 × 10 ms）"会每片空转 1 s、停曲卡 4 s ⇒ 只对
+      `g_queued[i]` 的片等。

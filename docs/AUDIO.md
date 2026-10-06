@@ -283,3 +283,28 @@ synth: streaming 4 x 2048-sample slices (92 ms each, 371 ms queued), sequence vo
 
 **判据**：回归 **8/8 PASS**、`FD2.TMP = 207360`；`ail: play 16` / `(cut) 0`；
 `synth: rendered` 统计与改动前一致。
+
+### 11.9 排查：为什么每首曲子开头 2 秒是小声的（**是原作自己的淡入**，2026-10-06）
+
+用户在 §11.8 之后报告"任何场景、包括刚进游戏，音量都先小一下再大回去"，怀疑是那一轮的回归。
+**结论：不是回归** —— 完整证据链见 `docs/rounds/06-audio-fade.md` §35，这里只留卡：
+
+| 问题 | 答案 |
+|---|---|
+| 谁让它小声的 | **游戏自己**：`play_bgm`（`0x25977`）在 `AIL_start_sequence` 之后 `set(seq,0,0)` + `set(seq,127,2000)` —— 每首曲子 2 秒淡入；只有 track 16/17（胜利曲）走"立刻满音量" |
+| 原版会不会这样 | **会**。AIL `sub_449E0` 把 `ms` 换算成每级音量的 µs 步长，MDI 驱动 `sub_43270` 逐级推进、`sub_42980` 把序列音量乘在每个 CC7 上 ⇒ 精确 `ms` 毫秒的线性淡变 |
+| 淡变盖得住整条音乐吗 | **盖得住**：`tools/xmi_cc7.py` 扫全部 15 首，所有出声声道都有 CC7（原版只乘 CC7），与我们"整条混音乘增益"听感等价 |
+| §11.8 之前为什么没有 | 之前 `ms` 被丢掉、曲子一上来就是满音量 —— **那才是偏离原作的状态** |
+
+**顺带修掉的移植侧偏差（起播抢跑）**：`synth_play` 原来在 `start` 内部就把 4×2048 样本
+（371 ms）按**上一首留下的增益**填好送进 waveOut，游戏随后的 `set(0,0)` 管不到已排队的缓冲
+⇒ 新曲开头满音量爆 371 ms 再掉下去（`--midi-dump` 证明标题曲第 1 个音在 **0.2 ms**、
+前 371 ms 峰值 17709/32767，不是静音）。改成**起播闸门**：`synth_play` 只 `Prepare` 不
+`Write`，等第一条 `synth_set_sequence_volume` 放行（`STREAM_ARM_MS=200` 兜底），
+放行时打印 `synth: stream released after 0 ms -> sequence volume 0/127, gain 0.000`
+—— `gain 0.000` 即"首批没抢跑"的硬判据。连带：`synth_stop` 只对已 `Write` 过的 header
+等 `WHDR_DONE`（否则每片空转 1 s）。详见 `rounds/06-audio-fade.md` §35.4，
+坑记 `PITFALLS.md` §8-52。
+
+**判据**：回归 **8/8 PASS**、`FD2.TMP = 207360`；`ail: play 16` / `(cut) 0`；
+`synth: rendered 2256 notes … peak 32258/32767, polyphony 36`（离线路径未动）。

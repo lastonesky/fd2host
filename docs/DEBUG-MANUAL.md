@@ -41,6 +41,7 @@
 | `keycheck` / `typecheck` | 低内存镜像 + **确定性时钟** | 原机器码与转译 C 共用同一个时钟桩（每读一次 tick 加一） |
 | `framediff.ps1` | 两个 `--screenshot` BMP 的逐像素差 | repl A/B：差值必须 ≤ none↔none 基线噪声 |
 | `re/preflight.py` / `re/fixup_scan.py` | 不运行的静态体检（LE/对象布局/与预留区冲突/AIL 特征；fixup 要 `bad=0 leftover=0`） | 换游戏先跑这个 |
+| `tools/xmi_cc7.py` | 扫 XMIDI `EVNT`，按声道统计 CC7（`--ail-dump` 或直接切 `FDMUS.DAT` 的 FORM/XMID） | 判定“原版 `AIL_set_sequence_volume` 的淡变覆盖哪些声道”——原版只乘 CC7（§35.2④） |
 
 其它要点：
 

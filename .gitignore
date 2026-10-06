@@ -69,3 +69,6 @@ Desktop.ini
 docs/knowledge-base/
 docs/data/
 docs/KEEP.md
+# === Python tooling ===
+__pycache__/
+*.pyc

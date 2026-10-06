@@ -490,6 +490,25 @@ static double   g_seq_to   = 127.0;
 static DWORD    g_ramp_t0;
 static int      g_ramp_ms;
 
+/* Start-of-stream gate.
+ *
+ * The game states the level *after* AIL_start_sequence returns: play_bgm
+ * (0x25977) does set(seq,0,0) then set(seq,127,2000) within microseconds.
+ * synth_play used to fill and waveOutWrite the whole first queue inside that
+ * window, so up to STREAM_BUFFERS x STREAM_SLICE = 371 ms of the new track
+ * were baked at whatever level the *previous* track left behind (normally
+ * 127/127): a full-volume burst, then a drop, then the game's own fade-in.
+ * The original AIL renders from timer interrupts, so nothing is audible in
+ * that window - it mutes before the first sample reaches the device.
+ *
+ * Holding the first write until the first volume request closes the gap.
+ * play_bgm always issues one immediately, so the delay is microseconds;
+ * STREAM_ARM_MS is only a safety net for a caller that never asks. */
+#define STREAM_ARM_MS   200
+static volatile LONG g_arm;
+static DWORD         g_arm_t0;
+static int           g_queued[STREAM_BUFFERS];   /* has reached waveOutWrite */
+
 static double seq_volume_now(void)
 {
     DWORD e;
@@ -502,6 +521,8 @@ static double seq_volume_now(void)
     return g_seq_from + (g_seq_to - g_seq_from) * (double)e / (double)g_ramp_ms;
 }
 
+static double stream_gain(void);
+
 static void stream_free_buffers(void)
 {
     int i;
@@ -512,6 +533,7 @@ static void stream_free_buffers(void)
             g_slices[i] = NULL;
         }
         memset(&g_hdrs[i], 0, sizeof g_hdrs[i]);
+        g_queued[i] = 0;
     }
 }
 
@@ -527,6 +549,14 @@ void synth_set_sequence_volume(int volume, int ms)
     g_seq_to   = (double)volume;
     g_ramp_ms  = ms > 0 ? ms : 0;
     g_ramp_t0  = GetTickCount();
+
+    /* First request for a freshly started stream: let it queue now, at this
+     * level, instead of at the stale one it armed with. */
+    if (InterlockedExchange(&g_arm, 0))
+        printf("synth: stream released after %lu ms -> sequence volume %.0f/127, "
+               "gain %.3f\n",
+               (unsigned long)(GetTickCount() - g_arm_t0),
+               seq_volume_now(), stream_gain());
 }
 
 static double stream_gain(void)
@@ -546,13 +576,26 @@ static DWORD WINAPI stream_thread(LPVOID param)
 
         if (InterlockedCompareExchange(&g_stop_flag, 0, 0))
             break;
+        if (InterlockedCompareExchange(&g_arm, 0, 0)) {
+            /* Held at the gate: no volume request for this stream yet. */
+            if (GetTickCount() - g_arm_t0 < STREAM_ARM_MS) {
+                Sleep(2);
+                continue;
+            }
+            printf("synth: no volume request after %d ms - starting at sequence "
+                   "volume %.0f/127\n", STREAM_ARM_MS, seq_volume_now());
+            InterlockedExchange(&g_arm, 0);
+        }
         for (i = 0; i < STREAM_BUFFERS; i++) {
             if (!(g_hdrs[i].dwFlags & WHDR_DONE))
                 continue;
             waveOutUnprepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
             stream_fill(g_slices[i], STREAM_SLICE, stream_gain());
             waveOutPrepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
-            waveOutWrite(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
+            if (waveOutWrite(g_dev, &g_hdrs[i], sizeof g_hdrs[i]) == MMSYSERR_NOERROR)
+                g_queued[i] = 1;
+            else
+                printf("synth: waveOutWrite failed (buffer %d)\n", i);
             idle = 0;
         }
         /* Make a running fade visible in the log: it is otherwise only
@@ -697,8 +740,11 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
         return 0;
     }
 
-    /* Streamed playback: render slice by slice and queue them, so the gain in
-     * force at submission time is what the listener hears. */
+    /* Streamed playback: the thread fills and queues slice by slice, so the
+     * gain in force at submission time is what the listener hears. The first
+     * queue is held back until the game has stated this stream's volume - see
+     * the gate above; nothing is filled at arm time, so no stale level can
+     * reach the device. */
     g_loop = loop;
     stream_init(ev, count, tick_rate, sample_rate);
     for (i = 0; i < STREAM_BUFFERS; i++) {
@@ -710,15 +756,13 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
         memset(&g_hdrs[i], 0, sizeof g_hdrs[i]);
         g_hdrs[i].lpData         = (LPSTR)g_slices[i];
         g_hdrs[i].dwBufferLength = STREAM_SLICE * 2;
-        stream_fill(g_slices[i], STREAM_SLICE, stream_gain());
-        if (waveOutPrepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]) != MMSYSERR_NOERROR ||
-            waveOutWrite(g_dev, &g_hdrs[i], sizeof g_hdrs[i]) != MMSYSERR_NOERROR) {
-            printf("synth: waveOutWrite failed (buffer %d)\n", i);
+        if (waveOutPrepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]) != MMSYSERR_NOERROR) {
+            printf("synth: waveOutPrepareHeader failed (buffer %d)\n", i);
             break;
         }
     }
     if (i < STREAM_BUFFERS) {
-        /* Could not queue every buffer: stop the device and report failure. */
+        /* Could not prepare every buffer: stop the device and report failure. */
         waveOutReset(g_dev);
         waveOutClose(g_dev);
         g_dev = NULL;
@@ -727,9 +771,11 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
     }
 
     InterlockedExchange(&g_stop_flag, 0);
+    g_arm_t0 = GetTickCount();
+    InterlockedExchange(&g_arm, 1);
     g_thread = CreateThread(NULL, 0, stream_thread, NULL, 0, NULL);
     printf("synth: streaming %u x %u-sample slices (%u ms each, %u ms queued), "
-           "sequence volume %.0f/127\n",
+           "sequence volume %.0f/127, first queue held for the volume request\n",
            STREAM_BUFFERS, STREAM_SLICE,
            (unsigned)((double)STREAM_SLICE * 1000.0 / (double)sample_rate),
            (unsigned)((double)STREAM_SLICE * STREAM_BUFFERS * 1000.0 /
@@ -745,6 +791,7 @@ void synth_set_bank_path(const char *path)
 
 void synth_stop(void)
 {
+    InterlockedExchange(&g_arm, 0);
     if (g_thread) {
         InterlockedExchange(&g_stop_flag, 1);
         WaitForSingleObject(g_thread, 1000);
@@ -759,9 +806,14 @@ void synth_stop(void)
         for (i = 0; i < STREAM_BUFFERS; i++) {
             if (!g_slices[i])
                 continue;
-            tries = 0;
-            while (!(g_hdrs[i].dwFlags & WHDR_DONE) && tries++ < 100)
-                Sleep(10);
+            /* A buffer that never reached waveOutWrite (still at the gate) is
+             * not owned by the driver and never gets WHDR_DONE - waiting for
+             * it would stall synth_stop for a second per slice. */
+            if (g_queued[i]) {
+                tries = 0;
+                while (!(g_hdrs[i].dwFlags & WHDR_DONE) && tries++ < 100)
+                    Sleep(10);
+            }
             if (g_hdrs[i].dwFlags & WHDR_PREPARED)
                 waveOutUnprepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
         }

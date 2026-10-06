@@ -31,7 +31,8 @@
 | `rounds/02-translation-toolkit.md` | 明细 | RLE、图形 blit、sprite24、字节/调色板工具 | §19 §21 §22 §23 |
 | `rounds/03-tables-and-plumbing.md` | 明细 | 寻路、资源加载器、**CRT 重定向**、转译接入、表访问器 | §24 §25 §26 §27 |
 | `rounds/04-dialog-and-ui.md` | 明细 | 0xC0-RLE 文本、对话框、开收框动画、等键 | §28 §29 §30 §31 |
-| `rounds/05-rec-and-services.md` | 明细 | 角色记录表、打字机步进 + tick 等待 + PCM 音效 | §32 §33 |
+| `rounds/05-rec-and-services.md` | 明细 | 角色记录表、打字机步进 + tick 等待 + PCM 音效 | §32 §33 §34 |
+| `rounds/06-audio-fade.md` | 明细 | 场景/进游戏音量“先小后大”排查（原作淡入）+ 起播抢跑修复 | §35 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。
