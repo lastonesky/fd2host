@@ -95,6 +95,10 @@ cmd //c E:\FD2\port\aux_build.bat typecheck
 # 运行（WINDOWS 子系统，无控制台；日志恒写 port/build/host.log）
 Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -WorkingDirectory 'E:\FD2'
 
+# 调试/无人值守时压低音量：--volume 默认 100（游戏自己的电平，自己玩不用管），
+# 自动跑的都显式加 --volume=10（regress.ps1 已内置）
+Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25','--volume=10' -WorkingDirectory 'E:\FD2'
+
 # 加载正确性判据（唯一可信）：与 Ghidra 重定位镜像逐字节对比
 & E:\FD2\port\build\letest.exe
 

@@ -89,6 +89,10 @@ for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         # pressed in the focused game window lands in the BDA ring and shifts
         # the schedule (the "stuck at the load menu" flake, PROGRESS §31.5).
         "--no-user-input",
+        # Debug runs are quiet: --volume defaults to 100 (the game's own level,
+        # convenient when playing), automated runs dial it down so the machine
+        # can be used while the regression is in progress.
+        "--volume=10",
         "--screenshot=$shot",
         "--shot-frame=900"
     )

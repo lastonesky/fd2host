@@ -51,7 +51,7 @@ Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -Wor
 | `--cmdtail=<尾巴>` | 写进 `PSP:0x80` 的命令行；`INT 21h AH=4B` 拉起子进程时自动传递 |
 | `--log=<路径>` | 换日志文件；子进程各用各的 `host.<pid>.log`，否则会截掉父日志（§8-47） |
 | 音频：`--ail-dump=<dir>` / `--ail-rate=<Hz>` / `--ail-bits=<8\|16>` / `--ail-stereo` | 导出音效样本与 XMIDI 原始数据、指定格式（见 `AUDIO.md`） |
-| 音频：`--midi-rate=<ticks/s>` / `--midi-backend=<synth\|winmidi>` / `--midi-dump=<wav>` / `--midi-test` / `--gm-bank=<path>` / `--volume=<0..100>` | 音乐 tick 基准（0 = 按序列 tempo）、后端（默认自带合成器）、离线 WAV、测试音、DLS 音色库、音量 |
+| **`--volume=<0..100>`** | 总输出音量（音乐 + 音效，在送 `waveOut` 前衰减）。**默认 `100` = 游戏自己的电平、不衰减**，这就是加 `--volume` 之前的听感；调试/回归时显式压低，例如 `--volume=10`（`regress.ps1` 已内置）。`0` 仍会跑完整条音频流水线，只是静音 |
 
 **一键回归**：`pwsh -File E:\FD2\port\regress.ps1`（重建沙箱 → autokey → 8 项断言，见
 `rounds/01-platform-and-tooling.md` §12.4）。

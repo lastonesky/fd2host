@@ -280,6 +280,11 @@ host: working directory = E:\FD2
 判据：`--volume=50` 跑 12 s → `ail: master output volume = 50% (music + SFX scaled at waveOut)`，
 同轮 `synth: rendered 2256 notes ... peak 32258/32767`（满量程统计仍在）。
 
+> **默认值后来改过（2026-10-06）**：当时定 `10` 是为了"能在旁边干活不受打扰"，但这让**自己玩**
+> 时也得手敲 `--volume`。现在默认改回 **`100`（= 加 `--volume` 之前的听感，不衰减）**，
+> 调试/自动跑时**显式**加 `--volume=10`（`regress.ps1` 已内置）。
+> 改动点在 `host.c` `g_volume`、`ail.c` `g_master_volume`、`synth.c` `g_master` 三处。
+
 ### 31.5 实测坑：测试机被别人按键干扰 → `--no-user-input`
 
 `regress.ps1` 的"卡在载入菜单"偶发失败根因：测试期间本机有人在用，**焦点在游戏窗口时按下的键

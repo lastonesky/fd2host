@@ -519,11 +519,12 @@ static int sample_open_device(ail_sample *s)
     return 1;
 }
 
-/* Master output volume (host --volume, 0..100, default 10): attenuates what
- * actually reaches waveOut, nothing else. The pipeline above it - AIL volume
- * tracking, the copy of the guest PCM, waveOut submission - is untouched, so
- * audio bugs still show up while the test runs quietly. */
-static int g_master_volume = 10;
+/* Master output volume (host --volume, 0..100, default 100 = no attenuation,
+ * the game's own level): attenuates what actually reaches waveOut, nothing
+ * else. The pipeline above it - AIL volume tracking, the copy of the guest
+ * PCM, waveOut submission - is untouched, so audio bugs still show up at any
+ * volume. Debug runs pass --volume=10 to stay quiet. */
+static int g_master_volume = 100;
 
 void ail_set_master_volume(int percent)
 {

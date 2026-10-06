@@ -93,9 +93,11 @@ static int          g_ail_mode;          /* 0=auto 1=fd2 (force) 2=none */
 static uint32_t     g_ail_rate  = 11025;
 static int          g_ail_bits  = 8;
 static int          g_ail_stereo;
-/* Output volume, --volume=0..100 (default 10: quiet enough to work next to,
- * still non-zero so the whole audio pipeline stays exercised). */
-static int          g_volume = 10;
+/* Output volume, --volume=0..100. Default 100 = the game's own level (no
+ * attenuation), i.e. what it sounded like before --volume existed. Debugging
+ * runs pass --volume=10 explicitly (regress.ps1 does) so a test can run next
+ * to a person; 0 still exercises the whole pipeline, just silently. */
+static int          g_volume = 100;
 /* --no-user-input: the real keyboard is ignored; only --autokey delivers
  * keystrokes. Tests run next to a person using the same machine, and a stray
  * key press in the focused game window goes straight into the BDA ring - that

@@ -435,7 +435,7 @@ void synth_set_dump_path(const char *path)
 /* Host master volume (0..100, default 10) - see synth.h. Applied to the
  * playback buffer only: the --midi-dump WAV and the render stats above stay
  * at full scale so the offline music checks keep their evidence. */
-static int g_master = 10;
+static int g_master = 100;   /* --volume, 0..100; 100 = no attenuation */
 
 void synth_set_master_volume(int percent)
 {
