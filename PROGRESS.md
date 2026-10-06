@@ -75,6 +75,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 | §35 | 10-06 | 音量“先小后大”排查 | **不是回归**：是游戏 `play_bgm` 自己的 `set(0,0)+set(127,2000)` 2 秒淡入，原版 AIL（`sub_449E0`/`sub_43270`/`sub_42980`）照实现，15 首曲子全声道有 CC7 ⇒ 覆盖等价；顺带修掉移植侧**起播 371 ms 抢跑旧增益**（起播闸门，`gain 0.000` 判据） | `docs/rounds/06-audio-fade.md`、`docs/AUDIO.md` §11.9、`docs/PITFALLS.md` §8-52 |
 | §36 | 10-06 | sokol 显示层验收 | 同 tick **基线 0 px**、GDI vs sokol **31 px（0.0484%）**且全在一块 14×4 动画元素上 ⇒ **第 2 步收口**；取样点必须选静止画面（片头转场同后端自比都能差 60%，`§8-53`） | `docs/rounds/07-sokol-acceptance.md`、`docs/BACKEND.md` §13.10 |
 | §37 | 10-06 | `svc_play_sfx2` 接入 | `0x25B45` 与 `0x25A96` **175 字节只差 17 字节**（6 个 rel32 + 5 处句柄立即数）⇒ 合共用体接入，接入 49→**50**；`typecheck` 1176→**1616 例全过**；顺带纠正 `sub_15F84` 的 ABI 测绘（**9 个栈参数**，不是 14 寄存器参数） | `docs/rounds/08-svc-sfx2.md`、`re/RE_MAP.md` |
+| §38 | 10-06 | 起播闸门返工（音乐哑了） | §35 的闸门**把音乐整个堵死**（`stream_thread` 等 `WHDR_DONE`，而 `PrepareHeader` 只置 `0x2` ⇒ 4 个缓冲一个都没进 waveOut；音效另一条路所以照常）；就绪判据改成“没进过队列的就是我们的”，**判据升级到设备层**（`stream alive … pos/peak` 每 10 s 一行） | `docs/rounds/06-audio-fade.md` §35.7、`docs/PITFALLS.md` §8-54 |
 
 ## 4. 下一步计划（按优先级）
 

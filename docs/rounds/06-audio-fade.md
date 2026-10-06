@@ -123,3 +123,47 @@ ail: set_sequence_volume(127, over 2000 ms) - ramped
 音量侧本轮收口；`docs/AUDIO.md` §11.9 是结论卡。剩下的音频待办仍是 §11.7 的"治本"
 （`audio_sokol.c` 软件混音，音乐+音效共用一条流）—— 见 `PROGRESS.md` 下一步第 4 条。
 源码化主线（`sub_15F84` 脚本 VM）见 `docs/TRANSLATION.md` §5 第 1 条。
+
+### 35.7 回归 + 再修：闸门把音乐整个堵死（2026-10-06 晚，用户实听发现）
+
+**症状**：这一版**音乐没了，只剩音效**。
+
+**根因**（`src/synth.c`，日志取证 `hdr flags 0x2`）：`stream_thread` 判断"这个缓冲可以重填"
+用的是 `WHDR_DONE`。闸门期间缓冲只 `waveOutPrepareHeader`、从未 `waveOutWrite`，而
+**`PrepareHeader` 只置 `WHDR_PREPARED`(0x2)，永远不置 `WHDR_DONE`(0x1)** ⇒ 闸门放行之后
+`if (!(dwFlags & WHDR_DONE)) continue;` 照样命中，**4 个缓冲一个都没进 waveOut**，
+音乐线程空转（`fading` 行照打，因为那几行在填充循环之外）。SFX 走自己那条设备路径，所以照常。
+
+**为什么上一轮没抓到**：判据只做到 `stream released … gain 0.000` + `fading 0 -> 127 …`
+—— 这两行只证明"**按什么电平去填缓冲**"，**没有证明缓冲进过设备**。更刺的是
+`PITFALLS §8-52` 当时已经写下"从未 `Write` 过的 header 永远不会置 `WHDR_DONE`"，
+但只用在了 `synth_stop` 的等待上，没回头改 `stream_thread` 的就绪判据。
+
+**修法**：就绪判据改成"**没进过队列的缓冲本来就是我的**"——
+
+```c
+if (g_queued[i] && !(g_hdrs[i].dwFlags & WHDR_DONE))   /* 只有驱动拥有的才等 DONE */
+    continue;
+```
+
+**判据升级（本轮教训）**：音频判据必须**到设备这一层**，新增两行：
+
+| 新判据行 | 证明什么 |
+|---|---|
+| `… first queue held for the volume request (hdr flags 0x2)` | 取证：`Prepare` 后只有 `0x2`，`DONE` 没置（根因） |
+| `synth: stream alive - N slices, pos P (type T), gain G, queued peak X/32767`（每 10 s） | N 单调增长 + pos 前进 = **设备在消费**；`peak > 0` = **内容非静音**；G = 当前电平 |
+
+**实测**（`--volume=10`，40 s 跑）：
+
+```
+synth: streaming … first queue held for the volume request (hdr flags 0x2)
+synth: stream released after 0 ms -> sequence volume 0/127, gain 0.000
+synth: stream alive - 4 slices,   pos 0        (type 4), gain 0.001, queued peak   14/32767
+synth: stream alive - 111 slices, pos 440750   (type 4), gain 0.100, queued peak 1108/32767
+synth: stream alive - 219 slices, pos 881838   (type 4), gain 0.100, queued peak 1174/32767
+synth: stream alive - 326 slices, pos 1322198  (type 4), gain 0.100, queued peak  740/32767
+```
+
+108 片/10 s × 92 ms ≈ 10 s（实时）、`type 4` = `TIME_BYTES` 44100 B/s = 22050 Hz × 2 B
+（驱动不支持 `TIME_MS` 时回退），都说明**数据在实时流出设备**。
+回归 **8/8 PASS**、`FD2.TMP = 207360`。坑记 `PITFALLS.md` §8-54。

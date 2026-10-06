@@ -343,3 +343,19 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     - **正确做法**：取样点选**静止画面**（标准 autokey 走完、停在静态等键态）。
       实测 `--shot-tick=600`：同后端基线 **0 px**，GDI vs sokol **31 px（0.0484%）**，
       差异全在一块 14×4 的动画元素相位上（见 `BACKEND.md` §13.10）。
+
+54. **`WHDR_DONE` 只对"进过队列的缓冲"有意义；判据也不能只做到"填了缓冲"**（第 35/38 轮）：
+    §8-52 的起播闸门把 `waveOutWrite` 推迟到游戏报音量之后，`stream_thread` 却仍用
+    `if (!(dwFlags & WHDR_DONE)) continue;` 当"可重填"判据 —— **`waveOutPrepareHeader`
+    只置 `WHDR_PREPARED`(0x2)，从未 `Write` 的缓冲永远等不到 `DONE`(0x1)** ⇒ 闸门放行后
+    依然全部 `continue`，**4 个缓冲一个都没进 waveOut：音乐整个没了，音效照常**（SFX 走
+    另一条设备路径，所以这个 bug 只哑音乐）。
+    - **同一个坑当时已写在 §8-52**，但只用在 `synth_stop` 的等待上，没回头检查**同一判据
+      在播放循环里的另一半** —— 改了流程就要把该流程上**所有**用到旧前提的地方过一遍。
+    - **修法**：`if (g_queued[i] && !(dwFlags & WHDR_DONE)) continue;` —— 只有驱动拥有的
+      缓冲才等 `DONE`，没进过队列的本来就是我们的。
+    - **判据教训（更值钱的一半）**：上一轮的证据 `stream released … gain 0.000` 与
+      `fading 0 -> 127 …` 只证明"**按什么电平填了缓冲**"，**没证明缓冲进过设备**，
+      于是照样发布了一个**没有音乐**的版本。音频类判据必须到设备层：
+      `synth: stream alive - N slices, pos P (type T), gain G, queued peak X/32767`
+      —— N/pos 单调前进 = 设备在消费，`peak > 0` = 内容非静音。

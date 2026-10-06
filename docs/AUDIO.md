@@ -308,3 +308,12 @@ synth: streaming 4 x 2048-sample slices (92 ms each, 371 ms queued), sequence vo
 
 **判据**：回归 **8/8 PASS**、`FD2.TMP = 207360`；`ail: play 16` / `(cut) 0`；
 `synth: rendered 2256 notes … peak 32258/32767, polyphony 36`（离线路径未动）。
+
+**⚠ 闸门的回归（同日晚，用户实听发现"音乐没了"）**：闸门期间缓冲只 `Prepare` 未 `Write`，
+而 `stream_thread` 判断"可重填"用的是 `WHDR_DONE` —— **`PrepareHeader` 只置 `WHDR_PREPARED`(0x2)**，
+`DONE` 永远不来 ⇒ 放行后 4 个缓冲**一个都没进 waveOut**（音效走另一条设备路径，照常）。
+修法：只有 `g_queued[i]` 的缓冲才等 `DONE`。**判据因此升级到设备层**：
+`synth: stream alive - N slices, pos P (type T), gain G, queued peak X/32767`（每 10 s，
+N/pos 前进 = 设备在消费、peak>0 = 内容非静音）。**光看 `gain 0.000` / `fading` 行是不够的**
+—— 上一版正是这样漏掉了"音乐根本没出声"。详见 `rounds/06-audio-fade.md` §35.7、
+`PITFALLS.md` §8-54。

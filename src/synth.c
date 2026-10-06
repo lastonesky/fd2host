@@ -508,6 +508,7 @@ static int      g_ramp_ms;
 static volatile LONG g_arm;
 static DWORD         g_arm_t0;
 static int           g_queued[STREAM_BUFFERS];   /* has reached waveOutWrite */
+static unsigned long g_slices_written;           /* for the heartbeat         */
 
 static double seq_volume_now(void)
 {
@@ -567,7 +568,7 @@ static double stream_gain(void)
 static DWORD WINAPI stream_thread(LPVOID param)
 {
     int i;
-    DWORD now, last_fade_log = 0;
+    DWORD now, last_fade_log = 0, last_heart = 0;
     int ramp_active = 0;
 
     (void)param;
@@ -587,16 +588,47 @@ static DWORD WINAPI stream_thread(LPVOID param)
             InterlockedExchange(&g_arm, 0);
         }
         for (i = 0; i < STREAM_BUFFERS; i++) {
-            if (!(g_hdrs[i].dwFlags & WHDR_DONE))
+            /* Ready = the driver is done with it. A header that never reached
+             * waveOutWrite (still at the gate) is ours, not the driver's:
+             * waveOutPrepareHeader sets only WHDR_PREPARED, never WHDR_DONE,
+             * so requiring DONE there would wait forever and nothing would
+             * ever be queued - music gone, SFX fine. */
+            if (g_queued[i] && !(g_hdrs[i].dwFlags & WHDR_DONE))
                 continue;
             waveOutUnprepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
             stream_fill(g_slices[i], STREAM_SLICE, stream_gain());
             waveOutPrepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
-            if (waveOutWrite(g_dev, &g_hdrs[i], sizeof g_hdrs[i]) == MMSYSERR_NOERROR)
+            if (waveOutWrite(g_dev, &g_hdrs[i], sizeof g_hdrs[i]) == MMSYSERR_NOERROR) {
                 g_queued[i] = 1;
-            else
+                g_slices_written++;
+            } else {
                 printf("synth: waveOutWrite failed (buffer %d)\n", i);
+            }
             idle = 0;
+        }
+        /* Heartbeat: proves data is reaching the device (position advances)
+         * and at what level - a silent stream is otherwise indistinguishable
+         * from a working one by logs alone. */
+        now = GetTickCount();
+        if (g_slices_written > 0 && now - last_heart >= 10000) {
+            MMTIME mt;
+            int    k, peak = 0;
+            memset(&mt, 0, sizeof mt);
+            mt.wType = TIME_MS;
+            if (waveOutGetPosition(g_dev, &mt, sizeof mt) == MMSYSERR_NOERROR) {
+                /* what is actually queued right now: level of the oldest slice
+                 * still in flight (a running copy is harmless for a diagnostic) */
+                for (k = 0; k < STREAM_SLICE; k++) {
+                    int v = g_slices[0][k];
+                    if (v < 0) v = -v;
+                    if (v > peak) peak = v;
+                }
+                printf("synth: stream alive - %lu slices, pos %lu (type %u), "
+                       "gain %.3f, queued peak %d/32767\n",
+                       g_slices_written, (unsigned long)mt.u.ms,
+                       (unsigned)mt.wType, stream_gain(), peak);
+            }
+            last_heart = now;
         }
         /* Make a running fade visible in the log: it is otherwise only
          * audible, and "did the ramp actually happen" is the whole point. */
@@ -773,14 +805,16 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
     InterlockedExchange(&g_stop_flag, 0);
     g_arm_t0 = GetTickCount();
     InterlockedExchange(&g_arm, 1);
+    g_slices_written = 0;
     g_thread = CreateThread(NULL, 0, stream_thread, NULL, 0, NULL);
     printf("synth: streaming %u x %u-sample slices (%u ms each, %u ms queued), "
-           "sequence volume %.0f/127, first queue held for the volume request\n",
+           "sequence volume %.0f/127, first queue held for the volume request "
+           "(hdr flags 0x%X)\n",
            STREAM_BUFFERS, STREAM_SLICE,
            (unsigned)((double)STREAM_SLICE * 1000.0 / (double)sample_rate),
            (unsigned)((double)STREAM_SLICE * STREAM_BUFFERS * 1000.0 /
                       (double)sample_rate),
-           seq_volume_now());
+           seq_volume_now(), (unsigned)g_hdrs[0].dwFlags);
     return 1;
 }
 
