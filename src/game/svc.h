@@ -2,6 +2,7 @@
  *
  *   0x17AA9  svc_wait_ticks   wait until the BIOS tick has advanced by N
  *   0x25A96  svc_play_sfx     start a PCM sound effect
+ *   0x25B45  svc_play_sfx2    the same routine on the second handle
  *
  * Both are app-level routines: they read and write the game's own
  * data-segment globals by their original addresses, exactly like the machine
@@ -50,5 +51,9 @@ int svc_wait_ticks(int n);
 /* 0x25A96 - play sample `index` of `bank`; `loops` is forwarded to
  * AIL_set_sample_loop_count unchanged (the typewriter step passes 1). */
 int svc_play_sfx(const void *bank, int index, int loops);
+
+/* 0x25B45 - byte-for-byte the same routine on the second sample handle
+ * dword_53EE8 (11 call sites); only the handle differs. */
+int svc_play_sfx2(const void *bank, int index, int loops);
 
 #endif /* GAME_SVC_H */

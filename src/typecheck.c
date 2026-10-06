@@ -4,6 +4,7 @@
  *   0x164E8  dlg_type_step    (src/game/dlg.c) - every second character it
  *                             blits a DATO sub-image through 0x16559
  *   0x25A96  svc_play_sfx     (src/game/svc.c) - five AIL calls
+ *   0x25B45  svc_play_sfx2    (src/game/svc.c) - the same body, other handle
  *   0x17AA9  svc_wait_ticks   (src/game/svc.c) - BIOS tick busy-wait
  *
  * Neither service can be tested by just running it twice: svc_wait_ticks
@@ -51,6 +52,7 @@ typedef int (__cdecl *orig_step_fn)(void);
 
 #define ORIG_WAIT ((orig_wait_fn)(uintptr_t)0x00017AA9u)
 #define ORIG_SFX  ((orig_sfx_fn) (uintptr_t)0x00025A96u)
+#define ORIG_SFX2 ((orig_sfx_fn) (uintptr_t)0x00025B45u)
 #define ORIG_STEP ((orig_step_fn)(uintptr_t)0x000164E8u)
 
 #define VGA       ((uint8_t *)(uintptr_t)0x000A0000u)
@@ -64,6 +66,7 @@ typedef int (__cdecl *orig_step_fn)(void);
 #define G53A85    (*(void **)(uintptr_t)0x00053A85u)
 #define G53C67    (*(int32_t *)(uintptr_t)0x00053C67u)
 #define G53EE4    (*(void **)(uintptr_t)0x00053EE4u)
+#define G53EE8    (*(void **)(uintptr_t)0x00053EE8u)
 #define G53EEC    (*(void **)(uintptr_t)0x00053EECu)
 #define G53EF1    (*(uint8_t  *)(uintptr_t)0x00053EF1u)
 #define G51E62    (*(uint8_t  *)(uintptr_t)0x00051E62u)
@@ -236,9 +239,9 @@ struct capture {
 
 static int          failures;
 static unsigned     cases_run;
-enum { P_WAIT, P_SFX, P_STEP };
-static const char *const path_name[] = { "wait", "sfx", "step" };
-static unsigned     path_count[3];
+enum { P_WAIT, P_SFX, P_SFX2, P_STEP };
+static const char *const path_name[] = { "wait", "sfx", "sfx2", "step" };
+static unsigned     path_count[4];
 
 static void begin_run(uint16_t tick0)
 {
@@ -413,6 +416,7 @@ static void reset_world(uint32_t vga_seed, int a10, int a14, int box)
     G53A85 = g_dato;
     G53EEC = g_bank;
     G53EE4 = (void *)(uintptr_t)0x40001000u;   /* arbitrary sample handle  */
+    G53EE8 = (void *)(uintptr_t)0x40008000u;   /* ... and the twin's       */
     G53C67 = box;
     G53A10 = a10;
     G53A14 = a14;
@@ -438,8 +442,14 @@ static void test_wait(unsigned id, int n, uint16_t t0)
     cmp_capture(id, P_WAIT, &co, &ct, 1);
 }
 
-/* --- case 2: svc_play_sfx ---------------------------------------------- */
-static void test_sfx(unsigned id, int driver, int enabled, int busy,
+/* --- case 2: svc_play_sfx / svc_play_sfx2 ----------------------------- */
+/* Both entry points run the same body on a different sample handle, so they
+ * share one test: the handle lands in every logged AIL call, which is what
+ * catches a mix-up between dword_53EE4 and dword_53EE8. */
+typedef int (__cdecl *sfx_c_fn)(const void *, int, int);
+
+static void test_sfx(unsigned id, int path, orig_sfx_fn orig, sfx_c_fn cfun,
+                     int driver, int enabled, int busy,
                      int index, int loops, uint16_t t0)
 {
     static struct capture co, ct;
@@ -450,19 +460,19 @@ static void test_sfx(unsigned id, int driver, int enabled, int busy,
     G54133 = busy;
 
     begin_run(t0);
-    r = ORIG_SFX(g_bank, index, loops);
+    r = orig(g_bank, index, loops);
     snapshot(&co);
     co.ret = r;
 
     begin_run(t0);
-    r = svc_play_sfx(g_bank, index, loops);
+    r = cfun(g_bank, index, loops);
     snapshot(&ct);
     ct.ret = r;
 
     /* when the gates block playback the original returns whatever was in EAX,
      * so only the played path has a defined return value to compare */
     played = (driver != 0 && enabled != 0 && busy == 0);
-    cmp_capture(id, P_SFX, &co, &ct, played);
+    cmp_capture(id, path, &co, &ct, played);
 }
 
 /* --- case 3: dlg_type_step, run as a sequence -------------------------- */
@@ -550,6 +560,11 @@ int main(int argc, char **argv)
     HOOK(0x39798u, stub_start);         /* AIL_start_sample                  */
 
     /* ---- svc_wait_ticks ------------------------------------------------ */
+    /* Two distinct sample handles up front: every logged AIL call carries the
+     * handle, so svc_play_sfx and svc_play_sfx2 swapping dword_53EE4 /
+     * dword_53EE8 would show up immediately. */
+    G53EE4 = (void *)(uintptr_t)0x40001000u;
+    G53EE8 = (void *)(uintptr_t)0x40008000u;
     /* The +0x10000 correction only ever fires where the *signed* reading
      * wraps - readings below 0x8000 are positive and above it negative, so
      * the tick has to cross 0x7FFF/0x8000 inside one run (each run reads the
@@ -576,7 +591,21 @@ int main(int argc, char **argv)
 
         seed = 0x5EED0000u + i;
         build_bank();
-        test_sfx(2000 + i, driver, enabled, busy, index, loops, (uint16_t)rnd());
+        test_sfx(2000 + i, P_SFX, ORIG_SFX, svc_play_sfx,
+                 driver, enabled, busy, index, loops, (uint16_t)rnd());
+    }
+    /* ---- svc_play_sfx2 (0x25B45, second handle) ----------------------- */
+    for (i = 0; i < 400 && !failures; i++) {
+        int driver  = (int)(rnd() % 2);
+        int enabled = (int)(rnd() % 2);
+        int busy    = (int)(rnd() % 2);
+        int index   = (int)(rnd() % (BANK_SLOTS + 1)) - 1;   /* -1 .. 7      */
+        int loops   = (int)(rnd() % 4);
+
+        seed = 0x5EED8000u + i;
+        build_bank();
+        test_sfx(6000 + i, P_SFX2, ORIG_SFX2, svc_play_sfx2,
+                 driver, enabled, busy, index, loops, (uint16_t)rnd());
     }
     /* constructed: every gate combination at a fixed bank */
     {
@@ -589,6 +618,17 @@ int main(int argc, char **argv)
                 for (b = 0; b < 2 && !failures; b++)
                     for (k = 0; k < 5 && !failures; k++)
                         test_sfx(3000 + d * 40 + e * 20 + b * 10 + k,
+                                 P_SFX, ORIG_SFX, svc_play_sfx,
+                                 d, e, b, idx[k], 1, 0x1234);
+        /* same matrix on the twin, so both handle slots are covered */
+        seed = 0xBEEF8u;
+        build_bank();
+        for (d = 0; d < 2 && !failures; d++)
+            for (e = 0; e < 2 && !failures; e++)
+                for (b = 0; b < 2 && !failures; b++)
+                    for (k = 0; k < 5 && !failures; k++)
+                        test_sfx(7000 + d * 40 + e * 20 + b * 10 + k,
+                                 P_SFX2, ORIG_SFX2, svc_play_sfx2,
                                  d, e, b, idx[k], 1, 0x1234);
     }
 
@@ -627,8 +667,9 @@ int main(int argc, char **argv)
         test_step(5101, 4, 0, 0, 0x3210, 0, 0, 1, 0xDEADBEEFu, (uint16_t)0x7FFF);
     }
 
-    printf("paths: wait=%u sfx=%u step=%u\n",
-           path_count[P_WAIT], path_count[P_SFX], path_count[P_STEP]);
+    printf("paths: wait=%u sfx=%u sfx2=%u step=%u\n",
+           path_count[P_WAIT], path_count[P_SFX], path_count[P_SFX2],
+           path_count[P_STEP]);
     printf("%s: %u cases, %d failures\n",
            failures ? "FAILED" : "PASS", cases_run, failures);
     le_close(&le);

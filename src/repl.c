@@ -155,10 +155,12 @@ static const struct repl_entry g_repl[] = {
      * AIL through the original entry points, which in the host are already
      * the replacements src/ail.c installed - so nothing here depends on
      * whether ail_install ran before repl_install. svc_wait_ticks is reached
-     * from 45 call sites and svc_play_sfx from 15, all of them ordinary
-     * cdecl callers. */
+     * from 45 call sites, svc_play_sfx from 15 and its twin svc_play_sfx2
+     * (0x25B45, byte-for-byte the same body on handle dword_53EE8) from 11,
+     * all of them ordinary cdecl callers. */
     { 0x17AA9, "svc_wait_ticks",      (void *)svc_wait_ticks,       REPL_SVC },
     { 0x25A96, "svc_play_sfx",        (void *)svc_play_sfx,         REPL_SVC },
+    { 0x25B45, "svc_play_sfx2",       (void *)svc_play_sfx2,        REPL_SVC },
 };
 
 unsigned repl_parse(const char *spec)

@@ -14,7 +14,7 @@
 资源、**持续渲染开场动画**、**有声音**（音效 waveOut + XMIDI 自带合成器），并能用 `--autokey`
 自动走完"片头 → 标题菜单 → continue → 剧情画面"。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 49 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 50 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8），下一个目标是 `sub_15F84` 脚本 VM。
 方法总览见 **`docs/TRANSLATION.md`**。
 
@@ -41,7 +41,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**49 个函数接入运行中的游戏**             ✅ 详见 docs/TRANSLATION.md
+源码转译：**50 个函数接入运行中的游戏**             ✅ 详见 docs/TRANSLATION.md
 ```
 
 ## 3. 轮次时间线
@@ -74,12 +74,14 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 | §34 | 10-06 | 抓帧触发改判 + sokol 实测 | sokol **能编能跑**（D3D11 / 159 fps）；验收标准“同帧”是错的 → 加 `--shot-time`，再收紧为 **`--shot-tick`**（按游戏 BIOS tick，跨后端同状态）；SFX 爆音按“常驻设备 + 3 ms 起停斜坡”修完 | `docs/rounds/05-rec-and-services.md` §34、`docs/BACKEND.md` §13.8、`docs/AUDIO.md` §11.6 |
 | §35 | 10-06 | 音量“先小后大”排查 | **不是回归**：是游戏 `play_bgm` 自己的 `set(0,0)+set(127,2000)` 2 秒淡入，原版 AIL（`sub_449E0`/`sub_43270`/`sub_42980`）照实现，15 首曲子全声道有 CC7 ⇒ 覆盖等价；顺带修掉移植侧**起播 371 ms 抢跑旧增益**（起播闸门，`gain 0.000` 判据） | `docs/rounds/06-audio-fade.md`、`docs/AUDIO.md` §11.9、`docs/PITFALLS.md` §8-52 |
 | §36 | 10-06 | sokol 显示层验收 | 同 tick **基线 0 px**、GDI vs sokol **31 px（0.0484%）**且全在一块 14×4 动画元素上 ⇒ **第 2 步收口**；取样点必须选静止画面（片头转场同后端自比都能差 60%，`§8-53`） | `docs/rounds/07-sokol-acceptance.md`、`docs/BACKEND.md` §13.10 |
+| §37 | 10-06 | `svc_play_sfx2` 接入 | `0x25B45` 与 `0x25A96` **175 字节只差 17 字节**（6 个 rel32 + 5 处句柄立即数）⇒ 合共用体接入，接入 49→**50**；`typecheck` 1176→**1616 例全过**；顺带纠正 `sub_15F84` 的 ABI 测绘（**9 个栈参数**，不是 14 寄存器参数） | `docs/rounds/08-svc-sfx2.md`、`re/RE_MAP.md` |
 
 ## 4. 下一步计划（按优先级）
 
-1. **源码化继续**：`sub_15F84` 脚本 VM（1380 B 词流解释器，126 个调用点）——依赖只剩两条已转译
-   的服务（`svc_wait_ticks`/`svc_play_sfx`）与 `0x15E9E`/`0x15E71`（仍留原机器码）；
-   用 CRT 重定向 + 确定性时钟对拍。**详见 `docs/TRANSLATION.md` §5。**
+1. **源码化继续**：`sub_15F84` 脚本 VM（1380 B 词流解释器，126 个调用点）——依赖只剩三条已转译
+   的服务（`svc_wait_ticks`/`svc_play_sfx`/`svc_play_sfx2`，§37 收官）与 `0x15E9E`/`0x15E71`（仍留原机器码）；
+   用 CRT 重定向 + 确定性时钟对拍。**ABI 已测绘：9 个 cdecl 栈参数**（原记“14 寄存器参数”是
+   `0x3702F` 栈探针的伪影，`re/RE_MAP.md` 已更正）。**详见 `docs/TRANSLATION.md` §5。**
    已完成：资源加载器 ✅、RLE/blit ✅、obj0 工具库 ✅、对话框系列 ✅、角色记录 ✅、系统服务 ✅。
 2. **补 autokey 配方**：当前标准配方到帧 1500 是静态等键态，只证明"无回归"，没证明
    `dlg_type_step` 在宿主里真的跑过（需要能进"打字进行中"画面的按键序列）。

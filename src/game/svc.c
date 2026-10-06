@@ -2,6 +2,7 @@
  *
  *   0x17AA9  svc_wait_ticks   wait until the BIOS tick has advanced by N
  *   0x25A96  svc_play_sfx     start a PCM sound effect
+ *   0x25B45  svc_play_sfx2    same, on the second sample handle
  *
  * See game/svc.h for the contract. The originals are 68 and 116 bytes; each
  * opens with the `push <frame size>; call sub_3702F` stack probe, which is a
@@ -34,6 +35,7 @@
 #define byte_51E62  (*(uint8_t  *)(uintptr_t)0x00051E62u) /* SFX enabled option */
 #define dword_54133 (*(int32_t *)(uintptr_t)0x00054133u) /* sample busy gate   */
 #define dword_53EE4 (*(void   **)(uintptr_t)0x00053EE4u) /* SFX sample handle  */
+#define dword_53EE8 (*(void   **)(uintptr_t)0x00053EE8u) /* 2nd sample handle  */
 
 typedef uint32_t (__cdecl *tick_fn)(void);
 typedef int32_t  (__cdecl *ail_h_fn)(void *handle);
@@ -78,26 +80,33 @@ int svc_wait_ticks(int n)
     return dword_53A2C;
 }
 
-/* 0x25A96
+/* 0x25A96 and its twin 0x25B45
  *
  *   if (!byte_53EF1 || !byte_51E62 || dword_54133)      nothing may play
  *       return;
- *   AIL_stop_sample(dword_53EE4);
+ *   AIL_stop_sample(handle);
  *   if (index == -1)
  *       return;
  *   row   = bank + 4*index;                  entry i: off[i] at row+6,
  *   start = bank + *(u32)(row + 6);                     off[i+1] at row+0xA
  *   len   = *(u32)(row + 0xA) - *(u32)(row + 6);
- *   AIL_init_sample(dword_53EE4);
- *   AIL_set_sample_address(dword_53EE4, start, len);
- *   AIL_set_sample_loop_count(dword_53EE4, loops);
- *   AIL_start_sample(dword_53EE4);
+ *   AIL_init_sample(handle);
+ *   AIL_set_sample_address(handle, start, len);
+ *   AIL_set_sample_loop_count(handle, loops);
+ *   AIL_start_sample(handle);
+ *
+ * The two entry points are the same 175 bytes with 17 bytes different: the
+ * rel32 of the stack probe and of the five AIL calls (they sit at different
+ * addresses) plus the five `push handle` immediates - 0x25A96 uses
+ * dword_53EE4, 0x25B45 uses dword_53EE8 (both allocated back to back at
+ * 0x25C43/0x25C57). The machine code re-reads the handle global for every AIL
+ * call, so the shared helper takes the *slot* and dereferences it each time.
  *
  * The return value is the result of the last AIL call (stop, when only the
  * stop happened); the branch that returns before calling anything leaves EAX
  * holding whatever was live there, which no caller reads either.
  */
-int svc_play_sfx(const void *bank, int index, int loops)
+static int play_sfx(void **slot, const void *bank, int index, int loops)
 {
     const uint8_t *row;
     const uint8_t *start;
@@ -107,7 +116,7 @@ int svc_play_sfx(const void *bank, int index, int loops)
     if (byte_53EF1 == 0 || byte_51E62 == 0 || dword_54133 != 0)
         return 0;
 
-    result = ORIG_STOP(dword_53EE4);
+    result = ORIG_STOP(*slot);
     if (index == -1)
         return result;
 
@@ -116,8 +125,20 @@ int svc_play_sfx(const void *bank, int index, int loops)
     end = *(const uint32_t *)(row + 0x0A);
     start = (const uint8_t *)bank + beg;
 
-    ORIG_INIT(dword_53EE4);
-    ORIG_ADDR(dword_53EE4, start, end - beg);
-    ORIG_LOOP(dword_53EE4, loops);
-    return ORIG_START(dword_53EE4);
+    ORIG_INIT(*slot);
+    ORIG_ADDR(*slot, start, end - beg);
+    ORIG_LOOP(*slot, loops);
+    return ORIG_START(*slot);
+}
+
+int svc_play_sfx(const void *bank, int index, int loops)
+{
+    return play_sfx(&dword_53EE4, bank, index, loops);
+}
+
+/* 0x25B45 - the same routine on the second sample handle; 11 call sites,
+ * mostly the same kind of trigger as svc_play_sfx's. */
+int svc_play_sfx2(const void *bank, int index, int loops)
+{
+    return play_sfx(&dword_53EE8, bank, index, loops);
 }
