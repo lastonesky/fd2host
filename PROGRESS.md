@@ -14,7 +14,7 @@
 资源、**持续渲染开场动画**、**有声音**（音效 waveOut + XMIDI 自带合成器），并能用 `--autokey`
 自动走完"片头 → 标题菜单 → continue → 剧情画面"。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 50 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 51 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8），下一个目标是 `sub_15F84` 脚本 VM。
 方法总览见 **`docs/TRANSLATION.md`**。
 
@@ -41,7 +41,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**50 个函数接入运行中的游戏**             ✅ 详见 docs/TRANSLATION.md
+源码转译：**51 个函数接入运行中的游戏**             ✅ 详见 docs/TRANSLATION.md
 ```
 
 ## 3. 轮次时间线
@@ -76,14 +76,15 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 | §36 | 10-06 | sokol 显示层验收 | 同 tick **基线 0 px**、GDI vs sokol **31 px（0.0484%）**且全在一块 14×4 动画元素上 ⇒ **第 2 步收口**；取样点必须选静止画面（片头转场同后端自比都能差 60%，`§8-53`） | `docs/rounds/07-sokol-acceptance.md`、`docs/BACKEND.md` §13.10 |
 | §37 | 10-06 | `svc_play_sfx2` 接入 | `0x25B45` 与 `0x25A96` **175 字节只差 17 字节**（6 个 rel32 + 5 处句柄立即数）⇒ 合共用体接入，接入 49→**50**；`typecheck` 1176→**1616 例全过**；顺带纠正 `sub_15F84` 的 ABI 测绘（**9 个栈参数**，不是 14 寄存器参数） | `docs/rounds/08-svc-sfx2.md`、`re/RE_MAP.md` |
 | §38 | 10-06 | 起播闸门返工（音乐哑了） | §35 的闸门**把音乐整个堵死**（`stream_thread` 等 `WHDR_DONE`，而 `PrepareHeader` 只置 `0x2` ⇒ 4 个缓冲一个都没进 waveOut；音效另一条路所以照常）；就绪判据改成“没进过队列的就是我们的”，**判据升级到设备层**（`stream alive … pos/peak` 每 10 s 一行） | `docs/rounds/06-audio-fade.md` §35.7、`docs/PITFALLS.md` §8-54 |
+| §39 | 10-06 | **脚本 VM 转译（主线）** | `0x15F84` 词流解释器 → `game/vm.c`：`case -1` 是与 `sub_15055` 共享的尾声 ⇒ `return cur`；12 个被调函数全部桩化对拍，**5512 例 0 失败**（当场抓到 `mode` 未写回、`dword_53C67` 无条件清零两个真 bug）；接入 50→**51**，A/B 三组 **0 px**，回归 8/8 | `docs/rounds/09-vm.md`、`docs/TRANSLATION.md` §4/§5 |
 
 ## 4. 下一步计划（按优先级）
 
-1. **源码化继续**：`sub_15F84` 脚本 VM（1380 B 词流解释器，126 个调用点）——依赖只剩三条已转译
-   的服务（`svc_wait_ticks`/`svc_play_sfx`/`svc_play_sfx2`，§37 收官）与 `0x15E9E`/`0x15E71`（仍留原机器码）；
-   用 CRT 重定向 + 确定性时钟对拍。**ABI 已测绘：9 个 cdecl 栈参数**（原记“14 寄存器参数”是
-   `0x3702F` 栈探针的伪影，`re/RE_MAP.md` 已更正）。**详见 `docs/TRANSLATION.md` §5。**
-   已完成：资源加载器 ✅、RLE/blit ✅、obj0 工具库 ✅、对话框系列 ✅、角色记录 ✅、系统服务 ✅。
+1. ~~**源码化继续**：`sub_15F84` 脚本 VM~~ **已完成（§39，2026-10-06）**：`game/vm.c` + `vmcheck`
+   **5512 例全过**，接入分组 `vm`（接入 50→**51**）。**ABI 结论：9 个 cdecl 栈参数**（原记
+   “14 寄存器参数”是 `0x3702F` 栈探针的伪影，`re/RE_MAP.md` 已更正）。
+   下一个源码化目标看 `docs/TRANSLATION.md` §5；快照/还原 `0x15E9E`/`0x15E71` 仍与 CRT 堆
+   整体替换一起接。
 2. **补 autokey 配方**：当前标准配方到帧 1500 是静态等键态，只证明"无回归"，没证明
    `dlg_type_step` 在宿主里真的跑过（需要能进"打字进行中"画面的按键序列）。
 3. ~~显示层换 sokol~~ **已验收（§36，2026-10-06）**：同 tick **基线 0 px**、GDI vs sokol **31 px（0.0484%）**，

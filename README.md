@@ -4,7 +4,7 @@
 Watcom + Miles AIL）在 Windows 上**原生**跑起来 —— 不模拟 DOS、不模拟实模式、不用 DOSBox。
 图形/声音/输入换成现代 Windows 实现，游戏逻辑先保留原始 x86 机器码，再逐函数换成还原的 C 源码。
 
-**当前里程碑：POC 已达成** —— 画面 + 声音 + 能进剧情，且正在把机器码逐模块换成 C（已接入 50 个）。
+**当前里程碑：POC 已达成** —— 画面 + 声音 + 能进剧情，且正在把机器码逐模块换成 C（已接入 51 个）。
 
 ---
 
@@ -68,14 +68,14 @@ pwsh -File E:\FD2\port\regress.ps1
 | 显示 | VGA DAC 是 **6 位/通道**（要 `(v<<2)\|(v>>4)`）、32bpp `BI_RGB` 内存序是 **BGRA** | `docs/PITFALLS.md` §8-17 |
 | 键盘 | 菜单走 `INT 16h`、片头轮询 BDA；**游戏不用鼠标**（静态 + 运行期双证） | `docs/PITFALLS.md` §8-22 / `docs/rounds/01-platform-and-tooling.md` §12.3 |
 | 音频 | 16 个 AIL 入口替换；音乐自带合成器 + 解析 `gm.dls`（不依赖系统 MIDI） | `docs/AUDIO.md` |
-| 转译 | 50 个函数经 `src/repl.c` 接入运行中的游戏，全部逐字节对拍通过 | `docs/TRANSLATION.md` |
+| 转译 | 51 个函数经 `src/repl.c` 接入运行中的游戏，全部逐字节对拍通过 | `docs/TRANSLATION.md` |
 
 > 以上每条背后都有硬判据（`host.log` 行 / `letest` 逐字节 / 抓帧 / `*check` 用例数），
 > 未证实的一律标注"待确认"。**禁止**用字节扫描或"听起来像"下结论。
 
 ## 下一步（摘要，完整版见 `PROGRESS.md`）
 
-1. **源码化继续**：下一个目标是 `sub_15F84` 脚本 VM（方法、依赖、判据见 `docs/TRANSLATION.md`）。
+1. **源码化继续**：下一个目标看 `docs/TRANSLATION.md` §5（`sub_15F84` 脚本 VM 已于 §39 完成）。
 2. ~~显示层换 sokol~~ **已验收（§36）**：默认后端就是 `sokol`（D3D11 / 155 fps），GDI 降为
    `-Render gdi` 对拍基准（不进日常循环）。同 guest tick 下**同后端基线 0 px**、
    GDI vs sokol **31 px（0.0484%）**；取样点定为静止画面 `--shot-tick=600`（片头转场同后端

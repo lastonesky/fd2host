@@ -35,6 +35,7 @@
 | `rounds/06-audio-fade.md` | 明细 | 场景/进游戏音量“先小后大”排查（原作淡入）+ 起播抢跑修复 | §35 |
 | `rounds/07-sokol-acceptance.md` | 明细 | sokol 与 GDI 同 guest tick 逐像素验收 + 取样点规则（先验基线） | §36 |
 | `rounds/08-svc-sfx2.md` | 明细 | `0x25B45` 同形函数转译接入 + `sub_15F84` ABI 测绘纠正 | §37 |
+| `rounds/09-vm.md` | 明细 | **脚本 VM `0x15F84` 转译**（词流解释器、共享尾声、EDI 语义、5512 例对拍） | §39 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。

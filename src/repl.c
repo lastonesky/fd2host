@@ -16,7 +16,7 @@
  *     addresses instead, which keeps one heap on every path.
  *
  * See repl.h for why this is safe. Groups: rle, gfx, sprite24, util, path,
- * dlg, rec, svc.
+ * dlg, rec, svc, vm.
  */
 #include <windows.h>
 #include <stdio.h>
@@ -34,6 +34,7 @@
 #include "game/dlg.h"
 #include "game/rec.h"
 #include "game/svc.h"
+#include "game/vm.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -161,6 +162,15 @@ static const struct repl_entry g_repl[] = {
     { 0x17AA9, "svc_wait_ticks",      (void *)svc_wait_ticks,       REPL_SVC },
     { 0x25A96, "svc_play_sfx",        (void *)svc_play_sfx,         REPL_SVC },
     { 0x25B45, "svc_play_sfx2",       (void *)svc_play_sfx2,        REPL_SVC },
+
+    /* --- script/text VM (src/game/vm.c) --------------------------------
+     * 1380 bytes, 126 direct call sites - the interpreter every line of
+     * dialogue, portrait swap and printed number goes through. Nine cdecl
+     * stack parameters (the "14 register parameters" in re/RE_MAP.md were
+     * the 0x3702F stack probe's artifact, see docs/rounds/08 §37.3).
+     * It reaches the services through their original addresses, which is
+     * how src/game/dlg.c and src/game/res.c are reached from here too. */
+    { 0x15F84, "vm_run",             (void *)vm_run,              REPL_VM },
 };
 
 unsigned repl_parse(const char *spec)
@@ -185,6 +195,7 @@ unsigned repl_parse(const char *spec)
         else if (!_stricmp(tok, "dlg"))      mask |= REPL_DLG;
         else if (!_stricmp(tok, "rec"))      mask |= REPL_REC;
         else if (!_stricmp(tok, "svc"))      mask |= REPL_SVC;
+        else if (!_stricmp(tok, "vm"))       mask |= REPL_VM;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

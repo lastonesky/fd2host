@@ -91,6 +91,7 @@ pwsh -File E:\FD2\port\build.ps1 -Target fd2host -Render gdi   # 换回 GDI 参�
 #   环境变量（含被 vcvars 漏掉的 Windows SDK include/lib）准备好再调 build.ps1。
 cmd //c E:\FD2\port\aux_build.bat fd2host
 cmd //c E:\FD2\port\aux_build.bat typecheck
+cmd //c E:\FD2\port\aux_build.bat vmcheck
 
 # 运行（WINDOWS 子系统，无控制台；日志恒写 port/build/host.log）
 Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -WorkingDirectory 'E:\FD2'
@@ -116,6 +117,7 @@ pwsh -File E:\FD2\port\build.ps1 -Target boxcheck; & E:\FD2\port\build\boxcheck.
 pwsh -File E:\FD2\port\build.ps1 -Target keycheck; & E:\FD2\port\build\keycheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target reccheck; & E:\FD2\port\build\reccheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target typecheck; & E:\FD2\port\build\typecheck.exe
+pwsh -File E:\FD2\port\build.ps1 -Target vmcheck; & E:\FD2\port\build\vmcheck.exe
 
 # 一键回归（重建沙箱、删 FD2.TMP、autokey 走 continue、8 项断言）
 pwsh -File E:\FD2\port\regress.ps1
