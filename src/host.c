@@ -36,6 +36,7 @@
 #include "xmidi.h"
 #include "synth.h"
 #include "audio.h"
+#include "keylog.h"
 #include "render.h"
 #include "host.h"
 
@@ -112,6 +113,8 @@ static const char  *g_autokey;          /* --autokey=<schedule>            */
 static const char  *g_midi_dump;        /* --midi-dump=<file.wav>          */
 static int          g_audio_rate = 22050; /* --audio-rate=<Hz> (mixer rate) */
 static const char  *g_audio_dump;       /* --audio-dump=<file.wav>         */
+static const char  *g_keylog_path;      /* --keylog=<path>                 */
+static const char  *g_keyplay;          /* --keyplay=<path> (src/keylog.c)  */
 static const char  *g_cmdtail;          /* --cmdtail=<tail> -> PSP:0x80    */
 static int          g_exit_after_secs;  /* --exit-after, for spawned children */
 static char         g_exit_when_path[MAX_PATH]; /* --exit-when-file=path:minbytes */
@@ -162,6 +165,10 @@ static int vk_from_name(const char *s, size_t n)
         { "DOWN", VK_DOWN },     { "LEFT", VK_LEFT },   { "RIGHT", VK_RIGHT },
         { "HOME", VK_HOME },     { "END", VK_END },     { "PGUP", VK_PRIOR },
         { "PGDN", VK_NEXT },     { "INS", VK_INSERT },  { "DEL", VK_DELETE },
+        { "F1", VK_F1 },   { "F2", VK_F2 },   { "F3", VK_F3 },
+        { "F4", VK_F4 },   { "F5", VK_F5 },   { "F6", VK_F6 },
+        { "F7", VK_F7 },   { "F8", VK_F8 },   { "F9", VK_F9 },
+        { "F10", VK_F10 }, { "F11", VK_F11 }, { "F12", VK_F12 },
     };
     size_t i;
     if (!n) return 0;
@@ -172,6 +179,13 @@ static int vk_from_name(const char *s, size_t n)
         if (s[0] >= '0' && s[0] <= '9') return s[0];
         if (s[0] >= 'a' && s[0] <= 'z') return s[0] - 'a' + 'A';
         if (s[0] >= 'A' && s[0] <= 'Z') return s[0];
+    }
+    /* #<decimal vk> is what src/keylog.c writes for keys the table has no
+     * name for, so a recording (or a hand-edited --autokey) still replays. */
+    if (n > 1 && s[0] == '#') {
+        int v = atoi(s + 1);
+        if (v > 0 && v < 256)
+            return v;
     }
     return 0;
 }
@@ -270,7 +284,7 @@ static DWORD WINAPI watchdog(LPVOID param)
                    g_frames * 1000.0 / (double)(elapsed ? elapsed : 1));
             break;
         }
-        if (g_autokey_done && exit_file_ok()) {
+        if (g_autokey_done && !keylog_replaying() && exit_file_ok()) {
             if (!settle_at) {
                 settle_at = GetTickCount();
                 printf("host: exit condition reached (file >= %u bytes, "
@@ -295,6 +309,7 @@ static DWORD WINAPI watchdog(LPVOID param)
         Sleep(200);
     }
     dos_terminate_child();        /* a P_WAIT child must not outlive us */
+    keylog_finish();              /* both shutdown paths record the keys  */
     audio_close();                /* the watchdog exits straight from here:
                                    * without this the --audio-dump header
                                    * would never get its final sizes */
@@ -445,6 +460,10 @@ void host_key(uint8_t scan, uint8_t ascii)
     uint8_t *lm;
     uint16_t tail, head, next;
 
+    /* Record every make code before anything else: this is the one funnel
+     * both backends and both the real keyboard and --autokey go through. */
+    keylog_note(scan);
+
     /* A game that replaced INT 9 owns the key queue: in the original the
      * BIOS handler that fills the ring at 0x41E is *not* chained to, so
      * feeding both paths hands the key over twice (FDPS then walks its menu
@@ -500,7 +519,7 @@ static int opt_wants_value(const char *a)
         "--wshot", "--shot-frame", "--shot-time", "--shot-tick", "--ail", "--ail-dump", "--ail-rate", "--ail-bits",
         "--midi-rate", "--midi-backend", "--gm-bank", "--autokey",
         "--midi-dump", "--cmdtail", "--log", "--exit-when-file", "--replace",
-        "--volume"
+        "--volume", "--keylog", "--keyplay", "--audio-rate", "--audio-dump"
     };
     size_t i;
     for (i = 0; i < sizeof opts / sizeof opts[0]; i++)
@@ -702,6 +721,12 @@ int host_init(int argc, char **argv)
         else if (!strncmp(argv[i], "--audio-dump=", 13)) {
             g_audio_dump = argv[i] + 13;
         }
+        else if (!strncmp(argv[i], "--keylog=", 9)) {
+            g_keylog_path = argv[i] + 9;
+        }
+        else if (!strncmp(argv[i], "--keyplay=", 10)) {
+            g_keyplay = argv[i] + 10;
+        }
         else if (!strcmp(argv[i], "--volume") && i + 1 < argc) {
             g_volume = atoi(argv[++i]);
         }
@@ -820,6 +845,11 @@ int host_init(int argc, char **argv)
                          g_replace_mask);
     }
 
+    /* Keystroke recording / replay (src/keylog.c): open the recorder first so
+     * even the keys pressed while the game is still starting are captured,
+     * and fail the replay load here rather than half-way into a run. */
+    keylog_init(g_keylog_path, g_keyplay, g_start_tick);
+
     /* One output device and one software mixer for music + sound effects
      * (docs/AUDIO.md §11.10). It has to exist before the game thread can
      * reach any AIL entry point; if there is no device the host still runs
@@ -848,7 +878,10 @@ int host_start(void)
     if (!th) { fprintf(stderr, "host: cannot start game thread\n"); return -1; }
     printf("host: game thread started\n");
 
-    if (g_autokey && g_autokey[0]) {
+    if (keylog_start()) {               /* --keyplay wins over --autokey    */
+        if (g_autokey && g_autokey[0])
+            printf("host: --keyplay given, ignoring --autokey\n");
+    } else if (g_autokey && g_autokey[0]) {
         printf("host: autokey schedule: %s\n", g_autokey);
         CreateThread(NULL, 0, autokey_thread, (LPVOID)g_autokey, 0, NULL);
     }
@@ -868,6 +901,7 @@ void host_request_quit(void)
 void host_shutdown(void)
 {
     printf("host: shutting down (%d frames drawn)\n", g_frames);
+    keylog_finish();
     audio_close();
     dos_dump_stats();
 }

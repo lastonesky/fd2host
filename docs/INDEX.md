@@ -38,6 +38,7 @@
 | `rounds/09-vm.md` | 明细 | **脚本 VM `0x15F84` 转译**（词流解释器、共享尾声、EDI 语义、5512 例对拍） | §39 |
 | `rounds/10-typewriter-recipe.md` | 明细 | “打字进行中”autokey 配方 + 逐字证据 + 抓图快流程（抓完即退）与 BMP→PNG 正确写法 | §40 |
 | `rounds/11-audio-mixer.md` | 明细 | **音频治本**：`audio.h` + `audio_sokol.c` 软件混音器（一个设备）、`--audio-dump` 可测判据 | §41 |
+| `rounds/12-keylog.md` | 明细 | **按键录制/回放**（`--keylog`/`--keyplay`，独立模块 `src/keylog.c`）+ 启动抢焦点混入杂键 | §42 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。

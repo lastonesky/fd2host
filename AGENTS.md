@@ -166,6 +166,7 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 | 跟丢执行流 | `--trace=<n>`（VEH 置 TF 单步） |
 | 抓画面证据 | `--screenshot`（绝对路径）+ `--shot-frame` / `--shot-time` / `--shot-tick`；**抓完即退**加 `--exit-when-file=<该BMP>:256054`（否则干等到 `--exit-after`，单轮 60 s → 22 s）。BMP→PNG 用 `python tools\bmp2png.py in.bmp out.png`（或 `.Save($p,[System.Drawing.Imaging.ImageFormat]::Png)` —— `Save(路径)` 存的是原图格式，会出花屏）。跨后端比画面用 `--shot-tick`（`docs/BACKEND.md` §13.8）；过渡段抓图要重试（`§8-55`） |
 | 无人值守菜单路径 | `--autokey=...`（例：`5000:SPACE;2500:RETURN;2500:RETURN;2500:DOWN,RETURN` 走 continue） |
+| **复现用户手玩的操作** | 用户跑 `--keylog=<文件>` → 你用 `--keyplay=<同文件>` 重跑（**绝对时间**，与 `--autokey` 不通用）；不给参数时 `host.log` 里也有每键一行与收尾的 `host: key schedule (…)`。录制↔回放同 tick 抓帧 **0 px**（`docs/rounds/12-keylog.md`）；启动瞬间会混入别处击键，见 `§8-57` |
 | 平台层还缺什么 | ida MCP 对照静态清单 `re/int21_ah_used.txt`、`re/int_sites_all.txt` vs `src/dos.c` 的 `switch (ah)`；日志会打印前 40 条 `UNHANDLED INT21` |
 | 游戏自己挂 INT 9 / 按键无效 | 日志链：`dos: INT 9 vector :=`（挂上）→ `INT 9 queued scan=` → `INT 9 injected ... esp →`（栈必须配平）；画面判据：`--screenshot` 前后两张图对比（§18.4）。若 `pop ds` 处 #GP，先看 `isr: handler bytes:` 是否被 fixup 踩过（§8-49） |
 | **换游戏前先体检（不运行）** | `python re\preflight.py <exe>`（LE/对象表/与预留区冲突/AIL 特征）+ `python re\fixup_scan.py <exe>`（fixup 语法要 `bad=0 leftover=0`）；然后 `--exe <新exe> --gamedir <新目录>` 跑，看日志 `fixups applied / low-memory window moved / INT10 / DAC`（§14） |

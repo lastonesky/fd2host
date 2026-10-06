@@ -54,6 +54,8 @@ Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -Wor
 | **`--volume=<0..100>`** | 总输出音量（音乐 + 音效，**在送进混音器前衰减**）。**默认 `100` = 游戏自己的电平、不衰减**，这就是加 `--volume` 之前的听感；调试/回归时显式压低，例如 `--volume=10`（`regress.ps1` 已内置）。`0` 仍会跑完整条音频流水线，只是静音（实测 `--audio-dump` 稳态 RMS 396 → 4081 = 10.3×） |
 | **`--audio-rate=<Hz>`** | 混音器设备采样率，默认 **22050**（= 音乐原生采样率，音乐就不必重采样）；`audio.h` 的设备只能开一次（`saudio_setup` 有 assert），所以采样率不能“试几个”，要用它指定 |
 | **`--audio-dump=<wav>`** | 把**混音器交给设备的那串样本**录成 WAV（音乐+音效混合后、实音量），用于离线量化音频（逐秒 RMS / 音量语义 / 音效突发）—— 音频判据不再靠耳朵 |
+| **`--keylog=<路径>`** | 录制按键：每个 make 码立刻追加一行 `<自启动的毫秒>:<键名>`（逐条 `fflush`，**崩溃也留得下**）；相对路径落在 `host.log` 同目录。不给此参数也照记——每键一行 `host: key @ms KEY` 进 `host.log`，收尾打一条完整的 `host: key schedule (…)` |
+| **`--keyplay=<路径>`** | 回放上述录制（**绝对时间**，与 `--shot-time`/`--exit-after` 同一基准）。**与 `--autokey` 不通用**：autokey 的延时是相对上一步的，录制文件的时间是绝对的 ⇒ 用本参数；两者同时给时本参数优先。退出触发（`--exit-when-file`）会等回放结束 |
 
 **一键回归**：`pwsh -File E:\FD2\port\regress.ps1`（重建沙箱 → autokey → 8 项断言，见
 `rounds/01-platform-and-tooling.md` §12.4）。

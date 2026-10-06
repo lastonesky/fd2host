@@ -79,6 +79,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 | §39 | 10-06 | **脚本 VM 转译（主线）** | `0x15F84` 词流解释器 → `game/vm.c`：`case -1` 是与 `sub_15055` 共享的尾声 ⇒ `return cur`；12 个被调函数全部桩化对拍，**5512 例 0 失败**（当场抓到 `mode` 未写回、`dword_53C67` 无条件清零两个真 bug）；接入 50→**51**，A/B 三组 **0 px**，回归 8/8 | `docs/rounds/09-vm.md`、`docs/TRANSLATION.md` §4/§5 |
 | §40 | 10-06 | 打字进行中配方 | 进一步证明 `vm_run`+`dlg_type_step` 在宿主里真跑过：`--shot-tick=326..334` 抓到**逐字画面**，框区差异 455→327→325→0，**15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽；顺带修快流程（抓完即退 60 s→**22 s**）与 BMP→PNG 错误写法 | `docs/rounds/10-typewriter-recipe.md`、`docs/PITFALLS.md` §8-55 |
 | §41 | 10-06 | **音频治本：软件混音器** | 音乐+音效收进 `audio.h` + `audio_sokol.c`（WASAPI，**设备每进程只开 1 次**）；增益仍在上游烘焙 ⇒ §11.6~§11.9 音量语义逐位不变；**新增 `--audio-dump` 可测判据**：逐秒 RMS 连续、`--volume` 10→100 实测 **10.3×**、`play 16`/`cut 0`、回归 8/8、A/B 0 px | `docs/rounds/11-audio-mixer.md`、`docs/AUDIO.md` §11.10、`docs/PITFALLS.md` §8-56 |
+| §42 | 10-06 | **按键录制/回放**（用户需求） | `--keylog` 把“启动后第几毫秒按了什么”逐条落盘（崩溃也留）、`--keyplay` 按绝对时间重跑；独立成 `src/keylog.c`（**非宿主逻辑不进 host.c**，只留 5 个调用点）；判据：**录制↔回放同 tick 抓帧 0 px**、回归 8/8；顺带查清启动抢焦点混入杂键（`§8-57`） | `docs/rounds/12-keylog.md`、`docs/DEBUG-MANUAL.md`、`docs/PITFALLS.md` §8-57 |
 
 ## 4. 下一步计划（按优先级）
 

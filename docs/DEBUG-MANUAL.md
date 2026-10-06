@@ -22,6 +22,7 @@
 | 看不到游戏自己的文本 | 先看日志里 `dos: write h=1 ... n=` 是不是 0（句柄无效 = 游戏 printf 全丢，§8-35）；`AH=3F/40` 对 ≤512 字节的小传输有内容日志（前 40 条） |
 | 游戏停在第一帧 / 端口操作数暴涨 | `0x3DA` 状态位没翻转（等回扫的经典写法死循环，§8-38）；端口操作数是正常量级的百倍/千倍即是此病 |
 | 崩溃现场新增字段 | AV 转储现在含 `RLE w/h (@0x627B4)`、`[ESI]` 源字节、`[ESP]` 返回地址、EBP 帧的 6 个参数 —— 定位"解压写飞"与"分配器越界"两类问题最快 |
+| **复现用户手玩时的操作** | 用户跑 `--keylog=<文件>` → 你用 **`--keyplay=<同文件>`** 重跑（绝对时间，**与 `--autokey` 不通用**）；不给 `--keylog` 时 `host.log` 里也有每键一行 `host: key @ms KEY` 与收尾的 `host: key schedule (…)` 行。判据：录制那一次与回放那一次同 tick 抓帧 **0 px**（`rounds/12-keylog.md` §42.4）；启动瞬间会混入别处击键，见 `§8-57` |
 | 文件写入回归（一键） | `pwsh -File port\regress.ps1`：重建 `build\sandbox`（删掉 `FD2.TMP`）→ `--autokey` 走 continue → 对日志+文件系统断言 8 项，`ALL PASS` 为准（§12.4） |
 | **转译接入的 A/B 画面证据** | 同一 `--autokey` + 固定 `--shot-frame` 分别以 `--replace=none` / `all` 抓帧 → `pwsh -File port\framediff.ps1 -A <none.bmp> -B <all.bmp>`；差值必须 ≤ none↔none 基线（对话框帧的 autokey/帧号与实测数据见 §30.3） |
 | 手工复现 fresh install | 把数据文件拷到任意目录、**删掉 `FD2.TMP`**，再 `--gamedir <该目录> --autokey=5000:SPACE;2500:RETURN;2500:RETURN;2500:DOWN,RETURN` |
