@@ -5,10 +5,13 @@
 param(
     [string]$Target = "all",
     [switch]$Debug,
-    # Render backend (docs/BACKEND.md §13): gdi = current StretchDIBits path
-    # (reference implementation), sokol = sokol_gfx (step 2).
+    # Render backend (docs/BACKEND.md §13): sokol = sokol_gfx (default),
+    # gdi = StretchDIBits path (reference implementation, kept for A/B).
+    # This is a BUILD-time switch: both entry layers define main() and sokol_app
+    # owns the window + frame loop, so exactly one can be linked in. There is no
+    # runtime --render flag; rebuild to switch.
     [ValidateSet("gdi", "sokol")]
-    [string]$Render = "gdi"
+    [string]$Render = "sokol"
 )
 
 $ErrorActionPreference = "Stop"

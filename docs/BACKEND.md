@@ -155,7 +155,7 @@ probe = `sokol_app`（`SOKOL_WIN32_FORCE_MAIN`，建 960×600 窗口）+ `sokol_
 ### 13.7 sokol 后端实测（2026-10-06，`-Render sokol` 真跑了一次）
 
 第 2 步的代码其实**已经写完并且能编能跑**（`src/main_sokol.c` 264 行 / `src/render_sokol.c`
-286 行 / `src/sokol_impl.c`），只是**验收没做**、**默认仍是 gdi**。本次实测（同一沙箱
+286 行 / `src/sokol_impl.c`），只是**验收没做**、**默认还是 gdi**（已改，见 §13.9）。本次实测（同一沙箱
 `build/sandbox33`、`--gamedir=build/sandbox33 --exit-after=6`）：
 
 | 项 | `-Render gdi` | `-Render sokol` |
@@ -164,17 +164,17 @@ probe = `sokol_app`（`SOKOL_WIN32_FORCE_MAIN`，建 960×600 窗口）+ `sokol_
 | 图形栈 | StretchDIBits | `sokol: backend=D3D11 image=320x200 … swapchain=960x600` |
 | **6 s 帧数** | **195 帧（32.5 fps）** | **928 帧（≈155 fps）** |
 | exe 体积 | **95,232 B** | **286,720 B（+191,488 B）** |
-| 窗口标题 | `…native host (POC)` | `…native host (sokol)` |
+| 窗口标题 | `…native host (POC)` → 现为 `(gdi)` | `…native host (sokol)` |
 
 **两条结论（对第 2 步验收有直接影响）**：
 
 1. **`swap_interval=1` 在无显示/RDP 会话里不生效**，sokol 退化成不限速（928 帧 vs 195 帧，
    **4.8×**）。所以 §13.6 第 2 步那句"**同帧**截图逐像素一致"**根本无法执行**——两个后端
    在同一墙钟时间内跑的游戏帧数不同，`--shot-frame=700` 取到的游戏状态不是同一个。
-2. **"POC" 只是窗口标题里的字样**（`main_win32.c:167` `FlameDragon2 - native host (POC)`），
-   它指的就是 §13.6 第 1 步抽出来的 **GDI 参考实现入口层**，不是另一条技术路线。GDI 之所以
-   一直当调试/回归基准：`build.ps1 -Render` 默认 `gdi`、帧节奏确定、全进程内单线程便于断点、
-   且第 2 步验收尚未落地。
+2. **"POC" 只是窗口标题里的字样**（原 `main_win32.c:167` `FlameDragon2 - native host (POC)`，
+   2026-10-06 起改成 `(gdi)`），它指的就是 §13.6 第 1 步抽出来的 **GDI 参考实现入口层**，
+   不是另一条技术路线。GDI 之所以一直当调试/回归基准：`build.ps1 -Render` 默认 `gdi`、
+   帧节奏确定、全进程内单线程便于断点、且第 2 步验收尚未落地。
 
 ### 13.8 验收标准改判：按帧号 → 按时间 → 按 guest tick（2026-10-06）
 
@@ -208,6 +208,39 @@ host: frame 2525 dumped … (age 16000 ms)     -Render sokol 158.3 fps, 3188 帧
 ⚠ 抓帧路径用**绝对路径**：宿主会 `chdir` 到游戏目录，相对路径会静默写不出 BMP
 （日志 `host: cannot write frame dump …`）。
 
-结论：GDI 保留为默认（`build.ps1 -Render gdi`）与调试基准，**但"高帧率不可比"这个理由不成立**——
-改用 tick 触发后 sokol 反而更适合做测量平台（采样更细、能跑到 158 fps）。第 2 步的验收应改成
-"**同一 guest tick 下的截图逐像素一致**"。
+结论：改用 tick 触发后，"**高帧率不可比**"这个理由**不成立**——sokol 反而更适合做测量平台
+（采样 ±6 ms vs GDI ±31 ms，且能跑到 158 fps）。第 2 步的验收应改成
+"**同一 guest tick 下的截图逐像素一致**"。GDI 的定位相应从"默认"降为**对拍/断点基准**，
+默认后端改判见 §13.9。
+
+### 13.9 默认后端改判：gdi → sokol（2026-10-06）
+
+**问题**：`build.ps1 -Render` 默认 `gdi`，且两个后端**输出到同一个 `build/fd2host.exe`**，
+后编的覆盖先编的。于是"默认启动"就是最后一次构建用的后端——一直是 GDI，窗口标题
+`…native host (POC)`，看起来像项目卡在 POC 阶段。
+
+**为什么没有运行时 `--render=` 开关**：`-Render` 只能是**构建期**开关。两个入口层都定义
+`int main(int argc, char **argv)`（`main_win32.c:179`、`main_sokol.c:242`，由 `entry.c` 的
+`fd2_entry → mainCRTStartup` 调用），且 sokol_app **独占窗口与帧循环**（回调驱动）而 GDI 用
+Win32 消息泵 + `SetTimer`，二者不能链进同一个二进制。要做运行时切换得先把两边改名为
+`host_main_gdi()` / `host_main_sokol()` 再在 `entry.c` 里分发——目前没这个需求。
+
+**改动**：
+
+| 项 | 改前 | 改后 |
+|---|---|---|
+| `build.ps1` 默认 | `[string]$Render = "gdi"` | `[string]$Render = "sokol"` |
+| GDI 窗口标题 | `…native host (POC)` | `…native host (gdi)`（`main_win32.c:167`） |
+
+"POC" 字样从此只出现在 `host.c` 的启动横幅与里程碑描述里（指项目阶段，不指后端）。
+
+**验证**：`aux_build.bat fd2host`（不带 `-Render`）→ 产物 287,232 B，日志
+`sokol: backend=D3D11 …` + `host: render backend = sokol`，5 s **788 帧 / 154.7 fps**。
+
+**回归（关键：证明换后端不改游戏行为）**：同一套 `regress.ps1` 参数在 sokol 下
+**8/8 PASS**、`FD2.TMP = 207360` 与原件一致、`ail: play 17` / `(cut) 0`，与 GDI 跑出的
+数字**逐项相同**——游戏节奏由 guest BIOS tick（18.2 Hz 独立线程）驱动，不受后端帧率影响
+（sokol 14 s / 2361 帧走完同一段流程）。这也说明 §13.6 第 2 步的验收只需比像素，不必比帧数。
+
+**想回 GDI**：`aux_build.bat fd2host -Render gdi`。注意它写的是同一个 `fd2host.exe`；
+需要两份并存时自行 `cp build/fd2host.exe build/fd2host_gdi.exe`。

@@ -164,7 +164,7 @@ static int create_window(void)
     if (!RegisterClassA(&wc)) return -1;
 
     AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
-    g_hwnd = CreateWindowA("FD2NATIVE", "FlameDragon2 - native host (POC)",
+    g_hwnd = CreateWindowA("FD2NATIVE", "FlameDragon2 - native host (gdi)",
                            WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT,
                            r.right - r.left, r.bottom - r.top,
                            NULL, NULL, GetModuleHandleA(NULL), NULL);

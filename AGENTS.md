@@ -80,8 +80,11 @@
 
 ```powershell
 # 构建（MSVC 14.51 / vcvars32 / 32 位目标）
-pwsh -File E:\FD2\port\build.ps1 -Target fd2host     # 宿主
+pwsh -File E:\FD2\port\build.ps1 -Target fd2host     # 宿主（默认 -Render sokol）
 pwsh -File E:\FD2\port\build.ps1 -Target letest      # 加载器自检
+pwsh -File E:\FD2\port\build.ps1 -Target fd2host -Render gdi   # 换回 GDI 参考实现
+# 注意：-Render 是构建期开关（两个入口层都定义 main()，不能共存），没有运行时 --render。
+# 两种后端都输出到 build/fd2host.exe，后编覆盖先编；要并存自行 cp 成 fd2host_gdi.exe。
 
 # 沙箱禁止 vcvars 起 reg.exe 时的替代路径（docs/rounds/05-rec-and-services.md §33.5）：
 #   build.ps1 在 VSCMD_VER 已设置时不再重复调 vcvars，aux_build.bat 负责把开发者
