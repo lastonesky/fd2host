@@ -75,15 +75,17 @@ static long         g_sampled_notes;         /* note-ons that found a sample */
 static long         g_drum_notes;            /* note-ons on the percussion channel */
 
 static HWAVEOUT     g_dev;
-static WAVEHDR      g_hdr;
-static int16_t     *g_pcm;
-static uint32_t     g_pcm_samples;
 static uint32_t     g_rate = 22050;
 static HANDLE       g_thread;
 static volatile LONG g_stop_flag;
 static int          g_loop;
 static long         g_notes;
 static int          g_peak_voices;
+
+/* Host master volume 0..100 (--volume, default 100 = no attenuation).
+ * Multiplied with the sequence volume when each slice is rendered - see
+ * synth.h and stream_gain(). */
+static int          g_master = 100;
 
 /* ------------------------------------------------------------- waveform -- */
 
@@ -273,26 +275,43 @@ static void apply_event(const synth_event *e, uint32_t t)
 
 /* -------------------------------------------------------------- render --- */
 
-static int render(const synth_event *ev, int count, double tick_rate,
-                  uint32_t rate, int16_t **out_pcm, uint32_t *out_samples)
+/* ---------------------------------------------------------- streaming ----
+ *
+ * The original AIL MDI driver synthesises incrementally: its timer callback
+ * renders the next slice and hands it to the sound device, so the music is
+ * always "in flight" and a volume change takes effect on the very next slice.
+ * Rendering the whole piece into one buffer and handing that to waveOut (what
+ * this file used to do) turns the volume into a constant baked in at render
+ * time - AIL_set_sequence_volume(seq, vol, ms) then has nothing to act on, and
+ * the game's 2 s fade-ins / 4 s fade-outs are silently dropped.
+ *
+ * The render state below (sample clock, event cursor, voices) lives in globals
+ * so any number of slices can be rendered back to back; render() at the end is
+ * just "one slice as long as the whole song". */
+
+static const synth_event *g_ev;
+static int                g_ev_count;
+static double             g_tick_rate;
+static uint32_t           g_total;      /* song length in samples            */
+static uint32_t           g_t;          /* sample clock                      */
+static int                g_ei;         /* next event to apply               */
+
+static void stream_init(const synth_event *ev, int count, double tick_rate,
+                        uint32_t rate)
 {
-    uint32_t total, t = 0;
-    uint32_t last_tick, max_age, perc_age;
-    int ei = 0, i;
-    int16_t *pcm;
+    int i;
 
     g_rate = rate;
     wave_init();
-    last_tick = ev[count - 1].tick;
-    total = (uint32_t)((double)last_tick / tick_rate * (double)rate) + rate;
-    if (total < rate)
-        total = rate;
+    g_ev        = ev;
+    g_ev_count  = count;
+    g_tick_rate = tick_rate;
+    g_total = (uint32_t)((double)ev[count - 1].tick / tick_rate * (double)rate) + rate;
+    if (g_total < rate)
+        g_total = rate;
+    g_t  = 0;
+    g_ei = 0;
 
-    pcm = (int16_t *)malloc((size_t)total * sizeof(int16_t));
-    if (!pcm) {
-        printf("synth: cannot allocate %u samples\n", (unsigned)total);
-        return 0;
-    }
     memset(g_voices, 0, sizeof g_voices);
     g_notes = 0;
     g_peak_voices = 0;
@@ -304,21 +323,42 @@ static int render(const synth_event *ev, int count, double tick_rate,
         g_channel_volume[i] = 127;      /* GM default: full volume            */
         g_channel_expr[i] = 127;
     }
-    max_age = (uint32_t)(NOTE_MAX_MS * (double)g_rate / 1000.0);
-    perc_age = (uint32_t)(PERC_MAX_MS * (double)g_rate / 1000.0);
+}
 
-    while (t < total) {
+/* Render up to `n` samples into `dst`, advancing the clock. `gain` (0..1) is
+ * applied per sample, which is what lets the volume change while playing. */
+static uint32_t stream_fill(int16_t *dst, uint32_t n, double gain)
+{
+    uint32_t written = 0;
+    uint32_t max_age  = (uint32_t)(NOTE_MAX_MS * (double)g_rate / 1000.0);
+    uint32_t perc_age = (uint32_t)(PERC_MAX_MS * (double)g_rate / 1000.0);
+
+    while (written < n) {
         uint32_t next_t;
         int32_t acc = 0;
         int k, nactive = 0;
 
+        if (g_t >= g_total) {
+            if (g_loop) {
+                /* Rewind the sequence. The ringing voices are dropped rather
+                 * than carried over: their start stamps belong to the old
+                 * timeline and would produce negative envelope ages. */
+                memset(g_voices, 0, sizeof g_voices);
+                g_t  = 0;
+                g_ei = 0;
+            } else {
+                memset(&dst[written], 0, (size_t)(n - written) * sizeof(int16_t));
+                return n;
+            }
+        }
+
         /* Apply every event that is due at or before this sample. */
-        while (ei < count) {
-            next_t = (uint32_t)((double)ev[ei].tick / tick_rate * (double)rate);
-            if (next_t > t)
+        while (g_ei < g_ev_count) {
+            next_t = (uint32_t)((double)g_ev[g_ei].tick / g_tick_rate * (double)g_rate);
+            if (next_t > g_t)
                 break;
-            apply_event(&ev[ei], t);
-            ei++;
+            apply_event(&g_ev[g_ei], g_t);
+            g_ei++;
         }
 
         for (k = 0; k < VOICES; k++)
@@ -330,15 +370,18 @@ static int render(const synth_event *ev, int count, double tick_rate,
         if (nactive == 0) {
             /* Silence: skip straight to the next event instead of walking
              * sample by sample (the sequence is ~5 minutes long). */
-            next_t = (ei < count)
-                   ? (uint32_t)((double)ev[ei].tick / tick_rate * (double)rate)
-                   : total;
-            if (next_t <= t)
-                next_t = t + 1;
-            if (next_t > total)
-                next_t = total;
-            memset(&pcm[t], 0, (size_t)(next_t - t) * sizeof(int16_t));
-            t = next_t;
+            next_t = (g_ei < g_ev_count)
+                   ? (uint32_t)((double)g_ev[g_ei].tick / g_tick_rate * (double)g_rate)
+                   : g_total;
+            if (next_t <= g_t)
+                next_t = g_t + 1;
+            if (next_t > g_total)
+                next_t = g_total;
+            if (next_t - g_t > n - written)      /* never overrun the slice */
+                next_t = g_t + (n - written);
+            memset(&dst[written], 0, (size_t)(next_t - g_t) * sizeof(int16_t));
+            written += next_t - g_t;
+            g_t = next_t;
             continue;
         }
 
@@ -357,9 +400,9 @@ static int render(const synth_event *ev, int count, double tick_rate,
              * age - drums are one-shot sounds, and holding them for seconds
              * used to fill the voice pool and silence the melodic tracks. */
             if (!v->release &&
-                (t - v->start) > (v->percussive ? perc_age : max_age))
-                v->release = t;
-            e = envelope(v, t);
+                (g_t - v->start) > (v->percussive ? perc_age : max_age))
+                v->release = g_t;
+            e = envelope(v, g_t);
             if (e <= 0.0) {
                 if (v->release)         /* the release has finished */
                     v->active = 0;
@@ -368,23 +411,23 @@ static int render(const synth_event *ev, int count, double tick_rate,
             if (v->w) {
                 /* General MIDI sample: linear interpolation + loop points. */
                 const int16_t *smp = (const int16_t *)v->w->data;
-                uint32_t total = v->w->samples;
+                uint32_t nsamples = v->w->samples;
                 uint32_t i0;
                 double frac, sample;
 
                 if (v->w->loop_len) {
                     while (v->pos >= (double)(v->w->loop_start + v->w->loop_len))
                         v->pos -= (double)v->w->loop_len;
-                } else if (v->pos >= (double)total - 1.0) {
+                } else if (v->pos >= (double)nsamples - 1.0) {
                     v->active = 0;
                     continue;
                 }
                 i0 = (uint32_t)v->pos;
-                if (i0 >= total)
-                    i0 = total - 1;
+                if (i0 >= nsamples)
+                    i0 = nsamples - 1;
                 frac = v->pos - (double)i0;
                 sample = (double)smp[i0];
-                if (i0 + 1 < total)
+                if (i0 + 1 < nsamples)
                     sample += ((double)smp[i0 + 1] - sample) * frac;
                 acc += (int32_t)(sample * e * ((double)v->volume / 127.0) *
                                  v->gain / 6.0);
@@ -400,9 +443,29 @@ static int render(const synth_event *ev, int count, double tick_rate,
         }
         if (acc > 32767) acc = 32767;
         if (acc < -32768) acc = -32768;
-        pcm[t++] = (int16_t)acc;
+        dst[written++] = (int16_t)((double)acc * gain);
+        g_t++;
     }
+    return written;
+}
 
+/* Whole-song render, used for the --midi-dump WAV and the render statistics:
+ * both are evidence of what the synthesiser produced and must stay at full
+ * scale regardless of the output volume. */
+static int render(const synth_event *ev, int count, double tick_rate,
+                  uint32_t rate, int16_t **out_pcm, uint32_t *out_samples)
+{
+    uint32_t total;
+    int16_t *pcm;
+
+    stream_init(ev, count, tick_rate, rate);
+    total = g_total;
+    pcm = (int16_t *)malloc((size_t)total * sizeof(int16_t));
+    if (!pcm) {
+        printf("synth: cannot allocate %u samples\n", (unsigned)total);
+        return 0;
+    }
+    stream_fill(pcm, total, 1.0);
     *out_pcm = pcm;
     *out_samples = total;
     return 1;
@@ -410,17 +473,101 @@ static int render(const synth_event *ev, int count, double tick_rate,
 
 /* ------------------------------------------------------------ waveOut ---- */
 
-static DWORD WINAPI resubmit_thread(LPVOID param)
+/* Several small buffers are queued and refilled as the driver finishes them,
+ * so the synthesiser only ever runs a couple of slices ahead of what is
+ * audible. Volume is applied per slice, which is what makes
+ * AIL_set_sequence_volume(seq, vol, ms) audible at all. */
+#define STREAM_SLICE    2048            /* samples per buffer (~93 ms @22050) */
+#define STREAM_BUFFERS  4
+
+static WAVEHDR  g_hdrs[STREAM_BUFFERS];
+static int16_t *g_slices[STREAM_BUFFERS];
+
+/* Sequence volume ramp - AIL_set_sequence_volume's `ms` argument. Stored in
+ * the AIL 0..127 domain and interpolated in wall-clock time. */
+static double   g_seq_from = 127.0;
+static double   g_seq_to   = 127.0;
+static DWORD    g_ramp_t0;
+static int      g_ramp_ms;
+
+static double seq_volume_now(void)
 {
+    DWORD e;
+
+    if (g_ramp_ms <= 0)
+        return g_seq_to;
+    e = GetTickCount() - g_ramp_t0;
+    if (e >= (DWORD)g_ramp_ms)
+        return g_seq_to;
+    return g_seq_from + (g_seq_to - g_seq_from) * (double)e / (double)g_ramp_ms;
+}
+
+static void stream_free_buffers(void)
+{
+    int i;
+
+    for (i = 0; i < STREAM_BUFFERS; i++) {
+        if (g_slices[i]) {
+            free(g_slices[i]);
+            g_slices[i] = NULL;
+        }
+        memset(&g_hdrs[i], 0, sizeof g_hdrs[i]);
+    }
+}
+
+void synth_set_sequence_volume(int volume, int ms)
+{
+    if (volume < 0)
+        volume = 0;
+    if (volume > 127)
+        volume = 127;
+    /* Start from wherever the current ramp has got to, so a new request in the
+     * middle of a fade continues smoothly instead of jumping back. */
+    g_seq_from = seq_volume_now();
+    g_seq_to   = (double)volume;
+    g_ramp_ms  = ms > 0 ? ms : 0;
+    g_ramp_t0  = GetTickCount();
+}
+
+static double stream_gain(void)
+{
+    return seq_volume_now() / 127.0 * (double)g_master / 100.0;
+}
+
+static DWORD WINAPI stream_thread(LPVOID param)
+{
+    int i;
+    DWORD now, last_fade_log = 0;
+    int ramp_active = 0;
+
     (void)param;
     for (;;) {
-        Sleep(200);
+        int idle = 1;
+
         if (InterlockedCompareExchange(&g_stop_flag, 0, 0))
             break;
-        if (!g_loop)
-            break;
-        if (g_hdr.dwFlags & WHDR_DONE)
-            waveOutWrite(g_dev, &g_hdr, sizeof g_hdr);
+        for (i = 0; i < STREAM_BUFFERS; i++) {
+            if (!(g_hdrs[i].dwFlags & WHDR_DONE))
+                continue;
+            waveOutUnprepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
+            stream_fill(g_slices[i], STREAM_SLICE, stream_gain());
+            waveOutPrepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
+            waveOutWrite(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
+            idle = 0;
+        }
+        /* Make a running fade visible in the log: it is otherwise only
+         * audible, and "did the ramp actually happen" is the whole point. */
+        now = GetTickCount();
+        ramp_active = (g_ramp_ms > 0) &&
+                      (now - g_ramp_t0 < (DWORD)g_ramp_ms);
+        if (ramp_active && now - last_fade_log >= 500) {
+            last_fade_log = now;
+            printf("synth: fading %.0f -> %.0f over %d ms: now %.1f/127 "
+                   "(%lu ms in)\n",
+                   g_seq_from, g_seq_to, g_ramp_ms, seq_volume_now(),
+                   (unsigned long)(now - g_ramp_t0));
+        }
+        Sleep(idle ? 5 : 0);
     }
     return 0;
 }
@@ -431,11 +578,6 @@ void synth_set_dump_path(const char *path)
 {
     g_dump_wav_path = path;
 }
-
-/* Host master volume (0..100, default 10) - see synth.h. Applied to the
- * playback buffer only: the --midi-dump WAV and the render stats above stay
- * at full scale so the offline music checks keep their evidence. */
-static int g_master = 100;   /* --volume, 0..100; 100 = no attenuation */
 
 void synth_set_master_volume(int percent)
 {
@@ -490,8 +632,10 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
 {
     WAVEFORMATEX wf;
     int16_t *pcm = NULL;
-    uint32_t samples = 0, bytes;
+    uint32_t samples = 0;
     DWORD t0;
+    int i;
+
     synth_stop();
     if (!ev || count <= 0 || tick_rate <= 0.0)
         return 0;
@@ -505,6 +649,11 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
             printf("synth: no GM sound bank available - waveform synthesis only\n");
     }
     t0 = GetTickCount();
+
+    /* Offline full render, exactly as before streaming existed: the --midi-dump
+     * WAV and the render statistics document what the synthesiser produced, so
+     * they stay at full scale and are not affected by the output volume. */
+    g_loop = 0;
     if (!render(ev, count, tick_rate, sample_rate, &pcm, &samples))
         return 0;
 
@@ -512,8 +661,6 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
         dump_wav(g_dump_wav_path, pcm, samples, sample_rate);
 
     {
-        /* Render stats on the full-scale buffer: they document what the
-         * synthesiser produced, independent of the output volume. */
         uint32_t k, nonzero = 0;
         int16_t peak = 0;
         for (k = 0; k < samples; k++) {
@@ -534,21 +681,8 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
                100.0 * (double)nonzero / (double)samples, (int)peak,
                g_peak_voices, (unsigned)(GetTickCount() - t0));
     }
-
-    /* Master output volume: scale the buffer that goes to waveOut (the loop
-     * thread resubmits it unchanged). The waveOut device is not open yet, so
-     * there is no race with the driver reading the samples. */
-    if (g_master < 100) {
-        double g = (double)g_master / 100.0;
-        uint32_t k;
-        for (k = 0; k < samples; k++) {
-            double v = (double)pcm[k] * g;
-            int    q = (int)(v + (v >= 0.0 ? 0.5 : -0.5));
-            pcm[k] = (int16_t)(q < -32768 ? -32768 : (q > 32767 ? 32767 : q));
-        }
-        printf("synth: master volume %d%% applied to the playback buffer\n",
-               g_master);
-    }
+    free(pcm);
+    pcm = NULL;
 
     memset(&wf, 0, sizeof wf);
     wf.wFormatTag      = WAVE_FORMAT_PCM;
@@ -559,29 +693,48 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
     wf.nAvgBytesPerSec = sample_rate * 2;
     if (waveOutOpen(&g_dev, WAVE_MAPPER, &wf, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
         printf("synth: waveOutOpen(%u Hz) failed\n", (unsigned)sample_rate);
-        free(pcm);
         g_dev = NULL;
         return 0;
     }
 
-    bytes = samples * 2;
-    memset(&g_hdr, 0, sizeof g_hdr);
-    g_hdr.lpData = (LPSTR)pcm;
-    g_hdr.dwBufferLength = bytes;
-    g_pcm = pcm;
-    g_pcm_samples = samples;
+    /* Streamed playback: render slice by slice and queue them, so the gain in
+     * force at submission time is what the listener hears. */
     g_loop = loop;
-    if (waveOutPrepareHeader(g_dev, &g_hdr, sizeof g_hdr) != MMSYSERR_NOERROR ||
-        waveOutWrite(g_dev, &g_hdr, sizeof g_hdr) != MMSYSERR_NOERROR) {
-        printf("synth: waveOutWrite failed\n");
+    stream_init(ev, count, tick_rate, sample_rate);
+    for (i = 0; i < STREAM_BUFFERS; i++) {
+        g_slices[i] = (int16_t *)malloc(STREAM_SLICE * sizeof(int16_t));
+        if (!g_slices[i]) {
+            printf("synth: cannot allocate the stream buffers\n");
+            break;
+        }
+        memset(&g_hdrs[i], 0, sizeof g_hdrs[i]);
+        g_hdrs[i].lpData         = (LPSTR)g_slices[i];
+        g_hdrs[i].dwBufferLength = STREAM_SLICE * 2;
+        stream_fill(g_slices[i], STREAM_SLICE, stream_gain());
+        if (waveOutPrepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]) != MMSYSERR_NOERROR ||
+            waveOutWrite(g_dev, &g_hdrs[i], sizeof g_hdrs[i]) != MMSYSERR_NOERROR) {
+            printf("synth: waveOutWrite failed (buffer %d)\n", i);
+            break;
+        }
+    }
+    if (i < STREAM_BUFFERS) {
+        /* Could not queue every buffer: stop the device and report failure. */
+        waveOutReset(g_dev);
         waveOutClose(g_dev);
         g_dev = NULL;
-        free(pcm);
-        g_pcm = NULL;
+        stream_free_buffers();
         return 0;
     }
+
     InterlockedExchange(&g_stop_flag, 0);
-    g_thread = CreateThread(NULL, 0, resubmit_thread, NULL, 0, NULL);
+    g_thread = CreateThread(NULL, 0, stream_thread, NULL, 0, NULL);
+    printf("synth: streaming %u x %u-sample slices (%u ms each, %u ms queued), "
+           "sequence volume %.0f/127\n",
+           STREAM_BUFFERS, STREAM_SLICE,
+           (unsigned)((double)STREAM_SLICE * 1000.0 / (double)sample_rate),
+           (unsigned)((double)STREAM_SLICE * STREAM_BUFFERS * 1000.0 /
+                      (double)sample_rate),
+           seq_volume_now());
     return 1;
 }
 
@@ -599,21 +752,23 @@ void synth_stop(void)
         g_thread = NULL;
     }
     if (g_dev) {
-        int tries = 0;
+        int i, tries = 0;
         waveOutReset(g_dev);
-        /* The driver may still own the buffer; never free it before the header
+        /* The driver may still own a buffer; never free one before its header
          * is no longer playing. */
-        while (!(g_hdr.dwFlags & WHDR_DONE) && tries++ < 100)
-            Sleep(10);
-        waveOutUnprepareHeader(g_dev, &g_hdr, sizeof g_hdr);
+        for (i = 0; i < STREAM_BUFFERS; i++) {
+            if (!g_slices[i])
+                continue;
+            tries = 0;
+            while (!(g_hdrs[i].dwFlags & WHDR_DONE) && tries++ < 100)
+                Sleep(10);
+            if (g_hdrs[i].dwFlags & WHDR_PREPARED)
+                waveOutUnprepareHeader(g_dev, &g_hdrs[i], sizeof g_hdrs[i]);
+        }
         waveOutClose(g_dev);
         g_dev = NULL;
     }
-    if (g_pcm) {
-        free(g_pcm);
-        g_pcm = NULL;
-        g_pcm_samples = 0;
-    }
+    stream_free_buffers();
 }
 
 int synth_is_playing(void)

@@ -79,8 +79,10 @@ pwsh -File E:\FD2\port\regress.ps1
 2. **显示层换 sokol**（0 DLL、各平台原生 GPU 前后端）：**已设为默认后端**（`build.ps1 -Render`
    默认 `sokol`，D3D11 / 155 fps），GDI 降为 `-Render gdi` 对拍基准。剩下的是验收——标准已从
    "同帧"改判为**同一 guest tick**（`--shot-tick`）。详见 `docs/BACKEND.md` §13.9。
-3. **音频治本**：SFX 爆音已按"设备常驻 + 3 ms 起停斜坡"修完；剩下的是软件混音
-   （sokol_audio 统一音乐 + 音效），见 `docs/AUDIO.md` §11.6。
+3. **音频治本**：SFX 爆音已按"设备常驻 + 3 ms 起停斜坡"修完；背景音乐已改成**流式合成**
+   （原版 AIL 的增量渲染架构）并补上 `AIL_set_sequence_volume` 的 `ms` 渐变，
+   进商店/剧情切换时的淡出淡入不再丢失。剩下的是软件混音
+   （sokol_audio 统一音乐 + 音效），见 `docs/AUDIO.md` §11.6 / §11.8。
 4. 稳定性长跑 / 首次存档路径实测；跨平台走"单代码库 + 后端选择"，不用 git 分支。
 
 ## 文档地图（`docs/`）

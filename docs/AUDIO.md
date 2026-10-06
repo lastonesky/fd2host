@@ -201,11 +201,9 @@ dos: open 'FD2.TMP'
 **实证**：20 s 跑 `ail: play` 47 次、`(cut)` **0 次** —— 60 ms 的音效以 1.7 次/秒触发根本不会
 重叠，所以**杂音的主因是起停阶跃（第 2 条），不是硬切**。这也说明斜坡修的是要害。
 
-**未修 / 待办**：硬切（重触发）与音乐侧的同类问题仍在 —— `synth.c` 的循环用 `Sleep(200)`
-轮询 `WHDR_DONE` 再重提交（`synth.c:413-426`），buffer 结束后最多 200 ms 静音再起，每个循环点
-一次"静音→有声"阶跃；`synth_stop` 是 `waveOutReset` 硬切。治本是 §13.6 第 3 步
-`audio_sokol.c` + `audio.h`：sokol_audio 回调做软件混音，音乐与音效共用一条流，设备只开一次，
-斜坡在混音器里统一做。
+**未修 / 待办**：只剩硬切（重触发）。~~音乐侧的同类问题~~ 已在 §11.8 一并解决（流式合成后
+`Sleep(200)` 重投造成的循环点阶跃不复存在）。治本是 §13.6 第 3 步 `audio_sokol.c` + `audio.h`：
+sokol_audio 回调做软件混音，音乐与音效共用一条流，设备只开一次，斜坡在混音器里统一做。
 
 ### 11.7 音量策略：默认不衰减，调试才压低（2026-10-06）
 
@@ -224,3 +222,64 @@ dos: open 'FD2.TMP'
 
 改动点三处，改默认时必须一起改：`host.c` `g_volume`、`ail.c` `g_master_volume`、
 `synth.c` `g_master`。
+
+### 11.8 背景音乐改流式合成 + `AIL_set_sequence_volume` 的 `ms` 渐变（2026-10-06）
+
+**症状**（用户在 DOSBox 原版里对比出来的）：进商店/酒馆一类场景后，之前正在播的背景音乐
+会**慢慢 mute**，一直到剧情结束、进入战斗才重新起音乐。我们的移植**既不淡出也不停**，
+从酒馆/道具店出来进战斗时，一直在放之前营地（或读档前）的曲子。
+
+**两个独立缺口叠在一起**（缺一不可，只修哪个都没声音上的区别）：
+
+1. **`AIL_set_sequence_volume(seq, vol, ms)` 把 `ms` 丢了**（`ail.c`）。
+   真实 AIL 的语义是**在 `ms` 毫秒内从当前音量渐变到目标音量**（由 AIL 定时器驱动）。
+   宿主日志里游戏确实在用它：
+
+   ```
+   ail: set_sequence_volume(0,   over 0 ms)      ← 换曲前先清零
+   ail: set_sequence_volume(127, over 2000 ms)   ← 2 秒淡入
+   ail: set_sequence_volume(0,   over 4000 ms)   ← 4 秒淡出  ← 用户看到的"慢慢 mute"
+   ```
+
+2. **就算实现了渐变也改不动音量**：播放链上没有实时增益。原来 `synth_play` 把**整首曲子一次
+   渲染成一个大 buffer**，`g_master` 只在渲染时烘焙一次（旧注释自己写着 "the loop thread
+   resubmits it unchanged"），`resubmit_thread` 每 200 ms 原样重投；而 `xmidi_set_volume` →
+   `midi_set_volume`（CC7）只作用于 **MIDI Mapper**，对 `--midi-backend=winmidi` 以外的默认
+   自带合成器路径毫无影响。⇒ **正在播的音乐的音量是一个常量。**
+
+**修法：按原版 AIL 的架构改成流式合成**（AIL 的 MDI 驱动本来就是在定时器回调里增量渲染、
+持续喂设备，音乐始终"在飞"，音量改动下一片就生效）：
+
+| 改动 | 做法 |
+|---|---|
+| `stream_init()` / `stream_fill()` | 把渲染状态（采样时钟 `g_t`、事件游标 `g_ei`、voices）提到全局，可任意分片续渲染；`render()` 降级为"一片 = 整首"，只用于 `--midi-dump` 与渲染统计 |
+| waveOut 分片队列 | `STREAM_SLICE` = 2048 样本（92 ms @22050）× `STREAM_BUFFERS` = 4（共 371 ms 预排队）， `stream_thread` 在 `WHDR_DONE` 时重新合成并回投 |
+| 逐样本增益 | `stream_fill(dst, n, gain)`：`gain = 序列音量/127 × --volume/100`，在混音后、钳位前乘上 |
+| `ms` 渐变 | `synth_set_sequence_volume(vol, ms)` 存 `from/to/起始时刻/时长`，`seq_volume_now()` 按墙钟插值；新请求从**当前渐变到的值**接着走，不会跳回 |
+
+**为什么离线证据没变**：`--midi-dump` 的 WAV 与 `synth: rendered …` 统计仍走 `render()`
+（整首、gain = 1.0、满量程），与改动前逐字节同级。实测回归里
+`2256 notes … peak 32258/32767, polyphony 36` 与文档既有判据完全一致。
+
+**实证**：
+
+```
+ail: set_sequence_volume(127, over 2000 ms) - ramped
+synth: fading 0 -> 127 over 2000 ms: now  1.0/127 (  16 ms in)
+synth: fading 0 -> 127 over 2000 ms: now 32.8/127 ( 516 ms in)
+synth: fading 0 -> 127 over 2000 ms: now 64.5/127 (1016 ms in)
+synth: fading 0 -> 127 over 2000 ms: now 96.3/127 (1516 ms in)
+synth: streaming 4 x 2048-sample slices (92 ms each, 371 ms queued), sequence volume 127/127
+```
+
+（渐变每 500 ms 打一行，否则"渐变到底发生没有"只能靠听。淡出用的是同一条代码路径，
+改动前的日志里已抓到过 `set_sequence_volume(0, over 4000 ms)` 这个调用。）
+
+**顺带修掉**：音乐循环点不再是"整段播完 → `Sleep(200)` 轮询 → 重投"，而是连续的流式拼接，
+§11.6 里那个"每个循环点一次静音→有声阶跃"的爆音源消失。
+
+**未修**：`AIL_stop_sequence` 仍是硬切（`synth_stop` → `waveOutReset`）。不过游戏总是先
+`ms` 淡到 0 再 stop，所以听感上已经是"淡完再停"。
+
+**判据**：回归 **8/8 PASS**、`FD2.TMP = 207360`；`ail: play 16` / `(cut) 0`；
+`synth: rendered` 统计与改动前一致。

@@ -964,7 +964,12 @@ static void host_AIL_set_sequence_volume(void *h, int32_t volume, int32_t ms)
     ail_seq *q = seq_of(h);
     if (q)
         q->volume = volume;
-    printf("ail: set_sequence_volume(%d, over %d ms)\n", (int)volume, (int)ms);
+    printf("ail: set_sequence_volume(%d, over %d ms)%s\n", (int)volume, (int)ms,
+           ms > 0 ? " - ramped" : "");
+    /* The built-in synthesiser streams its output, so the ramp lands on the
+     * next slice and really takes `ms` milliseconds (AIL semantics). The MIDI
+     * Mapper backend gets the level as a channel-volume message instead. */
+    synth_set_sequence_volume((int)volume, (int)ms);
     xmidi_set_volume((int)volume);
 }
 
