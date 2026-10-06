@@ -105,5 +105,16 @@ POSIX 侧 1:1 映射到 `PROT_*`，Win32 侧翻译成 `PAGE_*` 组合（它没�
 
 ### 43.6 下轮入口
 
+**依赖已就绪（2026-10-07 实测）**：`libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+libasound2-dev` 已装，sokol 全家（`sokol_app+gfx+audio+glue+time`）在 Debian13 + gcc14
+**编译通过**，但 Linux 侧必须加两个 flag —— 记在这里免得下一轮重新踩：
+
+```sh
+# 1) Linux 必须选 GL 后端（SOKOL_DUMMY_BACKEND 在 Linux 上会被 sokol_app #error 拒绝）
+# 2) -std=c11 会把 clock_gettime/CLOCK_MONOTONIC 藏起来 ⇒ 用 -std=gnu11（或 -D_GNU_SOURCE）
+cc -std=gnu11 -DSOKOL_GLCORE -Ivendor/sokol ...
+```
+（一次性验证探针：`build/sokolbuild_check.c`，与 `build/` 下其它产物一样不入库。）
+
 按 §43.5 顺序：**第 2 刀 = `dos.c`（异常 + 文件服务）**，之后入口层，最后 `-m32` 跑真游戏。
 `Makefile.linux` 是入口（`make -f Makefile.linux`），新增目标记得两边都挂。
