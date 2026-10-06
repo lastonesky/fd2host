@@ -2,7 +2,7 @@
 
 > 与 `RE_MAP.md`（FD2）并列的第二张地图。**所有地址为线性地址**，obj0=`0x10000`、
 > obj1=`0x60000`、obj2=`0x70000`。凡未经运行验证的结论标注"待确认"。
-> 运行侧进度与坑见 `PROGRESS.md` §14/§15。
+> 运行侧进度与坑见 docs/FDPS-ARCHIVE.md §14/§15。
 
 ---
 
@@ -159,7 +159,7 @@
 
 ---
 
-## 7. 宿主侧的 EXEC 实现（第 16 轮，`PROGRESS.md` §16）
+## 7. 宿主侧的 EXEC 实现（第 16 轮，docs/FDPS-ARCHIVE.md §16）
 
 `sub_30CB0` → `spawnlp` → `__dospawn` → `int 21h AH=4B`。宿主的落地方式：
 
@@ -181,7 +181,7 @@ obj1 `0x30000` vsize `0x3C50`，入口 `start = 0x12280`，fixup 2458 条 `bad=0
 
 ---
 
-## 8. FD.EXE（过场播放器）与 FDPS 的键盘 ISR（第 17 轮入口调研，详见 `PROGRESS.md` §17）
+## 8. FD.EXE（过场播放器）与 FDPS 的键盘 ISR（第 17 轮入口调研，详见 docs/FDPS-ARCHIVE.md §17）
 
 | 项 | 结论 | 证据存档 |
 |---|---|---|
@@ -192,6 +192,6 @@ obj1 `0x30000` vsize `0x3C50`，入口 `start = 0x12280`，fixup 2458 条 `bad=0
 | **键盘为什么无效** | 游戏**自己挂 INT 9**：`sub_56560` = `AH=3509` 取旧向量 → `push cs/pop ds; mov edx,offset sub_565A7; AH=2509` 挂上；ISR `sub_565A7` = `in 0x60`/`in·out 0x61` 应答 → 扫描码 `<0x80` 就写进 **`byte_7000F`（10 项环形队列，`dword_70019` 头 / `dword_7001D` 尾，全在 obj2 `0x70000..0x70054` 内）** → `out 0x20,0x20; iret`；出队是 `sub_5652E`（空则返回 -1） | `re/fdps_int9_56560.c`、`re/fdps_keyq_565A7.c` |
 | 宿主缺口 | `dispatch_swint` 对 `0x08/0x09/0x1A` 只计数不投递 ⇒ 队列恒空；`--autokey` 实测（日志有 `autokey vk=0D`）画面直方图**逐像素不变** | 帧 400/600/750 直方图全等 |
 
-**下一步（`PROGRESS.md` §17.3）**：`AH=25 AL=09` 时记 `g_guest_int9 = EDX`（用完整 32 位，DS=CS 基址 0），
+**下一步（docs/FDPS-ARCHIVE.md §17.3）**：`AH=25 AL=09` 时记 `g_guest_int9 = EDX`（用完整 32 位，DS=CS 基址 0），
 `host_key` 时置"待读扫描码"让 `in 0x60` 返回它，再**按中断帧调用 guest ISR**（栈上放 `EFLAGS、CS、返回地址`
 后 `call`，ISR 的 `iret` 正好弹回；VEH 需补 `iret` 的模拟）。

@@ -1,0 +1,19 @@
+=== sub_4E310_tick @ 4e310 ===
+4E310  56                        push    esi
+4E311  33 C0                     xor     eax, eax
+4E313  BE 6C 04 00 00            mov     esi, 46Ch
+4E318  66 AD                     lodsw
+4E31A  5E                        pop     esi
+4E31B  C3                        retn
+
+=== sub_3702F @ 3702f ===
+3702F  87 44 24 04               xchg    eax, [esp+arg_0]
+37033  E8 0A 00 00 00            call    sub_37042
+37038  8B 44 24 04               mov     eax, [esp+arg_0]
+3703C  C2 04 00                  retn    4
+3703F  C2 04 00                  retn    4
+37042  3B C4                     cmp     eax, esp
+37044  73 0D                     jnb     short loc_37053
+37046  2B C4                     sub     eax, esp
+37048  F7 D8                     neg     eax
+3704A  3B 05 14 28 05 00         cmp     eax, dword_52814

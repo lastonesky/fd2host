@@ -60,8 +60,12 @@ Desktop.ini
 *.cache
 
 # === External reference snapshot ===
-# port/docs/ = github.com/wicanr2/fd2_re (the Go/Ebiten remake project)
-# docs snapshot, ~28 MB. Useful RE semantics, but it is a DIFFERENT FD2.EXE
-# build (md5 b97caf22..., 357074 B) than ours (a6e341a8..., 509158 B) - see
-# PROGRESS.md §21.1. Not part of this repo's history.
-docs/
+# port/docs/knowledge-base + port/docs/data + docs/KEEP.md = github.com/wicanr2/fd2_re
+# (the Go/Ebiten remake project) docs snapshot, ~9 MB. Useful RE semantics, but it is a
+# DIFFERENT FD2.EXE build (md5 b97caf22..., 357074 B) than ours (a6e341a8..., 509158 B) -
+# see docs/rounds/02-translation-toolkit.md §21.1. Not part of this repo's history.
+# NOTE: our own project docs (docs/*.md, docs/rounds/*.md) ARE committed - do not blanket
+# ignore docs/ again.
+docs/knowledge-base/
+docs/data/
+docs/KEEP.md

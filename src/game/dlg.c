@@ -7,6 +7,7 @@
  *   0x168B6  dlg_box_stage    - app-level (reads the frame resource global)
  *   0x1685C  dlg_frame_tile   - pure
  *   0x16C57  dlg_wait_key     - app-level (BDA tick / BIOS key / palette)
+ *   0x164E8  dlg_type_step    - app-level (typed one character)
  *
  * The app-level half keeps the original addresses: the globals really do
  * live in the game's data segment (all four entries can be hooked without
@@ -34,14 +35,17 @@
  *
  * Verified against the machine code by src/boxcheck.c (whole-frame VGA,
  * the five stage snapshots, the global flag and a full event log of every
- * service call - ordering, arguments and VGA at each delay), and by
+ * service call - ordering, arguments and VGA at each delay), by
  * src/keycheck.c for dlg_wait_key: its wait loop is driven by a hooked
  * palette step (deterministic BIOS tick + scripted key) with the VGA
- * snapshotted on every iteration.
+ * snapshotted on every iteration, and by src/typecheck.c for dlg_type_step,
+ * which fits the two services it ends with - svc_play_sfx and svc_wait_ticks
+ * (src/game/svc.c) - into the same deterministic clock.
  */
 #include "dlg.h"
 #include "gfx.h"
 #include "rle2.h"
+#include "svc.h"
 #include <string.h>
 
 #define VGA_BASE 0x000A0000u
@@ -55,6 +59,9 @@
 #define dword_53A51 (*(int32_t *)(uintptr_t)0x00053A51u) /* text line step     */
 #define dword_53A81 (*(void **)(uintptr_t)0x00053A81u)   /* box frame resource */
 #define dword_53A85 (*(void **)(uintptr_t)0x00053A85u)   /* DATO sub-images    */
+#define dword_53EEC (*(void **)(uintptr_t)0x00053EECu)   /* SFX bank resource  */
+#define dword_53A10 (*(int32_t *)(uintptr_t)0x00053A10u) /* mouth phase 0..3   */
+#define dword_53A14 (*(int32_t *)(uintptr_t)0x00053A14u) /* chars since blit   */
 #define dword_53AB9 (*(int32_t *)(uintptr_t)0x00053AB9u) /* portrait cols */
 #define dword_53ABD (*(int32_t *)(uintptr_t)0x00053ABDu) /* portrait rows */
 #define dword_53C67 (*(int32_t *)(uintptr_t)0x00053C67u) /* box position */
@@ -286,6 +293,34 @@ void dlg_wait_key(int speaker)
         byte_53A8E = 0x1C;
     if (byte_53A8E == 0x53)
         byte_53A8E = 0x01;
+}
+
+/* 0x164E8 - one character of typewriter output. Called by the dialogue word
+ * interpreter (0x15F84, the only caller) once per character: every second
+ * character advances the mouth animation - the phase walks 0,1,2,3 and phase
+ * 3 is drawn as sub-image 1, so the blitted sub-images repeat 1,2,1,0 and the
+ * mouth closes again before the cycle starts over - then the typewriter click - sample index 2 of
+ * the SFX bank - plays once and the loop waits a single BIOS tick.
+ *
+ * Both counters are private to this function (IDA: the only xrefs to
+ * 0x53A10 / 0x53A14 are inside 0x164E8), but they are still the original
+ * globals, kept because the loop's whole point is to carry state between
+ * calls. Returns the last tick reading from svc_wait_ticks, which every
+ * caller ignores. */
+int dlg_type_step(void)
+{
+    int idx;
+
+    if (++dword_53A14 == 2) {
+        if (++dword_53A10 == 4)
+            dword_53A10 = 0;
+        idx = (dword_53A10 == 3) ? 1 : dword_53A10;
+        dlg_blit_dato(dword_53A85, dword_53C67, idx);
+        dword_53A14 = 0;
+    }
+
+    svc_play_sfx(dword_53EEC, 2, 1);
+    return svc_wait_ticks(1);
 }
 
 void dlg_blit_dato(const void *dato_buf, int box_pos, int idx)

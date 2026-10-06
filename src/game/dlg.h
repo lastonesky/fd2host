@@ -68,6 +68,13 @@ void dlg_box_stage(void *surface, int stride, int x0, int y0,
  * header-prefixed frame resource onto dest with the given stride. */
 void dlg_frame_tile(void *dest, int stride, const void *table, int idx);
 
+/* 0x164E8 - one character of typewriter dialogue: every second character
+ * steps the mouth animation - the private phase counter dword_53A10 walks
+ * 0,1,2,3 with 3 drawn as DATO sub-image 1, so the sequence repeats
+ * 1,2,1,0 - then plays SFX bank index 2 once and waits one BIOS tick. Only caller is the word interpreter
+ * sub_15F84. Verified by src/typecheck.c. */
+int dlg_type_step(void);
+
 /* 0x16C57 - wait for a key while animating (palette cycle, speaker tile
  * 18/19 flip, mouth open/close via DATO sub-images 3/0). `speaker != 0`
  * enables the speaker tile. Ends with INT 16h AH=10h into word_53A8D and

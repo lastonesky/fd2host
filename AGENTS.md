@@ -2,7 +2,8 @@
 
 > 面向接手本仓库的 agent/协作者。**背景知识与事实细节一律看文档**（见文末"文档地图"），
 > 本文件只写：怎么干活、怎么验证、什么不能碰。
-> 目标与路线见 `README.md`；进度、踩坑、实测数据见 `PROGRESS.md`。
+> 目标与路线见 `README.md`；**当前进度**见 `PROGRESS.md`；踩坑见 `docs/PITFALLS.md`；
+> 其余知识/说明/轮次明细按 `docs/INDEX.md` 的分类落盘（2026-10-06 重整过，别再往 README/PROGRESS 里堆）。
 
 ---
 
@@ -32,7 +33,7 @@
 | `src/host.h` + `src/host.c` | **内核**：参数、LE/DOS/AIL 启动、游戏线程、调色板→BGRA、抓帧、watchdog/autokey；不含窗口与消息泵 |
 | `src/main_win32.c` | **入口层**：`fd2_entry`、窗口/消息泵/定时器、Win32→BIOS 键盘、`input_post_vk`；`main_sokol.c` = 第 2 步 |
 | `src/repl.c` + `src/repl.h` | **源码接入层**：把已验证的转译函数入口改成 5 字节 `jmp rel32` 指向 C 实现（默认全开；`--replace=none\|all\|rle,gfx,sprite24,util,path`）。只对 FD2 build 生效 |
-| `src/game/*.c` | 转译产物（`rle`/`gfx`/`sprite24`/`util`/`path`/`res`）；`src/*check.c` 是各自与原机器码逐字节对拍 |
+| `src/game/*.c` | 转译产物（`rle`/`gfx`/`sprite24`/`util`/`path`/`res`/`dlg`/`rec`/`svc`）；`src/*check.c` 是各自与原机器码逐字节对拍 |
 | `src/ail.c` + `xmidi.c` + `synth.c` + `dls.c` | AIL 替换层 / XMIDI 解析 / 软件合成器 / gm.dls 音色 |
 | `src/letest.c` | 加载器自检（对拍 Ghidra 镜像） |
 | `re/` | 逆向工作台产物（测绘地图、函数表、静态扫描清单） |
@@ -42,9 +43,14 @@
 ## 2. 工作流约定（**必须遵守**）
 
 1. **随改随写文档**：任何代码/结论/选型一改，**同一轮**就更新对应文档——
-   - 行为、命令、对外约定变了 → `README.md`
-   - 进度、根因、修复、实测数据、踩坑 → `PROGRESS.md`（对应小节，没有就新开一节并编号）
-   - 逆向测绘结论变了 → `re/RE_MAP.md`（FD2）、`re/FDPS_MAP.md`（炎龙外传）、`re/funcmap.csv`
+   - 行为、命令、对外约定变了 → `README.md`（只放卡片级信息，细节写 `docs/`）
+   - 进度（新轮次、下一步计划）→ `PROGRESS.md` 的时间线；**轮次完整病历**写 `docs/rounds/*.md`
+   - 二进制事实 / 宿主设计 / 声音 / 后端选型 / 转译方法 → 对应 `docs/BINARY-FACTS.md`、
+     `docs/HOST-DESIGN.md`、`docs/AUDIO.md`、`docs/BACKEND.md`、`docs/TRANSLATION.md`
+   - 踩坑（根因 + 判据）→ `docs/PITFALLS.md`（编号追加，不删旧条目）
+   - 环境/命令/参数 → `docs/ENVIRONMENT.md`；调试手段 → `docs/DEBUG-MANUAL.md`
+   - 逆向测绘结论变了 → `re/RE_MAP.md`（FD2）、`re/FDPS_MAP.md`（炎龙外传，已冻结）、`re/funcmap.csv`
+   - 归类拿不准就看 `docs/INDEX.md` 的对照表；**不要把内容再堆回 README/PROGRESS**（2026-10-06 重整过）
    禁止"先改代码、以后再补文档"；交接文档的价值就在于及时。
 2. **逆向一律走 ida MCP**（首选分析环境），不要用别的反汇编工具重做一遍：
    - 工具：ida MCP（`open_database` / `execute_python` / `reference` / `save_database`）
@@ -61,7 +67,7 @@
    下载不到时先试代理，不要反复裸连浪费时间。
 4. **实证优先**：结论必须有硬判据（`host.log` 行 / `letest` 逐字节一致 / 截图 / `regress.ps1` 断言 /
    ida 静态证据）。没证实的**标"待确认"**，不要写成事实。禁止"字节扫描/听起来像"式结论
-   （教训见 `PROGRESS.md` §8-25、§12.3）。
+   （教训见 docs/PITFALLS.md §8-25、§12.3）。
 5. **git**：仓库根 = `port/`，**`main` 单线开发，不为平台开分支**（平台差异走"单代码库 + 后端选择"）。
    每步一提交，提交前跑回归。
 6. **回归**：动了宿主行为就跑 `pwsh -File port\regress.ps1`，以 **8/8 PASS** 为准；
@@ -76,6 +82,12 @@
 # 构建（MSVC 14.51 / vcvars32 / 32 位目标）
 pwsh -File E:\FD2\port\build.ps1 -Target fd2host     # 宿主
 pwsh -File E:\FD2\port\build.ps1 -Target letest      # 加载器自检
+
+# 沙箱禁止 vcvars 起 reg.exe 时的替代路径（docs/rounds/05-rec-and-services.md §33.5）：
+#   build.ps1 在 VSCMD_VER 已设置时不再重复调 vcvars，aux_build.bat 负责把开发者
+#   环境变量（含被 vcvars 漏掉的 Windows SDK include/lib）准备好再调 build.ps1。
+cmd //c E:\FD2\port\aux_build.bat fd2host
+cmd //c E:\FD2\port\aux_build.bat typecheck
 
 # 运行（WINDOWS 子系统，无控制台；日志恒写 port/build/host.log）
 Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -WorkingDirectory 'E:\FD2'
@@ -94,6 +106,9 @@ pwsh -File E:\FD2\port\build.ps1 -Target tablescheck; & E:\FD2\port\build\tables
 pwsh -File E:\FD2\port\build.ps1 -Target rle2check; & E:\FD2\port\build\rle2check.exe
 pwsh -File E:\FD2\port\build.ps1 -Target dlgcheck; & E:\FD2\port\build\dlgcheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target boxcheck; & E:\FD2\port\build\boxcheck.exe
+pwsh -File E:\FD2\port\build.ps1 -Target keycheck; & E:\FD2\port\build\keycheck.exe
+pwsh -File E:\FD2\port\build.ps1 -Target reccheck; & E:\FD2\port\build\reccheck.exe
+pwsh -File E:\FD2\port\build.ps1 -Target typecheck; & E:\FD2\port\build\typecheck.exe
 
 # 一键回归（重建沙箱、删 FD2.TMP、autokey 走 continue、8 项断言）
 pwsh -File E:\FD2\port\regress.ps1
@@ -108,17 +123,20 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 `--gamedir`、`--exe`、`--exit-after <秒>`、`--exit-when-file=<路径>:<字节数>`（文件写满且 autokey
 跑完 → 提前干净退出；与 `--exit-after` 上限配合）、`--replace=none|all|groups`（默认 `all`：
 接入已对拍的转译函数；`none` 用于 A/B）、`--headless`、`--trace=<n>`（单步跟踪）、
-`--screenshot=<bmp> --shot-frame=<n>`、`--autokey=<延时ms:VK[,VK...];...>`（无人值守按键回归）、
+`--screenshot=<bmp>`（**必须绝对路径**：宿主会 chdir 到游戏目录，相对路径静默写不出图）
+配 `--shot-frame=<n>`（按帧号，仅固定帧率下有意义）/ `--shot-time=<ms>`（按墙钟）
+/ **`--shot-tick=<n>`**（按游戏 BIOS tick，**跨后端对拍用这个**，见 `docs/BACKEND.md` §13.8）、
+`--autokey=<延时ms:VK[,VK...];...>`（无人值守按键回归）、
 `--midi-dump=<wav>`（离线核对音乐）、`--ail-dump=<dir>`、`--midi-test`、`--gm-bank=<path>`。
 
 ⚠ **跑完先看日志里的 `host: working directory = …`**：参数没被识别时是**静默回退**到
-`E:\FD2`，不报错（曾让对照实验跑错目录，见 `PROGRESS.md` §8-32）。
+`E:\FD2`，不报错（曾让对照实验跑错目录，见 docs/PITFALLS.md §8-32）。
 
 ---
 
 ## 4. 硬约束（碰了必炸，改代码前先对照）
 
-- **地址空间布局不可随意改**（`PROGRESS.md` §4.1）：游戏对象占 `0x10000..0x6FFFF`、
+- **地址空间布局不可随意改**（docs/HOST-DESIGN.md §4.1）：游戏对象占 `0x10000..0x6FFFF`、
   低内存镜像 `0x70000..0x7FFFF`、VGA `0xA0000`；低 64 KiB 不可映射。
 - **宿主映像必须小（现在 ~288 KB）且保留 ASLR**（`/DYNAMICBASE` + `/BASE:0x60000000`）：
   大静态数组（如 8 MB buffer）或关 ASLR 都会把游戏地址空间挤掉——大块内存一律 `VirtualAlloc`/`malloc`。
@@ -137,7 +155,7 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 | 验证加载 | `letest.exe`（obj1/obj2 必须逐字节一致） |
 | 崩溃地址 → 符号 | `port/fd2host.map`（RVA = 地址 − 映像基址） |
 | 跟丢执行流 | `--trace=<n>`（VEH 置 TF 单步） |
-| 抓画面证据 | `--screenshot` + `--shot-frame`，BMP→PNG 用 `[System.Drawing.Image]::FromFile(...).Save(...)` |
+| 抓画面证据 | `--screenshot`（绝对路径）+ `--shot-frame` / `--shot-time` / `--shot-tick`；BMP→PNG 用 `[System.Drawing.Image]::FromFile(...).Save(...)`。跨后端比画面用 `--shot-tick`（`docs/BACKEND.md` §13.8） |
 | 无人值守菜单路径 | `--autokey=...`（例：`5000:SPACE;2500:RETURN;2500:RETURN;2500:DOWN,RETURN` 走 continue） |
 | 平台层还缺什么 | ida MCP 对照静态清单 `re/int21_ah_used.txt`、`re/int_sites_all.txt` vs `src/dos.c` 的 `switch (ah)`；日志会打印前 40 条 `UNHANDLED INT21` |
 | 游戏自己挂 INT 9 / 按键无效 | 日志链：`dos: INT 9 vector :=`（挂上）→ `INT 9 queued scan=` → `INT 9 injected ... esp →`（栈必须配平）；画面判据：`--screenshot` 前后两张图对比（§18.4）。若 `pop ds` 处 #GP，先看 `isr: handler bytes:` 是否被 fixup 踩过（§8-49） |
@@ -146,9 +164,9 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 | 游戏自己不报错也没画面 | 看 `dos: write h=1 ... n=` 是否为 0（游戏 printf 被丢，§8-35）；看“端口操作数”是否暴涨到几千万（`0x3DA` 死循环，§8-38）；看是否卡在 `AIL_register_timer`（回调不触发，§14.5） |
 | 手工复现 fresh install | 数据文件拷到任意目录 + **删 `FD2.TMP`** → `--gamedir <该目录> --autokey=...` |
 | 反汇编/反编译游戏函数 | ida MCP（主）；Ghidra HTTP 桥 `/read_memory`、`/list_segments`（批量） |
-| **对拍依赖文件/内存的游戏函数** | **CRT 重定向术**（§25.2）：`le_map_and_relocate` 后把 CRT 入口 `0x3706E/0x3776E/0x37324/0x3759C/0x37940/0x373CA` 头 5 字节改成 jmp 到宿主 libc 封装，再直接调原机器码——不碰游戏逻辑，不需要 DOS 层。样例见 `src/rescheck.c` |
+| **对拍依赖文件/内存的游戏函数** | **CRT 重定向术**（见 `docs/TRANSLATION.md` §2 及 `docs/rounds/03-tables-and-plumbing.md` §25.2）：`le_map_and_relocate` 后把 CRT 入口 `0x3706E/0x3776E/0x37324/0x3759C/0x37940/0x373CA` 头 5 字节改成 jmp 到宿主 libc 封装，再直接调原机器码——不碰游戏逻辑，不需要 DOS 层。样例见 `src/rescheck.c` |
 
-## 6. 常见坑（速查，完整清单见 `PROGRESS.md` §8，**动手前先通读 §8**）
+## 6. 常见坑（速查，完整清单见 docs/PITFALLS.md §8，**动手前先通读 §8**）
 
 - 命令行参数写法不匹配 = 静默用默认值（§8-32）；特权指令模拟要返回**指令长度**（§8-13）；
   调色板 6 位 DAC + DIB 是 BGRA（§8-17）；DOS 的"写 0 字节 = 截断"在 Windows 是空操作（§8-31）。
@@ -157,16 +175,27 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 - **对拍 exe 自己被 ASLR 放进 guest 窗口**（§22.4）：新增任何走 `le.c` 的 console 对拍目标，
   必须在 `build.ps1` 给它 `/link /BASE:0x60000000`；否则 exe 映像可能落在 `0x10000..0x6FFFF`，
   `le_reserve_address_space()` 失败且报错信息会指向自己已预留的 0x10000（误导）。
-- 计划状态会过期：`PROGRESS.md` §7 的勾选项以正文实测为准；发现文档与代码不符，**当场修文档**。
+- 计划状态会过期：`PROGRESS.md`「下一步计划」的勾选项以正文实测为准；发现文档与代码不符，**当场修文档**。
 
 ## 7. 文档地图
 
 | 文档 | 内容 |
 |---|---|
-| `README.md` | 目标、目录、构建/运行、已验证事实、下一步、调试手法 |
-| `PROGRESS.md` | 交接文档：§2 环境与命令、§3 二进制事实、§4 宿主设计与服务语义、§6 历史卡点、§7 计划、**§8 踩坑清单（必读）**、§9 调试手册、§10 ida 环境、§11 声音、§12 文件服务、§13 显示/跨平台决策、**§14 通用化 + FDPS 首跑** |
+| `README.md` | **项目卡片**：目标、路线、目录树、快速开始、关键结论一句话版、下一步摘要 |
+| `PROGRESS.md` | **只看进度**：一句话现状、能力清单、轮次时间线、下一步计划（含 § 编号沿用说明） |
+| `docs/INDEX.md` | **总导航**：自建文档清单 + 旧 `PROGRESS.md` 的 §编号 → 新文件对照表 + 按需求查表 |
+| `docs/ENVIRONMENT.md` | 工具链、构建/运行、**全部命令行参数**、Ghidra HTTP 桥、IDA MCP（旧 §2 §10） |
+| `docs/BINARY-FACTS.md` | `FD2.EXE` 容器、LE 头实测偏移、fixup 格式、对象布局（旧 §3） |
+| `docs/HOST-DESIGN.md` | 地址空间硬约束、源文件职责、VEH 四类异常、服务返回值语义（旧 §4） |
+| `docs/PITFALLS.md` | **踩坑清单（动手前必读）** + 历史卡点（旧 §8 §6） |
+| `docs/DEBUG-MANUAL.md` | 诊断手段与自检/对拍工具清单（旧 §9） |
+| `docs/AUDIO.md` | AIL 替换层、XMIDI、合成器、gm.dls、已知杂音 bug（旧 §11） |
+| `docs/BACKEND.md` | sokol 选型实测、git 策略、跨平台抽取顺序（旧 §13） |
+| `docs/TRANSLATION.md` | 源码转译方法 + 模块/对拍/接入清单 + 下一步（旧 §19–§33 提炼） |
+| `docs/FDPS-ARCHIVE.md` | FDPS 炎龙外传**冻结存档**（旧 §14–§18） |
+| `docs/rounds/*.md` | 逐轮病历：01 平台/工具、02 叶子工具层、03 地基管线、04 对话框 UI、05 记录与服务 |
 | `re/RE_MAP.md` | 逆向测绘地图（FD2）：函数分区、AIL 边界、核心函数档案、转译路线 |
 | `re/FDPS_MAP.md` | 逆向测绘地图（FDPS 炎龙外传）：90 条 AIL 入口表、定时器族、spawn FD.EXE 流程 |
 | `re/funcmap.csv` | 全量函数表（1359 行） |
 | `re/*.txt` / `re/*.c` | 静态扫描清单与关键函数反编译存档 |
-| 外部：github.com/wicanr2/fd2_re（`docs/`、`docs/knowledge-base/`） | 反编译踩坑与知识库（同游戏逆向资料）。**本地已 curate 快照 `port/docs/`（`.gitignore` 已忽略，约 9 MB/274 文件；取舍理由与清单见 `docs/KEEP.md`）**：保留 `knowledge-base/`、`data/ida/*.txt`、`data/exe_tables`、游戏数据 JSON；但它**是另一个 FD2.EXE build**（md5 `b97caf22…`，非本项目 `a6e341a8…`）——地址/常量/指令一律以 `E:\FD2\FD2.EXE.i64` 复核（`PROGRESS.md` §21.1） |
+| 外部：github.com/wicanr2/fd2_re（`docs/`、`docs/knowledge-base/`） | 反编译踩坑与知识库（同游戏逆向资料）。**本地已 curate 快照 `port/docs/knowledge-base/` + `port/docs/data/`（被 `.gitignore` 忽略，约 9 MB/274 文件；取舍理由与清单见 `docs/KEEP.md`；注意 `docs/*.md` 与 `docs/rounds/` 是**本项目的自建文档，要入库**）**：保留 `knowledge-base/`、`data/ida/*.txt`、`data/exe_tables`、游戏数据 JSON；但它**是另一个 FD2.EXE build**（md5 `b97caf22…`，非本项目 `a6e341a8…`）——地址/常量/指令一律以 `E:\FD2\FD2.EXE.i64` 复核（docs/rounds/02-translation-toolkit.md §21.1） |

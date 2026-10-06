@@ -1,0 +1,92 @@
+=== sub_164E8 @ 164e8 ===
+164E8  68 10 00 00 00            push    10h
+164ED  E8 3D 0B 02 00            call    sub_3702F
+164F2  FF 05 14 3A 05 00         inc     dword_53A14
+164F8  83 3D 14 3A 05 00 02      cmp     dword_53A14, 2
+164FF  75 3B                     jnz     short loc_1653C
+16501  FF 05 10 3A 05 00         inc     dword_53A10
+16507  83 3D 10 3A 05 00 04      cmp     dword_53A10, 4
+1650E  75 0A                     jnz     short loc_1651A
+16510  C7 05 10 3A 05 00 00 00 00 00  mov     dword_53A10, 0
+1651A  A1 10 3A 05 00            mov     eax, dword_53A10
+1651F  83 F8 03                  cmp     eax, 3
+16522  75 05                     jnz     short loc_16529
+16524  B8 01 00 00 00            mov     eax, 1
+16529  50                        push    eax
+1652A  E8 2A 00 00 00            call    sub_16559
+1652F  83 C4 04                  add     esp, 4
+16532  C7 05 14 3A 05 00 00 00 00 00  mov     dword_53A14, 0
+1653C  6A 01                     push    1
+1653E  6A 02                     push    2
+16540  FF 35 EC 3E 05 00         push    dword_53EEC
+16546  E8 4B F5 00 00            call    sub_25A96
+1654B  83 C4 0C                  add     esp, 0Ch
+1654E  6A 01                     push    1
+16550  E8 54 15 00 00            call    sub_17AA9
+16555  83 C4 04                  add     esp, 4
+16558  C3                        retn
+
+=== sub_25A96 @ 25a96 ===
+25A96  68 1C 00 00 00            push    1Ch
+25A9B  E8 8F 15 01 00            call    sub_3702F
+25AA0  53                        push    ebx
+25AA1  83 EC 08                  sub     esp, 8
+25AA4  80 3D F1 3E 05 00 00      cmp     byte_53EF1, 0
+25AAB  0F 84 8F 00 00 00         jz      loc_25B40
+25AB1  80 3D 62 1E 05 00 00      cmp     byte_51E62, 0
+25AB8  0F 84 82 00 00 00         jz      loc_25B40
+25ABE  83 3D 33 41 05 00 00      cmp     dword_54133, 0
+25AC5  75 79                     jnz     short loc_25B40
+25AC7  FF 35 E4 3E 05 00         push    dword_53EE4
+25ACD  E8 33 3D 01 00            call    AIL_stop_sample
+25AD2  83 C4 04                  add     esp, 4
+25AD5  83 7C 24 14 FF            cmp     [esp+0Ch+arg_4], 0FFFFFFFFh
+25ADA  74 64                     jz      short loc_25B40
+25ADC  8B 44 24 14               mov     eax, [esp+0Ch+arg_4]
+25AE0  C1 E0 02                  shl     eax, 2
+25AE3  03 44 24 10               add     eax, [esp+0Ch+arg_0]
+25AE7  8B 54 24 10               mov     edx, [esp+0Ch+arg_0]
+25AEB  03 50 06                  add     edx, [eax+6]
+25AEE  89 54 24 04               mov     [esp+0Ch+var_8], edx
+25AF2  8B 50 06                  mov     edx, [eax+6]
+25AF5  8B 40 0A                  mov     eax, [eax+0Ah]
+25AF8  29 D0                     sub     eax, edx
+25AFA  89 04 24                  mov     [esp+0Ch+var_C], eax
+25AFD  FF 35 E4 3E 05 00         push    dword_53EE4
+25B03  E8 19 3A 01 00            call    AIL_init_sample
+25B08  83 C4 04                  add     esp, 4
+25B0B  FF 34 24                  push    [esp+0Ch+var_C]
+25B0E  FF 74 24 08               push    [esp+10h+var_8]
+25B12  FF 35 E4 3E 05 00         push    dword_53EE4
+25B18  E8 77 3B 01 00            call    AIL_set_sample_address
+25B1D  83 C4 0C                  add     esp, 0Ch
+25B20  FF 74 24 18               push    [esp+0Ch+arg_8]
+25B24  FF 35 E4 3E 05 00         push    dword_53EE4
+25B2A  E8 7F 3F 01 00            call    AIL_set_sample_loop_count
+25B2F  83 C4 08                  add     esp, 8
+25B32  FF 35 E4 3E 05 00         push    dword_53EE4
+25B38  E8 5B 3C 01 00            call    AIL_start_sample
+25B3D  83 C4 04                  add     esp, 4
+25B40  83 C4 08                  add     esp, 8
+25B43  5B                        pop     ebx
+25B44  C3                        retn
+
+=== sub_17AA9 @ 17aa9 ===
+17AA9  68 04 00 00 00            push    4
+17AAE  E8 7C F5 01 00            call    sub_3702F
+17AB3  8B 54 24 04               mov     edx, [esp+arg_0]
+17AB7  B8 6C 04 00 00            mov     eax, 46Ch
+17ABC  0F BF 00                  movsx   eax, word ptr [eax]
+17ABF  A3 2C 3A 05 00            mov     dword_53A2C, eax
+17AC4  B8 6C 04 00 00            mov     eax, 46Ch
+17AC9  0F BF 00                  movsx   eax, word ptr [eax]
+17ACC  2B 05 2C 3A 05 00         sub     eax, dword_53A2C
+17AD2  85 C0                     test    eax, eax
+17AD4  7D 05                     jge     short loc_17ADB
+17AD6  05 00 00 01 00            add     eax, offset sub_10000
+17ADB  39 D0                     cmp     eax, edx
+17ADD  7C E5                     jl      short loc_17AC4
+17ADF  B8 6C 04 00 00            mov     eax, 46Ch
+17AE4  0F BF 00                  movsx   eax, word ptr [eax]
+17AE7  A3 2C 3A 05 00            mov     dword_53A2C, eax
+17AEC  C3                        retn

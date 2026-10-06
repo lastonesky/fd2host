@@ -1,0 +1,384 @@
+=== sub_25A96 @ 25a96 size=af ===
+int __fastcall sub_25A96(__int32 a1, int a2, int a3, int a4, int a5, int a6, int a7)
+{
+  int result; // eax
+  int v8; // eax
+  int v9; // [esp+0h] [ebp-Ch]
+  int v10; // [esp+4h] [ebp-8h]
+
+  result = sub_3702F(a1, a2, a3, a4, a5: 28);
+  if ( byte_53EF1 != 0 && byte_51E62 != 0 && dword_54133 == 0 )
+  {
+    result = AIL_stop_sample(a1: dword_53EE4);
+    if ( a6 != -1 )
+    {
+      v8 = a5 + 4 * a6;
+      v10 = *(_DWORD *)(v8 + 6) + a5;
+      v9 = *(_DWORD *)(v8 + 10) - *(_DWORD *)(v8 + 6);
+      AIL_init_sample(a1: dword_53EE4);
+      AIL_set_sample_address(a1: dword_53EE4, a2: v10, a3: v9);
+      AIL_set_sample_loop_count(a1: dword_53EE4, a2: a7);
+      return AIL_start_sample(a1: dword_53EE4);
+    }
+  }
+  return result;
+}
+callers:
+  115b6 sub_115B6
+  117e7 sub_117E7
+  13fd4 sub_13FD4
+  164e8 sub_164E8
+  1741c sub_1741C
+  176b4 sub_176B4
+  17aed sub_17AED
+  17e0b sub_17E0B
+  1a30b sub_1A30B
+  1b9de sub_1B9DE
+  1c2da sub_1C2DA
+  1c4cc sub_1C4CC
+  1d4f6 sub_1D4F6
+  1d51d sub_1D51D
+  1d6c8 sub_1D6C8
+  1db65 sub_1DB65
+  1e98c sub_1E98C
+  1f894 sub_1F894
+  20421 sub_20421
+  21548 sub_21548
+  2185f sub_2185F
+  21a9e sub_21A9E
+  21ad9 sub_21AD9
+  21b99 sub_21B99
+  2211c sub_2211C
+  22153 sub_22153
+  22253 sub_22253
+  24618 sub_24618
+  26152 sub_26152
+  26e38 sub_26E38
+  275e6 sub_275E6
+  27d33 sub_27D33
+  27f4a sub_27F4A
+  29bcb sub_29BCB
+  2af28 sub_2AF28
+  2b996 sub_2B996
+  2bb33 sub_2BB33
+  2bd6c sub_2BD6C
+  2bfd9 sub_2BFD9
+  2c217 sub_2C217
+  2c441 sub_2C441
+  2c67d sub_2C67D
+  2cafc sub_2CAFC
+  2ccf4 sub_2CCF4
+  2ce1a sub_2CE1A
+  2cf30 sub_2CF30
+  2d80d sub_2D80D
+  2dfc8 sub_2DFC8
+  2e2b0 sub_2E2B0
+  2ebe1 sub_2EBE1
+  2ff01 sub_2FF01
+  30e9d sub_30E9D
+  32230 sub_32230
+  32999 sub_32999
+  3396a sub_3396A
+  33faf sub_33FAF
+
+callees:
+  -> 117a1 sub_115B6
+  -> 1193a sub_117E7
+  -> 11a33 sub_117E7
+  -> 11a54 sub_117E7
+  -> 11a75 sub_117E7
+  -> 11a96 sub_117E7
+  -> 1403d sub_13FD4
+  -> 16546 sub_164E8
+  -> 17495 sub_1741C
+  -> 176d3 sub_176B4
+  -> 17b2e sub_17AED
+  -> 17c56 sub_17AED
+  -> 17d26 sub_17AED
+  -> 17ede sub_17E0B
+  -> 1a3df sub_1A30B
+  -> 1ba55 sub_1B9DE
+  -> 1ba72 sub_1B9DE
+  -> 1ba9d sub_1B9DE
+  -> 1babe sub_1B9DE
+  -> 1baee sub_1B9DE
+  -> 1bb2a sub_1B9DE
+  -> 1c309 sub_1C2DA
+  -> 1c65c sub_1C4CC
+  -> 1d50a sub_1D4F6
+  -> 1d58c sub_1D51D
+  -> 1d5a9 sub_1D51D
+  -> 1d5d5 sub_1D51D
+  -> 1d5f6 sub_1D51D
+  -> 1d627 sub_1D51D
+  -> 1d65b sub_1D51D
+  -> 1d6e2 sub_1D6C8
+  -> 1ddaa sub_1DB65
+  -> 1ea20 sub_1E98C
+  -> 1fbd1 sub_1F894
+  -> 1fe7c sub_1F894
+  -> 1fe9c sub_1F894
+  -> 1fedb sub_1F894
+  -> 1ff5e sub_1F894
+  -> 2054d sub_20421
+  -> 20595 sub_20421
+  -> 217b2 sub_21548
+  -> 21873 sub_2185F
+  -> 21ab2 sub_21A9E
+  -> 21aed sub_21AD9
+  -> 21bad sub_21B99
+  -> 22130 sub_2211C
+  -> 22167 sub_22153
+  -> 2232b sub_22253
+  -> 24685 sub_24618
+  -> 26504 sub_26152
+  -> 26536 sub_26152
+  -> 265a7 sub_26152
+  -> 26e5e sub_26E38
+  -> 26e90 sub_26E38
+  -> 27625 sub_275E6
+  -> 2768b sub_275E6
+  -> 276d0 sub_275E6
+  -> 276fb sub_275E6
+  -> 27e3b sub_27D33
+  -> 27e99 sub_27D33
+  -> 27ede sub_27D33
+  -> 27f0e sub_27D33
+  -> 2805f sub_27F4A
+  -> 280bb sub_27F4A
+  -> 29c8a sub_29BCB
+  -> 29d30 sub_29BCB
+  -> 29d6c sub_29BCB
+  -> 2b08a sub_2AF28
+  -> 2b106 sub_2AF28
+  -> 2b12c sub_2AF28
+  -> 2b155 sub_2AF28
+  -> 2b17b sub_2AF28
+  -> 2b1f1 sub_2AF28
+  -> 2ba63 sub_2B996
+  -> 2bd62 sub_2BB33
+  -> 2bdfd sub_2BD6C
+  -> 2be85 sub_2BD6C
+  -> 2bf61 sub_2BD6C
+  -> 2c16c sub_2BFD9
+  -> 2c395 sub_2C217
+  -> 2c666 sub_2C441
+  -> 2c70b sub_2C67D
+  -> 2c7a3 sub_2C67D
+  -> 2cae8 sub_2C67D
+  -> 2ccdc sub_2CAFC
+  -> 2cdc9 sub_2CCF4
+  -> 2cef2 sub_2CE1A
+  -> 2d535 sub_2CF30
+  -> 2d770 sub_2CF30
+  -> 2db80 sub_2D80D
+  -> 2dc85 sub_2D80D
+  -> 2dd9e sub_2D80D
+  -> 2e1c6 sub_2DFC8
+  -> 2e284 sub_2DFC8
+  -> 2e918 sub_2E2B0
+  -> 2ee2f sub_2EBE1
+  -> 2ef0b sub_2EBE1
+  -> 2f004 sub_2EBE1
+  -> 30d1b sub_2FF01
+  -> 30f74 sub_30E9D
+  -> 31015 sub_30E9D
+  -> 32307 sub_32230
+  -> 32bcf sub_32999
+  -> 339eb sub_3396A
+  -> 33a14 sub_3396A
+  -> 33a3d sub_3396A
+  -> 33a66 sub_3396A
+  -> 34126 sub_33FAF
+  -> 34162 sub_33FAF
+  -> 3417e sub_33FAF
+  -> 341e7 sub_33FAF
+
+=== sub_17AA9 @ 17aa9 size=44 ===
+int __fastcall sub_17AA9(__int32 a1, int a2, int a3, int a4, int a5)
+{
+  int v5; // eax
+
+  sub_3702F(a1, a2, a3, a4, a5: 4);
+  dword_53A2C = MEMORY[0x46C];
+  do
+  {
+    v5 = MEMORY[0x46C] - dword_53A2C;
+    if ( v5 < 0 )
+      v5 += (int)sub_10000;
+  }
+  while ( v5 < a5 );
+  dword_53A2C = MEMORY[0x46C];
+  return MEMORY[0x46C];
+}
+callers:
+  10010 sub_10010
+  12cea sub_12CEA
+  1366a sub_1366A
+  13fd4 sub_13FD4
+  15055 sub_15055
+  164e8 sub_164E8
+  1a30b sub_1A30B
+  1c2da sub_1C2DA
+  1c4cc sub_1C4CC
+  1cd17 sub_1CD17
+  1d6c8 sub_1D6C8
+  1db65 sub_1DB65
+  1f1cc sub_1F1CC
+  1f30a sub_1F30A
+  1f42d sub_1F42D
+  1f73f sub_1F73F
+  1f894 sub_1F894
+  22470 sub_22470
+  22547 sub_22547
+  22656 sub_22656
+  22e5c sub_22E5C
+  24336 sub_24336
+  24c1e sub_24C1E
+  25757 sub_25757
+  28b41 sub_28B41
+  2cf30 sub_2CF30
+  2d80d sub_2D80D
+  2dfc8 sub_2DFC8
+  2e2b0 sub_2E2B0
+  2ebe1 sub_2EBE1
+  2fb2c sub_2FB2C
+  2fe14 sub_2FE14
+  2ff01 sub_2FF01
+  30e9d sub_30E9D
+  31266 sub_31266
+  31529 sub_31529
+  31c49 sub_31C49
+  32999 sub_32999
+  35468 sub_35468
+  3553f sub_3553F
+  355b7 sub_355B7
+  35a0d sub_35A0D
+
+callees:
+  -> 105b1 sub_10010
+  -> 12d33 sub_12CEA
+  -> 12d6c sub_12CEA
+  -> 136db sub_1366A
+  -> 137ae sub_1366A
+  -> 1380f sub_1366A
+  -> 138fd sub_1366A
+  -> 1402b sub_13FD4
+  -> 14096 sub_13FD4
+  -> 140ec sub_13FD4
+  -> 15182 sub_15055
+  -> 1518c sub_15055
+  -> 152b2 sub_15055
+  -> 152d0 sub_15055
+  -> 16550 sub_164E8
+  -> 1a32a sub_1A30B
+  -> 1a3ea sub_1A30B
+  -> 1a4b3 sub_1A30B
+  -> 1a730 sub_1A30B
+  -> 1c449 sub_1C2DA
+  -> 1c47f sub_1C2DA
+  -> 1c666 sub_1C4CC
+  -> 1cd93 sub_1CD17
+  -> 1d741 sub_1D6C8
+  -> 1d787 sub_1D6C8
+  -> 1dca0 sub_1DB65
+  -> 1de0a sub_1DB65
+  -> 1de77 sub_1DB65
+  -> 1f2e4 sub_1F1CC
+  -> 1f3c6 sub_1F30A
+  -> 1f4c7 sub_1F42D
+  -> 1f7b2 sub_1F73F
+  -> 1f7bc sub_1F73F
+  -> 1f959 sub_1F894
+  -> 1f963 sub_1F894
+  -> 22530 sub_22470
+  -> 2263f sub_22547
+  -> 22649 sub_22547
+  -> 226d7 sub_22656
+  -> 22e75 sub_22E5C
+  -> 22ec7 sub_22E5C
+  -> 22ee8 sub_22E5C
+  -> 243eb sub_24336
+  -> 2448c sub_24336
+  -> 24c6d sub_24C1E
+  -> 24cdd sub_24C1E
+  -> 258f4 sub_25757
+  -> 28b77 sub_28B41
+  -> 28b92 sub_28B41
+  -> 28bb6 sub_28B41
+  -> 28be6 sub_28B41
+  -> 28c10 sub_28B41
+  -> 28c46 sub_28B41
+  -> 28ca8 sub_28B41
+  -> 2d679 sub_2CF30
+  -> 2d7d2 sub_2CF30
+  -> 2d9d7 sub_2D80D
+  -> 2da40 sub_2D80D
+  -> 2daaf sub_2D80D
+  -> 2db0b sub_2D80D
+  -> 2dc24 sub_2D80D
+  -> 2e19b sub_2DFC8
+  -> 2e24f sub_2DFC8
+  -> 2e8e3 sub_2E2B0
+  -> 2edfe sub_2EBE1
+  -> 2eeda sub_2EBE1
+  -> 2f274 sub_2EBE1
+  -> 2fc22 sub_2FB2C
+  -> 2fe38 sub_2FE14
+  -> 30500 sub_2FF01
+  -> 30808 sub_2FF01
+  -> 30a28 sub_2FF01
+  -> 30c3a sub_2FF01
+  -> 30dea sub_2FF01
+  -> 31159 sub_30E9D
+  -> 3135d sub_31266
+  -> 3146a sub_31266
+  -> 319fa sub_31529
+  -> 31a43 sub_31529
+  -> 31b12 sub_31529
+  -> 31b35 sub_31529
+  -> 31b93 sub_31529
+  -> 31cde sub_31C49
+  -> 31f2f sub_31C49
+  -> 31fae sub_31C49
+  -> 3218c sub_31C49
+  -> 32ba9 sub_32999
+  -> 3548b sub_35468
+  -> 354a1 sub_35468
+  -> 354b7 sub_35468
+  -> 354cd sub_35468
+  -> 354e3 sub_35468
+  -> 3556e sub_3553F
+  -> 35584 sub_3553F
+  -> 355d9 sub_355B7
+  -> 35b15 sub_35A0D
+
+=== sub_164E8 @ 164e8 size=71 ===
+int __fastcall sub_164E8(__int32 a1, int a2, int a3, int a4)
+{
+  __int16 *v4; // eax
+  int v5; // edx
+  int v6; // ecx
+  __int32 v7; // eax
+
+  v4 = (__int16 *)sub_3702F(a1, a2, a3, a4, a5: 16);
+  if ( ++dword_53A14 == 2 )
+  {
+    if ( ++dword_53A10 == 4 )
+      dword_53A10 = 0;
+    v7 = dword_53A10;
+    if ( dword_53A10 == 3 )
+      v7 = 1;
+    v4 = sub_16559(a1: v7, a2: v5, a3, a4: v6, a5: v7);
+    dword_53A14 = 0;
+  }
+  sub_25A96(a1: (__int32)v4, a2: v5, a3, a4: v6, a5: dword_53EEC, a6: 2, a7: 1);
+  return sub_17AA9(a1: 1);
+}
+callers:
+  15f84 sub_15F84
+
+callees:
+  -> 16139 sub_15F84
+  -> 164a2 sub_15F84
+

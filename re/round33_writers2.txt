@@ -1,0 +1,47 @@
+=== write dword_54133=1 @2E735 ===
+2E720  push    [esp+5Ch+arg_4]
+2E724  call    sub_2EBE1
+2E729  add     esp, 20h
+2E72C  cmp     dword_54133, 0
+2E733  jz      short loc_2E763
+2E735  mov     dword_54133, 1
+2E73F  push    dword_5414F
+
+=== write dword_54133=ecx @31AE4 ===
+31AD0  mov     byte ptr [esi+56h], 0
+31AD1  mov     byte ptr [esi+56h], 0
+31AD2  mov     byte ptr [esi+56h], 0
+31AD8  mov     esi, dword_53A45
+31ADE  mov     [esi+57h], cl
+31ADF  mov     [esi+57h], cl
+31AE0  movzx   ecx, [esp+ebx+64h+var_64]
+31AE4  mov     dword_54133, ecx
+31AEA  push    1
+31AEC  push    0
+31AEE  call    sub_2E2B0
+
+=== main audio init @25C3B..25C78 ===
+25C30  mov     edx, eax
+25C32  mov     dword_53EDC, eax
+25C37  test    eax, eax
+25C39  jz      short loc_25C63
+25C3B  mov     byte_53EF1, 1
+25C42  push    eax
+25C43  call    AIL_allocate_sample_handle
+25C48  add     esp, 4
+25C4B  mov     dword_53EE4, eax
+25C50  push    dword_53EDC
+25C56  call    AIL_allocate_sample_handle
+25C5B  add     esp, 4
+25C5E  mov     dword_53EE8, eax
+25C63  push    1Fh
+25C65  push    dword_53EEC
+25C6B  push    offset aFdotherDat; "FDOTHER.DAT"
+25C70  call    sub_111BA
+25C75  add     esp, 0Ch
+25C78  mov     dword_53EEC, eax
+25C7D  push    1
+25C7F  push    dword_53A4D
+25C85  push    offset aFdotherDat; "FDOTHER.DAT"
+25C8A  call    sub_111BA
+25C8F  add     esp, 0Ch

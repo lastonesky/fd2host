@@ -5,7 +5,7 @@
 param(
     [string]$Target = "all",
     [switch]$Debug,
-    # Render backend (PROGRESS.md §13): gdi = current StretchDIBits path
+    # Render backend (docs/BACKEND.md §13): gdi = current StretchDIBits path
     # (reference implementation), sokol = sokol_gfx (step 2).
     [ValidateSet("gdi", "sokol")]
     [string]$Render = "gdi"
@@ -20,6 +20,11 @@ $vcvars  = "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\
 
 if (-not (Test-Path $vcvars)) { throw "vcvars32.bat not found: $vcvars" }
 New-Item -ItemType Directory -Force -Path $out | Out-Null
+
+# Run inside an already-initialised developer command prompt (VSCMD_VER set by
+# vcvars32.bat) without calling it again: some sandboxes refuse to start the
+# reg.exe it launches, and the environment is correct either way.
+$vcprompt = if ($env:VSCMD_VER) { "" } else { "`"$vcvars`" >nul && " }
 
 $cfg  = if ($Debug) { "/Od /Zi /MDd" } else { "/O2 /MD" }
 $cflags = "/nologo /W3 /EHsc /GS- /D_CRT_SECURE_NO_WARNINGS $cfg"
@@ -53,17 +58,22 @@ $targets = @{
     # differential test: src/game/rle2.c (0xC0-range RLE blits) vs 0x4EBFF/0x4EC31/0x4EBAB
     rle2check = @{ srcs = @("rle2check.c", "le.c", "game\rle2.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/dlg.c (dialogue box helpers) vs 0x16559/0x16E24
-    dlgcheck = @{ srcs = @("dlgcheck.c", "le.c", "game\dlg.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    # game\svc.c: dlg.c's dlg_type_step calls svc_play_sfx / svc_wait_ticks
+    dlgcheck = @{ srcs = @("dlgcheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/dlg.c box animation vs 0x165AC/0x16B43/0x168B6/0x1685C,
     # with the CRT heap / delay / BDA / portrait-glide services hooked to event-recording stubs
-    boxcheck = @{ srcs = @("boxcheck.c", "le.c", "game\dlg.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    boxcheck = @{ srcs = @("boxcheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: dlg_wait_key vs 0x16C57 - low-memory mirror + BDA
     # operand redirect (like the host), palette hook drives a deterministic
     # tick, int386 hook scripts the key
-    keycheck = @{ srcs = @("keycheck.c", "le.c", "game\dlg.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    keycheck = @{ srcs = @("keycheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/rec.c (80-byte record table) vs 0x34894/0x12C60
     reccheck = @{ srcs = @("reccheck.c", "le.c", "game\rec.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
-    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c");
+    # differential test: dlg_type_step (0x164E8) plus the two services it ends
+    # with - svc_play_sfx (0x25A96) and svc_wait_ticks (0x17AA9). Low-memory
+    # mirror + a tick stub that both sides read through (see src/typecheck.c)
+    typecheck = @{ srcs = @("typecheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c", "game\svc.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";
                  # ASLR must stay on (with /DYNAMICBASE:NO Windows reserves the
@@ -75,7 +85,7 @@ $targets = @{
                  link = "/ENTRY:fd2_entry /BASE:0x60000000 /MAP:fd2host.map" }
 }
 
-# --- render backend selection (PROGRESS.md §13.1) ---------------------------
+# --- render backend selection (docs/BACKEND.md §13.1) ---------------------------
 # The kernel (host.c) only sees render.h; exactly one entry layer + one
 # present backend are compiled in. The entry layer differs too because sokol
 # owns the window and drives frames through callbacks instead of a message
@@ -121,7 +131,7 @@ foreach ($name in $targets.Keys) {
     # lands far from that window and the reservation succeeds.
     $objdir = Join-Path $out "$name.obj"
     New-Item -ItemType Directory -Force -Path $objdir | Out-Null
-    $cmd = "`"$vcvars`" >nul && cl $cflags $($t.defs) /Fe:`"$out\$name.exe`" /Fo:`"$objdir\\`" $($t.inc) $srcFiles $($t.libs -join ' ') $sub"
+    $cmd = "$vcprompt cl $cflags $($t.defs) /Fe:`"$out\$name.exe`" /Fo:`"$objdir\\`" $($t.inc) $srcFiles $($t.libs -join ' ') $sub"
     Write-Host "== building $name =="
     cmd /c $cmd
     if ($LASTEXITCODE -ne 0) { throw "build failed: $name" }

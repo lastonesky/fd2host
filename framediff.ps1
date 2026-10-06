@@ -2,7 +2,7 @@
 #
 #   pwsh -File framediff.ps1 -A build\ab_n1.bmp -B build\ab_a1.bmp
 #
-# Used for the repl A/B argument (PROGRESS §26.3): the same fixed
+# Used for the repl A/B argument (docs/rounds/03-tables-and-plumbing.md §26.3): the same fixed
 # --shot-frame taken with --replace=none and --replace=all must differ by no
 # more than the run-to-run timing baseline (none vs none).
 #

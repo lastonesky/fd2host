@@ -85,6 +85,11 @@ static int         g_stereo  = 0;
 static char        g_dump_dir[MAX_PATH];
 static int         g_dump_seq;
 static int         g_installed;
+/* How often a sample was cut off while still playing (AIL semantics: stop
+ * then start). A cut is inherent to retriggering - what we removed is the
+ * *device* teardown that used to go with it. Counted so the residual is
+ * visible instead of being guessed at (docs/AUDIO.md). */
+static unsigned long g_sample_cuts;
 
 /* ------------------------------------------------------------ AIL timers ---
  *
@@ -443,17 +448,50 @@ static ail_seq *seq_of(void *handle)
 
 /* ------------------------------------------------------------- waveOut --- */
 
+/* Unprepare + free the submitted buffer. The driver owns a WAVEHDR until it
+ * is marked WHDR_DONE, so this waits for that flag (bounded, same guard as
+ * synth_stop) - it must never free memory the driver is still reading. */
+static void sample_release_buffer(ail_sample *s)
+{
+    if (s->dev && (s->hdr.dwFlags & WHDR_PREPARED)) {
+        int guard = 0;
+        while (!(s->hdr.dwFlags & WHDR_DONE) && guard++ < 200)
+            Sleep(1);
+        waveOutUnprepareHeader(s->dev, &s->hdr, sizeof s->hdr);
+    }
+    memset(&s->hdr, 0, sizeof s->hdr);
+    if (s->pcm) {
+        free(s->pcm);
+        s->pcm = NULL;
+    }
+}
+
+/* Stop playback but *keep the device open*.
+ *
+ * This used to be waveOutClose + waveOutOpen on every single sound effect
+ * (AIL_stop_sample -> close, AIL_start_sample -> open, and AIL_init_sample
+ * closed it once more), i.e. the whole audio device was torn down and
+ * rebuilt a couple of times a second. Besides being slow, each teardown
+ * pops. The device is now opened once per sample and closed only when the
+ * format changes or in ail_shutdown (docs/AUDIO.md, round 33 33.7). */
+static void sample_stop(ail_sample *s)
+{
+    if (s->dev && (s->hdr.dwFlags & WHDR_PREPARED) &&
+        !(s->hdr.dwFlags & WHDR_DONE)) {
+        waveOutReset(s->dev);           /* only if it is still playing */
+        g_sample_cuts++;                /* a real cut: documented, not silent */
+    }
+    sample_release_buffer(s);
+    s->playing = 0;
+}
+
 static void sample_close_device(ail_sample *s)
 {
+    sample_stop(s);
     if (s->dev) {
-        /* Closing is the simplest way to stop and release the buffer without
-         * racing waveOutReset/waveOutUnprepareHeader. Devices are reopened on
-         * the next play; sound effects fire a few times per second at most. */
         waveOutClose(s->dev);
         s->dev = NULL;
     }
-    memset(&s->hdr, 0, sizeof s->hdr);
-    s->playing = 0;
 }
 
 static int sample_open_device(ail_sample *s)
@@ -523,32 +561,87 @@ static void pcm_apply_gain(uint8_t *pcm, uint32_t bytes, int bits, double g)
     }
 }
 
+/* Fade the first and last few milliseconds of a PCM copy to silence.
+ *
+ * A one-shot waveOutWrite starts and stops wherever the waveform happens to
+ * be: an 8-bit buffer that begins at, say, 200 instead of the 128 silence
+ * level steps the output the instant the device starts, and the same step
+ * happens again when the device goes idle at the end. Those two steps are
+ * the "click" (docs/AUDIO.md). The DOS hardware fed the same waveform to a
+ * Sound Blaster, which was far more forgiving; waveOut is not.
+ *
+ * 3 ms is below the threshold where a level change is audible as such, but
+ * it turns both steps into ramps. Applied to the host copy only - guest
+ * memory is never touched. */
+#define AIL_RAMP_MS 3
+
+static void pcm_apply_ramp(uint8_t *pcm, uint32_t bytes, int bits,
+                           uint32_t rate, int channels)
+{
+    uint32_t nsamp, ramp, i;
+    int16_t *p16;
+
+    nsamp = bytes / (bits > 8 ? 2u : 1u);
+    if (nsamp < 8 || rate == 0)
+        return;
+    ramp = (uint32_t)((double)rate * AIL_RAMP_MS / 1000.0) *
+           (uint32_t)(channels > 0 ? channels : 1);
+    if (ramp == 0)
+        return;
+    if (ramp > nsamp / 2)
+        ramp = nsamp / 2;               /* never eat more than half a sample */
+
+    if (bits <= 8) {
+        for (i = 0; i < ramp; i++) {
+            double g = (double)i / (double)ramp;
+            int head = (int)pcm[i] - 128;
+            int tail = (int)pcm[nsamp - 1 - i] - 128;
+            pcm[i]               = (uint8_t)((int)(head * g) + 128);
+            pcm[nsamp - 1 - i]   = (uint8_t)((int)(tail * g) + 128);
+        }
+    } else {
+        p16 = (int16_t *)(void *)pcm;
+        for (i = 0; i < ramp; i++) {
+            double g = (double)i / (double)ramp;
+            p16[i]             = (int16_t)(p16[i] * g);
+            p16[nsamp - 1 - i] = (int16_t)(p16[nsamp - 1 - i] * g);
+        }
+    }
+}
+
 static void sample_play(ail_sample *s)
 {
     uint32_t played;
+    int      bits;
+    int      cut;
 
-    sample_close_device(s);
     if (!s->addr || !s->len)
         return;
     if (!sample_open_device(s))
         return;
-    if (s->pcm) {
-        free(s->pcm);
-        s->pcm = NULL;
-    }
+
+    /* The driver owns the submitted header until it is WHDR_DONE, so release
+     * it before the copy is rebuilt. Only reset when the previous sound is
+     * genuinely still running - a finished sample needs no cut at all. */
+    cut = (s->hdr.dwFlags & WHDR_PREPARED) && !(s->hdr.dwFlags & WHDR_DONE);
+    sample_stop(s);
+
     s->pcm = (uint8_t *)malloc(s->len);
     if (!s->pcm)
         return;
     memcpy(s->pcm, s->addr, s->len);
+    bits = s->bits ? s->bits : g_bits;
     {
         /* master volume x the game's AIL_set_sample_volume (0..127, the AIL
          * default is 127): applied to the copy, never to guest memory. */
-        int bits = s->bits ? s->bits : g_bits;
         double g = (double)g_master_volume / 100.0 *
                    (double)s->volume / 127.0;
         if (g < 1.0)
             pcm_apply_gain(s->pcm, s->len, bits, g);
     }
+    pcm_apply_ramp(s->pcm, s->len, bits,
+                   s->rate ? s->rate : g_rate, s->channels);
+
     s->hdr.lpData         = (LPSTR)s->pcm;
     s->hdr.dwBufferLength = s->len;
     if (waveOutPrepareHeader(s->dev, &s->hdr, sizeof s->hdr) != MMSYSERR_NOERROR)
@@ -556,9 +649,9 @@ static void sample_play(ail_sample *s)
     if (waveOutWrite(s->dev, &s->hdr, sizeof s->hdr) == MMSYSERR_NOERROR) {
         s->playing = 1;
         played = s->len;
-        printf("ail: play %u bytes (%.2f s @ %u Hz, loop=%d)\n",
+        printf("ail: play %u bytes (%.2f s @ %u Hz, loop=%d)%s\n",
                (unsigned)played, (double)played / (g_rate * (g_stereo ? 2 : 1) * (g_bits / 8)),
-               (unsigned)g_rate, (int)s->loop_count);
+               (unsigned)g_rate, (int)s->loop_count, cut ? " (cut)" : "");
     }
 }
 
@@ -586,7 +679,8 @@ static void host_AIL_shutdown(void)
     }
     for (i = 0; i < AIL_MAX_SEQS; i++)
         memset(&g_seqs[i], 0, sizeof g_seqs[i]);
-    printf("ail: shutdown (timer callbacks fired %lu)\n", g_timer_fires);
+    printf("ail: shutdown (timer callbacks fired %lu, %lu samples cut short)\n",
+           g_timer_fires, g_sample_cuts);
 }
 
 /* The game checks these for non-zero before using any sample/sequence API. */
@@ -648,7 +742,10 @@ static void host_AIL_init_sample(void *h)
     s->addr = NULL;
     s->loop_count = 1;
     s->type = 0;                            /* DIG_F_MONO_8 */
-    sample_close_device(s);
+    /* Stop, but do NOT tear the device down: AIL_init_sample is called on
+     * every single sound effect (svc_play_sfx: init/addr/loop/start), so
+     * closing here was one waveOutClose per effect (round 33 33.7). */
+    sample_stop(s);
 }
 
 static void host_AIL_set_sample_address(void *h, void *start, uint32_t len)

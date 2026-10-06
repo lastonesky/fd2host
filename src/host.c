@@ -50,12 +50,38 @@ static volatile int g_running  = 1;
 static volatile int g_use_image;         /* load pre-relocated images     */
 static volatile int g_frames;
 
-/* Optional frame capture (--screenshot=<file.bmp> [--shot-frame=<n>]): writes
- * exactly the pixels handed to GDI, so palette and channel-order regressions
- * can be checked without a desktop or a visible window. */
+/* Optional frame capture (--screenshot=<file.bmp> [--shot-frame=<n>]):
+ * writes exactly the pixels handed to the render backend, so palette and
+ * channel-order regressions can be checked without a desktop or a visible
+ * window.
+ *
+ * Two triggers, pick one:
+ *   --shot-frame=<n>  fire on frame number n (backend-dependent: the same n
+ *                     is a *different instant* at 32 fps and at 155 fps)
+ *   --shot-time=<ms>  fire on the first frame whose wall-clock age since
+ *                     host_init is >= ms (backend-independent, see below)
+ *
+ * --shot-time exists because the guest's own clock is real time: the BIOS
+ * tick at 0x40:0x6C is advanced by an independent 18.2 Hz thread
+ * (dos.c bios_tick_thread) and --autokey schedules on Sleep(ms), so wall
+ * clock - not frame count - is the axis both backends and both runs share.
+ * A higher frame rate then only makes the sample *finer* (155 fps samples
+ * every ~6 ms, 32 fps every ~31 ms), which is why sokol is the better test
+ * platform once the trigger is time-based (docs/BACKEND.md §13.7).
+ *
+ * --shot-tick goes one step further and fires on the guest's own tick
+ * counter, which removes even that residual: with --shot-time a 32 fps
+ * backend can overshoot the requested instant by a whole frame period
+ * (~31 ms) and land one animation step ahead of a 158 fps backend asked for
+ * the same millisecond. Same tick counter = same guest state, whatever the
+ * frame rate. This is the trigger to use for cross-backend comparison. */
 static const char  *g_screenshot_path;
 static int          g_screenshot_frame = 300;
+static int          g_shot_time_ms;      /* 0 = unused, frame trigger wins  */
+static int          g_shot_tick;         /* 0 = unused; beats both above    */
 static int          g_screenshot_done;
+static DWORD        g_shot_at_ms;        /* age of the captured frame       */
+static uint32_t     g_shot_at_tick;      /* guest tick of the captured frame*/
 static const char  *g_wshot_path;      /* --wshot=<bmp>: window capture */
 
 /* AIL replacement layer knobs (see src/ail.c). The game never calls
@@ -233,8 +259,10 @@ static DWORD WINAPI watchdog(LPVOID param)
 
         if (g_exit_after_secs > 0 &&
             elapsed >= (DWORD)g_exit_after_secs * 1000) {
-            printf("host: watchdog fired after %d s (%d frames drawn)\n",
-                   g_exit_after_secs, g_frames);
+            printf("host: watchdog fired after %d s (%d frames drawn)"
+                   " - %.1f fps\n",
+                   g_exit_after_secs, g_frames,
+                   g_frames * 1000.0 / (double)(elapsed ? elapsed : 1));
             break;
         }
         if (g_autokey_done && exit_file_ok()) {
@@ -245,7 +273,11 @@ static DWORD WINAPI watchdog(LPVOID param)
                        g_exit_when_size, (unsigned)EXIT_SETTLE_MS);
             } else if (GetTickCount() - settle_at >= EXIT_SETTLE_MS) {
                 if (g_screenshot_path && !g_screenshot_done) {
-                    g_screenshot_frame = g_frames + 1; /* last frame = evidence */
+                    /* last frame = evidence: drop whichever trigger has not
+                     * fired yet and take the very next frame */
+                    g_shot_time_ms = 0;
+                    g_shot_tick = 0;
+                    g_screenshot_frame = g_frames + 1;
                     Sleep(250);                        /* let it be drawn */
                 }
                 printf("host: exit condition met after %u s (%d frames drawn)\n",
@@ -310,7 +342,38 @@ static void dump_frame_bmp(const char *path)
     fwrite(&ih, sizeof ih, 1, f);
     fwrite(g_rgb, pix, 1, f);
     fclose(f);
-    printf("host: frame %d dumped to %s\n", g_frames, path);
+    printf("host: frame %d dumped to %s (age %lu ms, guest tick %lu)\n",
+           g_frames, path, (unsigned long)g_shot_at_ms,
+           (unsigned long)g_shot_at_tick);
+}
+
+/* Milliseconds since host_init: the shared clock for --shot-time, the
+ * watchdog and --autokey alike. */
+unsigned long host_age_ms(void)
+{
+    return (unsigned long)(GetTickCount() - g_start_tick);
+}
+
+/* The guest's own clock: the BIOS tick counter at 0x40:0x6C that the game
+ * polls for all of its timing. An independent 18.2 Hz host thread advances
+ * it (dos.c bios_tick_thread), so - unlike the frame counter - it does not
+ * care how often the backend draws. */
+uint32_t host_guest_tick(void)
+{
+    volatile uint32_t *t = (volatile uint32_t *)(void *)(lowmem() + 0x46C);
+    return *t;
+}
+
+/* Should this frame be captured?  See the comment on g_shot_time_ms: the
+ * tick trigger is the backend-independent one, time is the coarser variant
+ * and the frame trigger is kept for the existing scripts. */
+static int host_shot_due(void)
+{
+    if (g_shot_tick > 0)
+        return (int32_t)host_guest_tick() >= g_shot_tick;
+    if (g_shot_time_ms > 0)
+        return (int)host_age_ms() >= g_shot_time_ms;
+    return g_frames >= g_screenshot_frame;
 }
 
 /* One frame: guest framebuffer -> 32bpp BGRA -> backend.
@@ -340,8 +403,10 @@ int host_frame(void)
 
     render_present(g_rgb, 320, 200);
 
-    if (!g_screenshot_done && g_frames >= g_screenshot_frame) {
+    if (!g_screenshot_done && host_shot_due()) {
         g_screenshot_done = 1;
+        g_shot_at_ms = GetTickCount() - g_start_tick;
+        g_shot_at_tick = host_guest_tick();
         shot = 1;
         if (g_screenshot_path)
             dump_frame_bmp(g_screenshot_path);
@@ -424,7 +489,7 @@ static int opt_wants_value(const char *a)
 {
     static const char *opts[] = {
         "--exe", "--gamedir", "--exit-after", "--trace", "--screenshot",
-        "--wshot", "--shot-frame", "--ail", "--ail-dump", "--ail-rate", "--ail-bits",
+        "--wshot", "--shot-frame", "--shot-time", "--shot-tick", "--ail", "--ail-dump", "--ail-rate", "--ail-bits",
         "--midi-rate", "--midi-backend", "--gm-bank", "--autokey",
         "--midi-dump", "--cmdtail", "--log", "--exit-when-file", "--replace",
         "--volume"
@@ -571,6 +636,15 @@ int host_init(int argc, char **argv)
         }
         else if (!strncmp(argv[i], "--shot-frame=", 13)) {
             g_screenshot_frame = atoi(argv[i] + 13);
+            g_shot_time_ms = 0;             /* last one wins */
+            g_shot_tick = 0;
+        }
+        else if (!strncmp(argv[i], "--shot-time=", 12)) {
+            g_shot_time_ms = atoi(argv[i] + 12);
+            g_shot_tick = 0;
+        }
+        else if (!strncmp(argv[i], "--shot-tick=", 12)) {
+            g_shot_tick = atoi(argv[i] + 12);
         }
         else if (!strncmp(argv[i], "--ail=", 6)) {
             const char *m = argv[i] + 6;

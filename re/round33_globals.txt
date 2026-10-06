@@ -1,0 +1,186 @@
+0x53a14 dword_53A14 size=4
+   xref from 164f2 in sub_164E8
+   xref from 164f8 in sub_164E8
+   xref from 16532 in sub_164E8
+0x53a10 dword_53A10 size=4
+   xref from 16501 in sub_164E8
+   xref from 16507 in sub_164E8
+   xref from 16510 in sub_164E8
+   xref from 1651a in sub_164E8
+0x53a2c dword_53A2C size=4
+   xref from 17abf in sub_17AA9
+   xref from 17acc in sub_17AA9
+   xref from 17ae7 in sub_17AA9
+0x53ee4 dword_53EE4 size=4
+   xref from 25ac7 in sub_25A96
+   xref from 25afd in sub_25A96
+   xref from 25b12 in sub_25A96
+   xref from 25b24 in sub_25A96
+   xref from 25b32 in sub_25A96
+   xref from 25c4b in main
+0x53eec dword_53EEC size=4
+   xref from 1179b in sub_115B6
+   xref from 11934 in sub_117E7
+   xref from 11a2d in sub_117E7
+   xref from 11a4e in sub_117E7
+   xref from 11a6f in sub_117E7
+   xref from 11a90 in sub_117E7
+   xref from 13d0d in sub_13A9F
+   xref from 14037 in sub_13FD4
+   xref from 16540 in sub_164E8
+   xref from 1748f in sub_1741C
+   xref from 176cd in sub_176B4
+   xref from 17b28 in sub_17AED
+0x53ef1 byte_53EF1 size=1
+   xref from 25aa4 in sub_25A96
+   xref from 25b53 in sub_25B45
+   xref from 25c3b in main
+0x51e62 byte_51E62 size=1
+   xref from 10446 in sub_10010
+   xref from 172da in sub_1728C
+   xref from 173c6 in sub_1728C
+   xref from 173cf in sub_1728C
+   xref from 173db in sub_1728C
+   xref from 1a0d7 in sub_19DF7
+   xref from 25ab1 in sub_25A96
+   xref from 25b60 in sub_25B45
+   xref from 26098 in sub_25EBB
+   xref from 2978c in sub_2968D
+   xref from 299c2 in sub_2986F
+0x54133 dword_54133 size=4
+   xref from 25abe in sub_25A96
+   xref from 25b6d in sub_25B45
+   xref from 2e32a in sub_2E2B0
+   xref from 2e459 in sub_2E2B0
+   xref from 2e462 in sub_2E2B0
+   xref from 2e51d in sub_2E2B0
+   xref from 2e548 in sub_2E2B0
+   xref from 2e594 in sub_2E2B0
+   xref from 2e679 in sub_2E2B0
+   xref from 2e6ff in sub_2E2B0
+   xref from 2e72c in sub_2E2B0
+   xref from 2e735 in sub_2E2B0
+0x53a85 dword_53A85 size=4
+   xref from 161b2 in sub_15F84
+   xref from 161c5 in sub_15F84
+   xref from 161e3 in sub_15F84
+   xref from 16297 in sub_15F84
+   xref from 162aa in sub_15F84
+   xref from 162c8 in sub_15F84
+   xref from 163c4 in sub_15F84
+   xref from 163d7 in sub_15F84
+   xref from 16440 in sub_15F84
+   xref from 16453 in sub_15F84
+   xref from 16573 in sub_16559
+   xref from 17f1d in sub_17EEF
+0x53c67 dword_53C67 size=4
+   xref from 15fcd in sub_15F84
+   xref from 15fd9 in sub_15F84
+   xref from 16010 in sub_15F84
+   xref from 1601c in sub_15F84
+   xref from 16174 in sub_15F84
+   xref from 161f9 in sub_15F84
+   xref from 1625e in sub_15F84
+   xref from 162de in sub_15F84
+   xref from 16322 in sub_15F84
+   xref from 1632e in sub_15F84
+   xref from 16397 in sub_15F84
+   xref from 16413 in sub_15F84
+0x53a75 dword_53A75 size=4
+   xref from 16113 in sub_15F84
+   xref from 16471 in sub_15F84
+   xref from 25ccd in main
+   xref from 25ce0 in main
+
+=== disasm sub_17AA9 ===
+push    4
+call    sub_3702F
+mov     edx, [esp+arg_0]
+mov     eax, 46Ch
+movsx   eax, word ptr [eax]
+mov     dword_53A2C, eax
+mov     eax, 46Ch
+movsx   eax, word ptr [eax]
+sub     eax, dword_53A2C
+test    eax, eax
+jge     short loc_17ADB
+add     eax, offset sub_10000
+cmp     eax, edx
+jl      short loc_17AC4
+mov     eax, 46Ch
+movsx   eax, word ptr [eax]
+mov     dword_53A2C, eax
+retn
+
+=== disasm sub_164E8 ===
+push    10h
+call    sub_3702F
+inc     dword_53A14
+cmp     dword_53A14, 2
+jnz     short loc_1653C
+inc     dword_53A10
+cmp     dword_53A10, 4
+jnz     short loc_1651A
+mov     dword_53A10, 0
+mov     eax, dword_53A10
+cmp     eax, 3
+jnz     short loc_16529
+mov     eax, 1
+push    eax
+call    sub_16559
+add     esp, 4
+mov     dword_53A14, 0
+push    1
+push    2
+push    dword_53EEC
+call    sub_25A96
+add     esp, 0Ch
+push    1
+call    sub_17AA9
+add     esp, 4
+retn
+
+=== disasm sub_25A96 ===
+push    1Ch
+call    sub_3702F
+push    ebx
+sub     esp, 8
+cmp     byte_53EF1, 0
+jz      loc_25B40
+cmp     byte_51E62, 0
+jz      loc_25B40
+cmp     dword_54133, 0
+jnz     short loc_25B40
+push    dword_53EE4
+call    AIL_stop_sample
+add     esp, 4
+cmp     [esp+0Ch+arg_4], 0FFFFFFFFh
+jz      short loc_25B40
+mov     eax, [esp+0Ch+arg_4]
+shl     eax, 2
+add     eax, [esp+0Ch+arg_0]
+mov     edx, [esp+0Ch+arg_0]
+add     edx, [eax+6]
+mov     [esp+0Ch+var_8], edx
+mov     edx, [eax+6]
+mov     eax, [eax+0Ah]
+sub     eax, edx
+mov     [esp+0Ch+var_C], eax
+push    dword_53EE4
+call    AIL_init_sample
+add     esp, 4
+push    [esp+0Ch+var_C]
+push    [esp+10h+var_8]
+push    dword_53EE4
+call    AIL_set_sample_address
+add     esp, 0Ch
+push    [esp+0Ch+arg_8]
+push    dword_53EE4
+call    AIL_set_sample_loop_count
+add     esp, 8
+push    dword_53EE4
+call    AIL_start_sample
+add     esp, 4
+add     esp, 8
+pop     ebx
+retn

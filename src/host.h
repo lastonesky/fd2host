@@ -68,6 +68,18 @@ void host_shutdown(void);
  * a spawned child host so a bounded run stays bounded process-tree wide. */
 int host_exit_after_remaining(void);
 
+/* Milliseconds since host_init began.  This is the *shared* clock: the guest
+ * BIOS tick (0x40:0x6C) is advanced by an independent 18.2 Hz thread and
+ * --autokey schedules on Sleep(ms), so wall clock - not frame count - is the
+ * axis two render backends and two runs have in common.  --shot-time uses it,
+ * and so should any cross-backend comparison (docs/BACKEND.md 13.7). */
+unsigned long host_age_ms(void);
+
+/* The guest's own clock: the BIOS tick counter at 0x40:0x6C. Frame-rate
+ * independent, so it is the most exact trigger for a cross-backend frame
+ * comparison (--shot-tick=<n>); see docs/BACKEND.md 13.7. */
+uint32_t host_guest_tick(void);
+
 /* ---- entry/input layer (main_win32.c) ---- */
 
 /* Injects a virtual-key keystroke into the window (used by --autokey).

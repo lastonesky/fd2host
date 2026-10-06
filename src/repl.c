@@ -16,7 +16,7 @@
  *     addresses instead, which keeps one heap on every path.
  *
  * See repl.h for why this is safe. Groups: rle, gfx, sprite24, util, path,
- * dlg, rec.
+ * dlg, rec, svc.
  */
 #include <windows.h>
 #include <stdio.h>
@@ -33,6 +33,7 @@
 #include "game/rle2.h"
 #include "game/dlg.h"
 #include "game/rec.h"
+#include "game/svc.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -141,12 +142,23 @@ static const struct repl_entry g_repl[] = {
     { 0x168B6, "dlg_box_stage",       (void *)dlg_box_stage,        REPL_DLG },
     { 0x1685C, "dlg_frame_tile",      (void *)dlg_frame_tile,       REPL_DLG },
     { 0x16C57, "dlg_wait_key",        (void *)dlg_wait_key,         REPL_DLG },
+    { 0x164E8, "dlg_type_step",       (void *)dlg_type_step,        REPL_DLG },
 
     /* --- character record table (src/game/rec.c) -----------------------
      * Both entries read/write the game data segment directly, so the C
      * signature matches the machine code one to one (cdecl, one stack arg). */
     { 0x34894, "rec_flag",            (void *)rec_flag,             REPL_REC },
     { 0x12C60, "rec_find",            (void *)rec_find,             REPL_REC },
+
+    /* --- tick wait + PCM SFX playback (src/game/svc.c) -------------------
+     * App-level too: the globals they need are the game's, and they talk to
+     * AIL through the original entry points, which in the host are already
+     * the replacements src/ail.c installed - so nothing here depends on
+     * whether ail_install ran before repl_install. svc_wait_ticks is reached
+     * from 45 call sites and svc_play_sfx from 15, all of them ordinary
+     * cdecl callers. */
+    { 0x17AA9, "svc_wait_ticks",      (void *)svc_wait_ticks,       REPL_SVC },
+    { 0x25A96, "svc_play_sfx",        (void *)svc_play_sfx,         REPL_SVC },
 };
 
 unsigned repl_parse(const char *spec)
@@ -170,6 +182,7 @@ unsigned repl_parse(const char *spec)
         else if (!_stricmp(tok, "path"))     mask |= REPL_PATH;
         else if (!_stricmp(tok, "dlg"))      mask |= REPL_DLG;
         else if (!_stricmp(tok, "rec"))      mask |= REPL_REC;
+        else if (!_stricmp(tok, "svc"))      mask |= REPL_SVC;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

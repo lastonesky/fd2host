@@ -77,7 +77,7 @@ flags 粗筛：`gfx_A0000`（字节含 `00 00 0A 00`）172 个 —— **含误�
 AIL_*_timer* / AIL_install_DIG_INI / AIL_allocate_sample_handle / AIL_*_sample*` 等。
 
 - main 的音频初始化链：`sub_3702F(28)` → `AIL_startup` → `?` → `AIL_install_DIG_INI(0x3908B)` → `AIL_allocate_sample_handle(0x392D0)` ×2。
-- **替换策略**（PROGRESS §7.3）：51 个 `AIL_*` 入口全部打桩 → "成功但静音" 或转接现代音频后端；`*.DIG/*.MDI` 已在宿主报"文件不存在"。
+- **替换策略**（见 `docs/AUDIO.md`）：51 个 `AIL_*` 入口全部打桩 → "成功但静音" 或转接现代音频后端；`*.DIG/*.MDI` 已在宿主报"文件不存在"。
 - 无 trace 的 AIL 内部函数尚未分离（散在 `lib_nosym`），打桩以 51 个导出入口为界即可。
 
 ### 3.1 游戏实际只调用 16 个入口（宿主替换清单）
@@ -101,7 +101,7 @@ AIL_*_timer* / AIL_install_DIG_INI / AIL_allocate_sample_handle / AIL_*_sample*`
 | `AIL_set_sequence_volume` | 0x3B124 | `sub_25977`, `sub_1728C` |
 | `AIL_set_sequence_loop_count` | 0x3B1A6 | `sub_25977` |
 
-⇒ 这 16 个入口被宿主改写为 `jmp`（`port/src/ail.c`，见 `PROGRESS.md` §11）。
+⇒ 这 16 个入口被宿主改写为 `jmp`（`port/src/ail.c`，见 docs/AUDIO.md §11）。
 **游戏从不调用 `AIL_set_sample_type` / `_playback_rate` / `_volume` / `_pan`** ⇒ 采样走 AIL
 默认值（8 位无符号单声道、11025 Hz），已由运行时字节统计证实。
 
@@ -129,7 +129,7 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | `0x3ACA3` | `AIL_allocate_sequence_handle` | 音乐侧句柄分配 |
 
 **XMIDI 事件流解析规则**（delta 为 0 时省略、running status 数据、**60 ticks/beat 且墙钟时间由
-`FF 51 03` tempo 换算**、本作几乎无 note-off）见 `PROGRESS.md` §11 —— 这是播放音乐必须知道的，
+`FF 51 03` tempo 换算**、本作几乎无 note-off）见 docs/AUDIO.md §11 —— 这是播放音乐必须知道的，
 按标准 SMF 处理会得到明显错误的时长与卡音。
 
 ---
@@ -151,13 +151,15 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | `0x4EBE3` | 随机表滚动 | `ROL16(word_627B8-28652)` | ★ |
 | `0x3702F` | 库公共 thunk？ | 538 lib + 16 game 调用，`_InterlockedExchange` 包装 —— **待确认**（lib 层，不转译） | — |
 
-> **转译进展（截至第 31 轮）**：`0x4E98D`+`0x4E8D3` RLE → `rle.c`（1900）；图形 blit 工具族
+> **转译进展（截至第 33 轮）**：`0x4E98D`+`0x4E8D3` RLE → `rle.c`（1900）；图形 blit 工具族
 > `0x4EC7C..0x4EEE0` → `gfx.c`（1450）；0xC0-RLE 文本 blit `0x4EBFF/0x4EC31/0x4EBAB` → `rle2.c`（1200）；
 > 24×24 精灵 RLE 族 → `sprite24.c`（2100）；字节/调色板工具 → `util.c`（2200）；地形代价洪泛/寻路
 > `0x4E390..0x4E751` → `path.c`（1000）；表访问器 `0x4E7DD..0x4E8BC` → `tables.c`（4528）；
 > 资源加载 `0x111BA` → `res.c`（160）；对话框辅助 `0x16559/0x16E24` → `dlg.c`（800）；开框/收框动画
 > `0x165AC/0x16B43/0x168B6/0x1685C` → `dlg.c`（boxcheck 240）；等键+嘴型 `0x16C57` → `dlg.c`（keycheck 100）；
-> 其中 **44 个经 `src/repl.c` 接入运行中的游戏**（机器码逐字节对拍 + `regress` 8/8，PROGRESS §19..§31）。
+> 角色记录表 `0x34894/0x12C60` → `rec.c`（28739）；**系统服务** `0x17AA9` 等 N 个 BIOS tick /
+> `0x25A96` 播 PCM 音效 → `svc.c`，打字机步进 `0x164E8` → `dlg.c`（typecheck 1176）；
+> 其中 **49 个经 `src/repl.c` 接入运行中的游戏**（机器码逐字节对拍 + `regress` 8/8，docs/rounds/*.md（按轮次分卷，见 docs/INDEX.md）§19..§33）。
 
 游戏侧高频依赖（`lib_nosym`，需归类确认属于谁）：`0x4E381(15/64)`、`0x4EBE3(28/40)`、`0x4DF4C(56/32)`、`0x4E22A(114/13)`、`0x4E31C(101/15)` —— 0x4D000..0x4F000 段像**游戏自带工具库**（位流、24×24 图元、BIOS 封装），优先归类。
 
@@ -180,16 +182,16 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | 0 ✅ | IDA 数据库 + 测绘（本文档 + funcmap.csv） | 与 Ghidra 逐项一致 |
 | 1 | 模块归类：把 569 `game` + 0x4D000..0x4F000 段按调用图/字符串聚成模块；提取数据结构（全局 `dword_53xxx` 状态区、obj2 数据） | 交叉引用人工核对 |
 | 2 | **叶子模块先行**：DAT 解码器（BG/SHAP/ANI/RLE，格式已知于 FD2_analysis.md）→ 独立 C + 测试样本对拍 | 与原始解压输出逐字节 diff |
-|   | ✅ **RLE 已完成**（第 19 轮）：`src/game/rle.c` + `rlecheck` 机器码对拍 1900 例（PROGRESS §19） | 对拍判据已建立，可复用于后续模块 |
-|   | ✅ **图形 blit 工具族已完成**（第 21 轮）：`src/game/gfx.c`（save/restore rect、block/透明 blit、16×16 字形、scanline 重排）+ `gfxcheck` 对拍 1450 例（PROGRESS §21） | 同 §19.4 |
-|   | ✅ **24×24 精灵 RLE 族已完成**（第 22 轮）：`src/game/sprite24.c`（7 变体）+ `sprite24check` 对拍 2100 例（PROGRESS §22） | 同 §19.4 |
-|   | ✅ **字节/调色板工具已完成**（第 23 轮）：`src/game/util.c`（6 函数）+ `utilcheck` 对拍 2200 例（PROGRESS §23） | 同 §19.4 |
-|   | ✅ **地形代价洪泛/寻路已完成**（第 24 轮）：`src/game/path.c`（2 入口 + 7 内部）+ `pathcheck` 对拍 1000 例（PROGRESS §24） | 同 §19.4 |
-|   | ✅ **资源加载器已完成**（第 25 轮）：`src/game/res.c`（原 `0x111BA`）+ `rescheck` 对拍 160 例；同轮建立 **CRT 重定向对拍术**（PROGRESS §25.2） | 同 §19.4 + CRT 替换 |
-|   | ✅ **表访问器已完成**（第 27 轮）：`src/game/tables.c`（11 个）+ `tablescheck` 对拍 4528 例（PROGRESS §27） | 同 §19.4 |
-|   | ✅ **0xC0-RLE 文本 blit 已完成**（第 28 轮）：`src/game/rle2.c`（3 变体 + 共享解码器）+ `rle2check` 对拍 1200 例（PROGRESS §28） | 同 §19.4 |
-|   | ✅ **对话框辅助已完成**（第 29 轮）：`src/game/dlg.c`（`0x16559` 贴 DATO 子图 / `0x16E24` 文本上滚）+ `dlgcheck` 对拍 800 例（整帧 VGA 对比，PROGRESS §29） | 同 §19.4 |
-|   | ✅ **开框/收框动画已完成**（第 30 轮）：`src/game/dlg.c`（`0x165AC` 开框+人像滑入 / `0x16B43` 收框 / `0x168B6` 5 阶段贴框 / `0x1685C` 贴瓦片）+ `boxcheck` 对拍 240 例（VGA + 5 段快照 + 事件序列 + 每次 delay 抓帧，PROGRESS §30） | 同 §19.4；app-level 写法：全局留原地址、堆/时序服务留原机器码 |
+|   | ✅ **RLE 已完成**（第 19 轮）：`src/game/rle.c` + `rlecheck` 机器码对拍 1900 例（docs/rounds/02-translation-toolkit.md §19） | 对拍判据已建立，可复用于后续模块 |
+|   | ✅ **图形 blit 工具族已完成**（第 21 轮）：`src/game/gfx.c`（save/restore rect、block/透明 blit、16×16 字形、scanline 重排）+ `gfxcheck` 对拍 1450 例（docs/rounds/02-translation-toolkit.md §21） | 同 §19.4 |
+|   | ✅ **24×24 精灵 RLE 族已完成**（第 22 轮）：`src/game/sprite24.c`（7 变体）+ `sprite24check` 对拍 2100 例（docs/rounds/02-translation-toolkit.md §22） | 同 §19.4 |
+|   | ✅ **字节/调色板工具已完成**（第 23 轮）：`src/game/util.c`（6 函数）+ `utilcheck` 对拍 2200 例（docs/rounds/02-translation-toolkit.md §23） | 同 §19.4 |
+|   | ✅ **地形代价洪泛/寻路已完成**（第 24 轮）：`src/game/path.c`（2 入口 + 7 内部）+ `pathcheck` 对拍 1000 例（docs/rounds/03-tables-and-plumbing.md §24） | 同 §19.4 |
+|   | ✅ **资源加载器已完成**（第 25 轮）：`src/game/res.c`（原 `0x111BA`）+ `rescheck` 对拍 160 例；同轮建立 **CRT 重定向对拍术**（docs/rounds/03-tables-and-plumbing.md §25.2） | 同 §19.4 + CRT 替换 |
+|   | ✅ **表访问器已完成**（第 27 轮）：`src/game/tables.c`（11 个）+ `tablescheck` 对拍 4528 例（docs/rounds/03-tables-and-plumbing.md §27） | 同 §19.4 |
+|   | ✅ **0xC0-RLE 文本 blit 已完成**（第 28 轮）：`src/game/rle2.c`（3 变体 + 共享解码器）+ `rle2check` 对拍 1200 例（docs/rounds/04-dialog-and-ui.md §28） | 同 §19.4 |
+|   | ✅ **对话框辅助已完成**（第 29 轮）：`src/game/dlg.c`（`0x16559` 贴 DATO 子图 / `0x16E24` 文本上滚）+ `dlgcheck` 对拍 800 例（整帧 VGA 对比，docs/rounds/04-dialog-and-ui.md §29） | 同 §19.4 |
+|   | ✅ **开框/收框动画已完成**（第 30 轮）：`src/game/dlg.c`（`0x165AC` 开框+人像滑入 / `0x16B43` 收框 / `0x168B6` 5 阶段贴框 / `0x1685C` 贴瓦片）+ `boxcheck` 对拍 240 例（VGA + 5 段快照 + 事件序列 + 每次 delay 抓帧，docs/rounds/04-dialog-and-ui.md §30） | 同 §19.4；app-level 写法：全局留原地址、堆/时序服务留原机器码 |
 | 3 | 图形 blit/调色板（`gfx_A0000` 粗筛集，先精化名单） | fd2host 显示对拍 |
 | 4 | 主状态机 + 脚本 VM | 逐步替换法：机器码 vs 转译 C 逐函数对拍（**待确认**可行性） |
 | 5 | CRT/平台层 → Win32（`dos.c` 已有大半）+ AIL 打桩 | host.log 行为等价 |
@@ -222,7 +224,7 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | 3D/3E/3F/40/42/44 | 打开/关闭/读/写/lseek/IOCTL | ✅ 已实现（`40` 的 `CX=0` 截断是第 12 轮补的） |
 | 48/49/4A/4C | 分配/释放/重分配/终止 | ⚠️ `49`/`4A` 是**空操作返回成功**（账本只增不减，待改） |
 | 01/05/08 | 控制台输入类 | ✅ 返回"无键"（`06/07/08/0B` 同） |
-| **3C** | **创建/截断** | ✅ **第 12 轮补上**（缺了会崩，见 `PROGRESS.md` §12.1） |
+| **3C** | **创建/截断** | ✅ **第 12 轮补上**（缺了会崩，见 docs/rounds/01-platform-and-tooling.md §12.1） |
 | **41** | **删除** | ✅ 第 12 轮补上（游戏无调用点，属兜底） |
 | 43 / 4D / 4E / 4F / 56 | 属性 / 返回码 / 查找 / 改名 | — **静态确认无调用点，不实现**（除非出现新的 `UNHANDLED INT21`） |
 
@@ -235,16 +237,17 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | `push 0x33`（3 处，`push33_sites.txt`） | 是 `sub_1366A(…,51)` / `sub_34894` 的**标志位索**（相邻传 50/52/53），不是中断号 |
 | 运行期 `host.log` | `int 33` 从未出现 |
 
-⇒ `PROGRESS.md` §7.3 的"鼠标接真实状态"**从计划里划掉**；宿主 `int33()` stub 保留。
+⇒ "鼠标 `INT 33h` 接真实状态" 这条旧计划项**已划掉**（判定过程见
+`docs/rounds/01-platform-and-tooling.md` §12.3）；宿主 `int33()` stub 保留。
 
 > **方法论坑**：`CD xx` 裸扫必然是噪声（本作连 `CD 00`…`CD FF` 每种字节都有），必须按
-> **指令边界 + 所处区段**（桩表 / CRT / 游戏区）分类后才可用。参见 `PROGRESS.md` §8-25、§12.3。
+> **指令边界 + 所处区段**（桩表 / CRT / 游戏区）分类后才可用。参见 docs/PITFALLS.md §8-25、§12.3。
 
 ---
 
 ## 7. 状态与下轮入口
 
-**宿主侧（2026-10-05）**：`PROGRESS.md` §6 的卡点已修复 —— 根因是 INT 21h 的语义
+**宿主侧（2026-10-05）**：docs/PITFALLS.md §6 的卡点已修复 —— 根因是 INT 21h 的语义
 （`AH=42` 的 CX:DX/DX:AX 约定、`AH=48` 读全 EBX）加上需要预映射 1 MiB 内的实模式区。
 现在游戏能原生持续渲染开场动画（30 s / 960 帧无崩溃），画面颜色也已修正
 （6 位 DAC 伸展 + BGRA 通道序）。**第 12 轮**又补完了文件服务（`AH=3C/41` + `AH=40 CX=0` 截断，
@@ -256,12 +259,12 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 4. 全局状态区 `dword_53A00..0x53F00` 的结构还原（`main` 已见约 20 个成员）。
 5. **下一批源码转译目标**：★★★ `sub_15F84`（文本/脚本渲染器）：已补齐依赖 `rle2`、`dlg`
    （`0x16559/0x16E24`）与**开框/收框动画**（第 30 轮：`0x165AC/0x16B43/0x168B6/0x1685C`，
-   `boxcheck` 240 例，PROGRESS §30）；仅剩 `sub_16C57`（等键+嘴型：BDA `0x46C` 计时 +
-   `int386(0x16)` 取键 + `sub_10620` 待键判断 + `sub_4E31C` 写 DAC 端口，对拍需 VEH 服务端口/
-   注键，方案见 PROGRESS §30.5-1）与 `sub_164E8`（小，已反编译，`re/dlg_deps.txt`）。
-   清掉后即可整体转译 `sub_15F84` 对拍 VGA。
+   `boxcheck` 240 例，docs/rounds/04-dialog-and-ui.md §30）。`sub_16C57`（等键+嘴型，第 31 轮 keycheck 100 例）与
+   `sub_164E8`（打字机步进，第 33 轮 typecheck 1176 例）**均已完成**，依赖它们的两条服务
+   `0x17AA9` / `0x25A96` 也已转译（`src/game/svc.c`）。**至此可整体转译 `sub_15F84` 并对拍 VGA**
+   （对拍手法：§25.2 CRT 重定向 + §33.2 确定性时钟）。
 6. **官方逆向知识库**：`port/docs/`（已 curate 到 9 MB/274 文件，见 `docs/KEEP.md`）可作语义线索；
    但**它是另一个 FD2.EXE build**（md5 `b97caf22…`，非本项目 `a6e341a8…`），地址/常量/指令
-   一律以 `E:\FD2\FD2.EXE.i64` 复核。详见 PROGRESS §21.1/§22.1。
+   一律以 `E:\FD2\FD2.EXE.i64` 复核。详见 docs/rounds/02-translation-toolkit.md §21.1/§22.1。
 6. **平台侧遗留**（第 12 轮收尾清单）：`AH=49/4A` 改成真释放；"首次保存"与"存档变小截断"
    两条路径实测；深层路径（战斗/地图）出现新 `UNHANDLED INT21` 时按 §6.1 表补齐。
