@@ -15,7 +15,8 @@
 | 看谁改了内存 | 崩溃报告会打印 EIP 前后 48 字节 + 分配账本（`note_alloc`） |
 | 反汇编游戏函数 | Ghidra：`decompile_function` / `read_memory`；注意 obj0 是 32 位平坦代码，obj1/obj2 是数据 |
 | 已知的 Ghidra 陷阱 | `_entry`(0x3CCB4) 的反编译里充满 `in_DS/in_ES/swi()` 伪寄存器——那是段寄存器访问与 `int` 指令的建模，代码本身是正常的 32 位代码 |
-| 抓当前帧画面（不依赖窗口/桌面） | `--exit-after=30 --screenshot=E:\FD2\port\build\frame.bmp --shot-frame=700`，日志出现 `host: frame N dumped … (age … ms, guest tick …)` 后把 BMP 转 PNG 查看（`[System.Drawing.Image]::FromFile`）。**`--screenshot` 必须用绝对路径**（宿主会 chdir 到游戏目录，相对路径只在日志留一行 `host: cannot write frame dump …`）。帧数见 watchdog 行 `(N frames drawn) - X fps`。帧内容也可用 ASCII 网格打印（不依赖看图工具）：对 `GetPixel` 采样 64×24、按亮度映射成 ` .:-=+*#%@` |
+| 抓当前帧画面（不依赖窗口/桌面） | `--screenshot=<绝对路径> --shot-frame/--shot-time/--shot-tick=<n>`，日志出现 `host: frame N dumped … (age … ms, guest tick …)`。**要抓完就退出**就再加 `--exit-when-file=<该BMP>:256054`（BMP 写满 +2 s 即退，单轮 22 s；只给 `--exit-after=60` 会在画面上白等几十秒）。**`--screenshot` 必须用绝对路径**（宿主会 chdir 到游戏目录，相对路径只在日志留一行 `host: cannot write frame dump …`）。帧数见 watchdog 行 `(N frames drawn) - X fps`。帧内容也可用 ASCII 网格打印（不依赖看图工具）：对 `GetPixel` 采样 64×24、按亮度映射成 ` .:-=+*#%@` |
+| **抓“打字进行中”画面**（证明 `vm_run`+`dlg_type_step` 在宿主里跑过） | 标准 autokey + `--shot-tick=326..334`（tick 320 还没开框、335 已打完）+ `--exit-when-file` 即时退出；**过渡段跨运行会错位，要重试 + 用像素判据挑帧**（§8-55）。配方与判据见 `docs/rounds/10-typewriter-recipe.md` §40.2 |
 | **跨渲染后端比同一画面** | 用 **`--shot-tick=<n>`**（按游戏 BIOS tick `0x40:0x6C`，与帧率无关）。不要用 `--shot-frame`（帧号在不同帧率下不是同一时刻），`--shot-time` 也只到 ±1 个帧周期（GDI ±31 ms / sokol ±6 ms）的精度。见 `docs/BACKEND.md` §13.8 |
 | **换一个游戏前的静态体检** | `python re\preflight.py <exe>`（LE/对象布局/与宿主预留区冲突/AIL 特征/扩展器）+ `python re\fixup_scan.py <exe>`（fixup 语法，要 `bad=0 leftover=0`）。两个都不运行、零风险，能在开跑前报出必修点（§14.1） |
 | 看不到游戏自己的文本 | 先看日志里 `dos: write h=1 ... n=` 是不是 0（句柄无效 = 游戏 printf 全丢，§8-35）；`AH=3F/40` 对 ≤512 字节的小传输有内容日志（前 40 条） |
@@ -51,5 +52,8 @@
 - 崩溃转储会打印：EIP 前后 48 字节、`RLE w/h (@0x627B4)`、`[ESI]` 源字节、`[ESP]` 返回地址、
   EBP 帧的前 6 个参数、全部 INT21/INT31 分配块、最后被接管的中断站点；
   `port/fd2host.map` 可把宿主 RVA 反查成符号。
-- `--screenshot` 的 BMP→PNG：`[System.Drawing.Image]::FromFile(...).Save(...)`；
+- `--screenshot` 的 BMP→PNG：**用仓库现成工具** `python tools\bmp2png.py in.bmp out.png`
+  （顺带打印 bbox/ink）；或 `[System.Drawing.Image]::FromFile($bmp).Save($png,
+  [System.Drawing.Imaging.ImageFormat]::Png)` —— **注意 `Save(路径)` 存的是原图格式**（产物头
+  是 `BM`，扩展名 `.png` 会骗过文件名、骗不过看图器 ⇒ 花屏，§40 踩过）；
   画面内容也可用 ASCII 网格打印（64×24 采样 + 亮度映射 ` .:-=+*#%@`），不依赖看图工具。

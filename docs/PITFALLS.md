@@ -359,3 +359,17 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
       于是照样发布了一个**没有音乐**的版本。音频类判据必须到设备层：
       `synth: stream alive - N slices, pos P (type T), gain G, queued peak X/32767`
       —— N/pos 单调前进 = 设备在消费，`peak > 0` = 内容非静音。
+
+55. **过渡画面抓图：同配方同 tick 跨运行也会落在不同画面，必须重试 + 用像素判据挑帧**
+    （第 40 轮，是 §8-53 的执行细则）：autokey 按**墙钟**发键，游戏状态推进还受加载/调度
+    抖动影响，于是同一配方、同一 `--shot-tick` 的两次运行可能一个在台词打字中、另一个在
+    章节选择菜单（实测 tick323 = 菜单、tick326/329 = 打字中、tick345 = 菜单）。
+    - **判据顺序**：先在目标窗口连取几个 tick，拿"目标态参考帧"算逐像素差挑出正确帧
+      （本轮 框区差 455→327→325→**0** 就是进度曲线）；**静止段反而可靠** —— 打完之后
+      tick380..590 连续 10 次抓图 **0 px 差**。
+    - **省时间的抓法**：`--screenshot=<bmp>` + `--exit-when-file=<同bmp>:256054`，抓完 2 s 即退；
+      只写 `--exit-after=60` 会在静止画面上白等几十秒（单轮 60 s → **22 s**）。
+    - **BMP→PNG 别用 `Save(路径)`**：`[System.Drawing.Image]::FromFile(b).Save(p)` 存的是**原图
+      格式**（产物头 `BM`），文件名 `.png` 骗过文件名骗不过看图器 = 花屏。用
+      `python tools\bmp2png.py in.bmp out.png`，或 `.Save(p, [System.Drawing.Imaging.ImageFormat]::Png)`。
+    配方与完整判据见 `docs/rounds/10-typewriter-recipe.md` §40。

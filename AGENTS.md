@@ -164,7 +164,7 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 | 验证加载 | `letest.exe`（obj1/obj2 必须逐字节一致） |
 | 崩溃地址 → 符号 | `port/fd2host.map`（RVA = 地址 − 映像基址） |
 | 跟丢执行流 | `--trace=<n>`（VEH 置 TF 单步） |
-| 抓画面证据 | `--screenshot`（绝对路径）+ `--shot-frame` / `--shot-time` / `--shot-tick`；BMP→PNG 用 `[System.Drawing.Image]::FromFile(...).Save(...)`。跨后端比画面用 `--shot-tick`（`docs/BACKEND.md` §13.8） |
+| 抓画面证据 | `--screenshot`（绝对路径）+ `--shot-frame` / `--shot-time` / `--shot-tick`；**抓完即退**加 `--exit-when-file=<该BMP>:256054`（否则干等到 `--exit-after`，单轮 60 s → 22 s）。BMP→PNG 用 `python tools\bmp2png.py in.bmp out.png`（或 `.Save($p,[System.Drawing.Imaging.ImageFormat]::Png)` —— `Save(路径)` 存的是原图格式，会出花屏）。跨后端比画面用 `--shot-tick`（`docs/BACKEND.md` §13.8）；过渡段抓图要重试（`§8-55`） |
 | 无人值守菜单路径 | `--autokey=...`（例：`5000:SPACE;2500:RETURN;2500:RETURN;2500:DOWN,RETURN` 走 continue） |
 | 平台层还缺什么 | ida MCP 对照静态清单 `re/int21_ah_used.txt`、`re/int_sites_all.txt` vs `src/dos.c` 的 `switch (ah)`；日志会打印前 40 条 `UNHANDLED INT21` |
 | 游戏自己挂 INT 9 / 按键无效 | 日志链：`dos: INT 9 vector :=`（挂上）→ `INT 9 queued scan=` → `INT 9 injected ... esp →`（栈必须配平）；画面判据：`--screenshot` 前后两张图对比（§18.4）。若 `pop ds` 处 #GP，先看 `isr: handler bytes:` 是否被 fixup 踩过（§8-49） |
