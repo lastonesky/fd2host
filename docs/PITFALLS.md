@@ -428,3 +428,35 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
       跨页写只有在**下一页属于同一对象**时才允许（跨对象边界邻居的基址不同）。
     - **方法教训**：差异先归类再放过 = 自我安慰；用**第三家独立实现**复核
       （`python tools/ghidra_objects.py` 重导参考镜像，`tools/fixup_dump.py` 按地址查记录）。
+61. **Linux 的 SIGSEGV/SI_KERNEL 是“三重身份”，且不带故障地址**（第 45 轮，实测 `src/faultprobe32.c`，写 `dos_fault_posix.c` 前必读）：
+    Windows VEH 靠 **异常码**区分三件事：`int NN` → ACCESS_VIOLATION、特权指令 →
+    PRIV_INSTRUCTION、段选择器非法 → ACCESS_VIOLATION（EIP 都指向指令）。Linux（i386
+    compat，-m32 实测）把这三种**全部**报成 `SIGSEGV si_code=SI_KERNEL(128)`，而且
+    **`si_addr=NULL`**：
+    - **不能按“地址 < 0x10000 就改写低内存操作数”那条规则直接用 `si_addr`** —— SI_KERNEL
+      下它是 0，会把代码里无关的立即数 `00 00 00 00` 当成低内存访问改写掉（写坏代码）。
+      修法：`si_code ∈ {SEGV_MAPERR, SEGV_ACCERR}` 才 `has_addr=1`，低内存改写路径用
+      `has_addr && addr < 0x10000` 把关（`dos_fault_core`）。
+    - **区分三种身份只能靠解码 EIP 处的指令字节**：`CD xx` → 软中断分发；特权表
+      （`E4..EF/FA/FB/F4/0F 01…`）→ 模拟；`8E` → 段替换规则；其余才走访问违规报告。
+    - **int 3 的 EIP 语义相反**：Windows 报告 EIP **停在** `CC`/`CD 03` 上（probe4 实测），
+      Linux `SIGTRAP si_code=128` 的 EIP **已越过**指令 → 包装层先回退 1/2 字节（`break_fix_eip`）。
+    - **`int 0x80` 在 Linux 是真 syscall，不会进分发**（faultprobe 实测“不炸”）。FD2 的
+      `CD 80/81/82` 三条连续字节在 `0x46AC8`（步长 3，像数据表）；`-m32` 轮要实测游戏不执行它。
+    - 判据：`faultprobe32` 输出表 + `doscheck` 第 4 层（真实 `int 0x21` 被 sigaction 分发、
+      寄存器/CF 回写）两平台 49/49。
+62. **Win32 `VirtualFree(MEM_RELEASE)` 的 `dwSize` 必须是 0，传长度会静默失败**（第 45 轮）：
+    round43 抽出的 `plat_release(addr, len)` 直接把 `len` 传了进去 —— `MEM_RELEASE` + 非 0
+    长度返回 `ERROR_INVALID_PARAMETER`，而返回值没人看 ⇒ 页面**从未释放**。跑了两年没人发现，
+    因为加载器路径只 reserve/commit 不 release；`doscheck` 的
+    “released page is not readable” 第一次踩上去才暴露。
+    修法：`VirtualFree(addr, 0, MEM_RELEASE)`（区域必须整体释放，`len` 忽略）。
+    **判据**：`plat_reserve → plat_readable=1 → plat_release → plat_readable=0`（两平台 doscheck 都有）。
+63. **64 位下把 32 位寄存器帧回写进 `ucontext` 会截断 RSP/RIP（栈/instr 指针瞬间飞掉）**（第 45 轮）：
+    `dos_ctx` 是 32 位帧（游戏是 32 位），但 Linux x86-64 的宿主栈在 `0x7fff_…`、PIE 文本在
+    `0x55…`：原样写回 `gregs[REG_RSP/RIP]` 后，第一次被服务的 `int` 返回时 RSP 就丢了高 32 位
+    （实测：下一条 `push` 直接砸到 `0x03CF8xxx` 的未映射页）。修法：**merge**（保留原高 32 位、
+    只换低 32 位，`dos_fault_posix.c` 的 `MERGE64`）；`-m32` 下高半恒 0，等价于普通拷贝。
+    同一事实的另一面：**一切穿过 `dos_ctx` 的指针都必须 < 4 GiB** —— `doscheck` 把字符串、
+    缓冲区和执行 `int 0x21` 的代码桩都放进 `0x30000000` 的固定低页（与游戏同一规则），
+    否则 64 位主机的栈/`.rodata` 地址一进 `Edx` 就被截断（当场抓到过一次：`open` 收到 `0x8198C01C`）。

@@ -1,24 +1,43 @@
-# Makefile.linux - POSIX build of the parts that are already portable.
+# Makefile.linux - POSIX build of the portable parts of the host.
 #
-#   make -f Makefile.linux        -> build/letest-linux + build/platprobe-linux
-#   make -f Makefile.linux run    -> ... and run it against the game
+#   make -f Makefile.linux        -> build/letest-linux, platprobe-linux,
+#                                    doscheck-linux, faultprobe32/64
+#   make -f Makefile.linux run    -> ... and run letest against the game
 #
 # Same usage as the Windows letest.exe:
 #   build/letest-linux <FD2.EXE> <reference-image-dir>
 #
-# Only the loader has crossed over so far: le.c no longer talks to kernel32
-# (it goes through src/platform.h, POSIX side platform_posix.c). Everything
-# else still needs the VEH, the Win32 file services and the entry layers -
-# docs/rounds/13-portability.md.
+# Covered so far (docs/rounds/15-dos-and-faults.md):
+#   le.c            loader - byte-identical hashes vs Windows (§43)
+#   dos.c           INT 21h/31h/10h/16h services + fault core; the platform
+#                   fault entry is dos_fault_posix.c (sigaction, §45)
+#   platform_posix.c  the OS seam
+# Still Windows-only: host.c and the entry layers (next slice).
+#
+# Flags:
+#   -std=gnu11      plain -c11 hides POSIX.1-2008 declarations the seam needs
+#                   (clock/sigaltstack/gettid-era prototypes, ucontext's REG_*
+#                   enum) - the same trap §43.6 hit with sokol; gnu11 turns on
+#                   _DEFAULT_SOURCE.
+#   -D_FILE_OFFSET_BITS=64   off_t must be 64-bit for pread/pwrite offsets
+#                   once the game runs under -m32 (plain 32-bit off_t would
+#                   cap file positions at 2 GiB).
+#   -pthread         platform_posix.c's plat_thread
+# faultprobe32 is freestanding (-m32 -nostdlib): it measures the i386 compat
+# fault model *without* needing gcc-multilib installed.
 
 CC      ?= cc
-CFLAGS  ?= -O2 -g -std=c11 -Wall
+CFLAGS  ?= -O2 -g -std=gnu11 -Wall -D_FILE_OFFSET_BITS=64 -pthread
 SRC     := src
 OUT     := build
 GAME    ?= /mnt/e/FD2/FD2.EXE
 REFDIR  ?= /mnt/e/FD2/port/build
 
-all: $(OUT)/letest-linux $(OUT)/platprobe-linux
+DOS_SRCS   := $(SRC)/dos.c $(SRC)/dos_fault_posix.c $(SRC)/le.c $(SRC)/platform_posix.c
+PROBE32_CFLAGS := -m32 -O2 -g -ffreestanding -nostdlib -static -fno-pie -no-pie -Wall -Wextra
+
+all: $(OUT)/letest-linux $(OUT)/platprobe-linux $(OUT)/doscheck-linux \
+     $(OUT)/faultprobe32 $(OUT)/faultprobe64
 
 $(OUT)/platprobe-linux: $(SRC)/platprobe.c $(SRC)/le.c $(SRC)/platform_posix.c $(SRC)/le.h $(SRC)/platform.h
 	@mkdir -p $(OUT)
@@ -28,10 +47,28 @@ $(OUT)/letest-linux: $(SRC)/letest.c $(SRC)/le.c $(SRC)/platform_posix.c $(SRC)/
 	@mkdir -p $(OUT)
 	$(CC) $(CFLAGS) -I$(SRC) -o $@ $(SRC)/letest.c $(SRC)/le.c $(SRC)/platform_posix.c
 
+# INT 21h services + low memory + a real `int 0x21` through sigaction.
+# host_exit_after_remaining is stubbed in doscheck.c, so host.c stays out.
+$(OUT)/doscheck-linux: $(SRC)/doscheck.c $(DOS_SRCS) $(SRC)/dos.h $(SRC)/dos_fault.h $(SRC)/le.h $(SRC)/platform.h
+	@mkdir -p $(OUT)
+	$(CC) $(CFLAGS) -I$(SRC) -o $@ $(SRC)/doscheck.c $(DOS_SRCS)
+
+# Fault-model probes (docs/rounds/15-dos-and-faults.md):
+#   faultprobe32 - freestanding i386 (compat mode, the game's real mode)
+#   faultprobe64 - glibc x86-64 (compile/smoke architecture)
+$(OUT)/faultprobe32: $(SRC)/faultprobe32.c
+	@mkdir -p $(OUT)
+	$(CC) $(PROBE32_CFLAGS) -o $@ $(SRC)/faultprobe32.c
+
+$(OUT)/faultprobe64: $(SRC)/faultprobe64.c
+	@mkdir -p $(OUT)
+	$(CC) -O0 -g -Wall -o $@ $(SRC)/faultprobe64.c
+
 run: $(OUT)/letest-linux
 	$(OUT)/letest-linux $(GAME) $(REFDIR)
 
 clean:
-	rm -f $(OUT)/letest-linux $(OUT)/platprobe-linux
+	rm -f $(OUT)/letest-linux $(OUT)/platprobe-linux $(OUT)/doscheck-linux \
+	      $(OUT)/faultprobe32 $(OUT)/faultprobe64
 
 .PHONY: all run clean

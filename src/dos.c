@@ -4,9 +4,10 @@
  * --------
  * The game is 32-bit flat-model DOS/4GW code. All of its environment access
  * happens through `int NN` instructions, privileged port instructions and the
- * 0xA0000 frame buffer. None of that may run as-is in a Win32 user process, so
- * this module services the original interrupt with Win32 calls. Privileged
- * IN/OUT instructions are caught as EXCEPTION_PRIV_INSTRUCTION and emulated.
+ * 0xA0000 frame buffer. None of that may run as-is in a user process, so
+ * this module services the original interrupt with host OS facilities - files,
+ * time, threads and process control all go through src/platform.h. Privileged
+ * IN/OUT instructions are caught by the fault handler and emulated.
  *
  * The software interrupts are *not* patched any more. They used to be
  * rewritten from `CD xx` to `CC 90` at load time and looked up in a site
@@ -18,7 +19,11 @@
  * in ring 3 raises EXCEPTION_ACCESS_VIOLATION and `int 3` raises
  * EXCEPTION_BREAKPOINT, both with EIP pointing *at* the instruction, so the
  * vector can simply be read from the faulting instruction and the guest code
- * is left byte-for-byte intact.
+ * is left byte-for-byte intact. src/faultprobe32.c measured the Linux side:
+ * `int NN` arrives as SIGSEGV with si_code=SI_KERNEL, si_addr=NULL and EIP at
+ * the instruction too - the same rule works (see dos_fault.h for the full
+ * mapping; the instruction bytes, not the signal, tell int/privileged/
+ * segment faults apart).
  *
  * That is a *replacement* of the DOS/flat-hardware interfaces, not a DOS
  * emulator: there is no real-mode CPU, no interrupt controller, no option ROM.
@@ -26,10 +31,10 @@
 
 #include "dos.h"
 #include "le.h"
+#include "dos_fault.h"
 #include "host.h"        /* host_exit_after_remaining: bound a spawned child */
 #include <stdio.h>
 #include <string.h>
-#include <io.h>        /* _get_osfhandle: CRT fd -> OS handle */
 
 /* ---------------------------------------------------------------- globals */
 
@@ -48,8 +53,7 @@ static int       g_trace_mode;         /* single-step tracing enabled */
 /* per-interrupt statistics */
 static unsigned  g_calls[256];
 static unsigned  g_unknown[256];
-static HANDLE    g_child;          /* process started by INT 21h AH=4B       */
-static int       g_child_exit;     /* its exit code, returned by AH=4D        */
+static int       g_child_exit;     /* exit code of an AH=4B child (AH=4D)     */
 
 /* The game's own keyboard ISR (INT 9), installed with INT 21h AH=25h AL=09h.
  * Windows never raises hardware interrupts in this process, so a game that
@@ -63,7 +67,7 @@ static uint32_t  g_guest_int9;
 static uint8_t   g_kbd_last_sc;    /* what `in al,60h` returns next        */
 static uint32_t  g_isr_lo, g_isr_hi;  /* EIP window of the injected handler  */
 static int       g_isr_log_left;   /* exceptions left to log after a key    */
-static DWORD     g_guest_tid;      /* the thread that executes guest code  */
+static uint64_t  g_guest_tid;      /* the thread that executes guest code  */
 
 /* Ring of the most recent *unusual* VEH events (privileged instructions, access
  * violations, stray breakpoints). Ordinary int3 trap sites are excluded - there
@@ -73,7 +77,7 @@ static DWORD     g_guest_tid;      /* the thread that executes guest code  */
 static struct { uint32_t eip, code, info; } g_veh_ring[VEH_RING];
 static unsigned g_veh_pos;
 
-static void veh_record(uint32_t eip, DWORD code, uint32_t info)
+static void veh_record(uint32_t eip, uint32_t code, uint32_t info)
 {
     unsigned i = g_veh_pos & (VEH_RING - 1);
     g_veh_ring[i].eip = eip;
@@ -100,7 +104,8 @@ static unsigned  g_port_ops;
 #define DOS_MAX_FILES 64
 
 typedef struct {
-    HANDLE h;
+    plat_file h;
+    uint32_t  pos;      /* DOS file position: owned here, not by the OS  */
     int    used;
     int    is_dev;      /* 1 = console/stdaux/stdprn                   */
     char   name[64];    /* for logs: which file a handle refers to     */
@@ -126,7 +131,7 @@ static struct {
 } g_trap_ring[TRAP_RING];
 static int g_trap_ring_pos;
 
-static void trap_note(uint8_t vec, uint32_t eip, const CONTEXT *c)
+static void trap_note(uint8_t vec, uint32_t eip, const dos_ctx *c)
 {
     int i = g_trap_ring_pos++ & (TRAP_RING - 1);
     g_trap_ring[i].vec = vec;
@@ -267,22 +272,24 @@ static void files_init(void)
     memset(g_files, 0, sizeof g_files);
     /* 0=stdin 1=stdout 2=stderr 3=stdaux 4=stdprn
      *
-     * Ask the CRT for the OS handle behind fd 0/1/2 rather than
-     * GetStdHandle(): main() freopen()s stdout/stderr onto host.log, which
-     * re-points fd 1/2 but does NOT update the Win32 STD_*_HANDLE slots - so
-     * GetStdHandle() handed the guest a NULL handle and every game printf was
-     * written nowhere (observed as `dos: write h=1 want=39 n=0`). */
+     * Ask the CRT for the OS handle behind fd 0/1/2 rather than the STD_*
+     * slots: main() freopen()s stdout/stderr onto host.log, which re-points
+     * fd 1/2 but does NOT update them - on Windows GetStdHandle() handed the
+     * guest a NULL handle and every game printf was written nowhere
+     * (observed as `dos: write h=1 want=39 n=0`). On POSIX the fd *is* the
+     * handle, so plat_console_file(i) is exactly what the CRT redirected. */
     for (i = 0; i < 5; i++) {
-        intptr_t h = (i < 3) ? _get_osfhandle(i) : -1;
         g_files[i].used = 1;
         g_files[i].is_dev = 1;
-        g_files[i].h = (h == -1) ? INVALID_HANDLE_VALUE : (HANDLE)h;
+        g_files[i].h = (i < 3) ? plat_console_file(i) : PLAT_FILE_INVALID;
     }
     printf("dos: console handles stdin=%p stdout=%p stderr=%p\n",
-           g_files[0].h, g_files[1].h, g_files[2].h);
+           (void *)(uintptr_t)g_files[0].h,
+           (void *)(uintptr_t)g_files[1].h,
+           (void *)(uintptr_t)g_files[2].h);
 }
 
-static int file_alloc(HANDLE h, const char *name)
+static int file_alloc(plat_file h, const char *name)
 {
     int i;
     for (i = 5; i < DOS_MAX_FILES; i++) {
@@ -290,6 +297,9 @@ static int file_alloc(HANDLE h, const char *name)
             g_files[i].used = 1;
             g_files[i].is_dev = 0;
             g_files[i].h = h;
+            g_files[i].pos = 0;        /* a fresh handle starts at BOF -
+                                        * the OS position used to provide
+                                        * this for free (ReadFile/CreateFile) */
             g_files[i].name[0] = 0;
             if (name) {
                 strncpy(g_files[i].name, name, sizeof g_files[i].name - 1);
@@ -301,21 +311,10 @@ static int file_alloc(HANDLE h, const char *name)
     return -1;
 }
 
-/* Windows error -> DOS error code. sopen() only really distinguishes
- * 2 (file not found) - it is the trigger for the O_CREAT fallback - but
- * reporting the plausible code makes failures easier to read in the log. */
-static uint32_t dos_win_error(DWORD e)
-{
-    switch (e) {
-    case ERROR_FILE_NOT_FOUND:
-    case ERROR_PATH_NOT_FOUND:   return 2;   /* file not found  */
-    case ERROR_ACCESS_DENIED:    return 5;   /* access denied   */
-    case ERROR_SHARING_VIOLATION:return 5;
-    case ERROR_INVALID_HANDLE:   return 6;   /* invalid handle  */
-    case ERROR_TOO_MANY_OPEN_FILES: return 4;
-    default:                     return 5;
-    }
-}
+/* Platform error -> DOS error code, mapped per OS in platform.h
+ * (plat_error_to_dos): sopen() only really distinguishes 2 (file not found) -
+ * it is the trigger for the O_CREAT fallback - but reporting the plausible
+ * code makes failures easier to read in the log. */
 
 /* --------------------------------------------------------- low memory init */
 
@@ -399,22 +398,21 @@ void dos_init_lowmem(void)
 /* The BIOS tick counter at 0x40:0x6C is the game's time source (it polls it
  * instead of hooking the timer interrupt). Keep it advancing at the classic
  * 18.2 Hz so animations and delays progress. */
-static DWORD WINAPI bios_tick_thread(LPVOID param)
+static void bios_tick_thread(void *param)
 {
     (void)param;
     for (;;) {
-        Sleep(55);
+        plat_sleep_ms(55);
         if (g_lowmem) {
             uint32_t t = *(uint32_t *)(g_lowmem + 0x46C);
             *(uint32_t *)(g_lowmem + 0x46C) = t + 1;
         }
     }
-    return 0;
 }
 
 static void bios_tick_start(void)
 {
-    CreateThread(NULL, 0, bios_tick_thread, NULL, 0, NULL);
+    plat_thread(bios_tick_thread, NULL);   /* detached */
 }
 
 /* ------------------------------------------------------- interrupt census */
@@ -476,7 +474,7 @@ int dos_patch_lowmem_refs(void)
 
 /* --------------------------------------------------------------- services */
 
-static void log_call(const char *what, CONTEXT *c)
+static void log_call(const char *what, dos_ctx *c)
 {
     g_verbose = g_verbose;
     printf("  %-28s eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X\n",
@@ -484,15 +482,16 @@ static void log_call(const char *what, CONTEXT *c)
            (unsigned)c->Edx, (unsigned)c->Esi, (unsigned)c->Edi);
 }
 
-static void set_cf(CONTEXT *c, int on)
+static void set_cf(dos_ctx *c, int on)
 {
     if (on) c->EFlags |= 1u;
     else    c->EFlags &= ~1u;
 }
 
 /* Windows encodes the access kind in ExceptionInformation[0]: 0=read,
- * 1=write, 8=execute (instruction fetch). */
-static const char *fault_kind(ULONG_PTR kind)
+ * 1=write, 8=execute (instruction fetch). Linux derives the same three
+ * values from the page-fault error code (dos_fault_posix.c). */
+static const char *fault_kind(int kind)
 {
     switch (kind) {
     case 0: return "read from";
@@ -509,12 +508,12 @@ static const char *fault_kind(ULONG_PTR kind)
  * answers "did the read return data / did the message actually get written". */
 static int g_rw_logged;
 
-static void log_small_io(const char *rw, int hnd, DWORD want, DWORD n,
+static void log_small_io(const char *rw, int hnd, unsigned want, unsigned n,
                          const void *buf)
 {
     const uint8_t *p = (const uint8_t *)buf;
     char txt[41];
-    DWORD i;
+    unsigned i;
 
     if (g_rw_logged >= 40 || want > 512)
         return;
@@ -534,24 +533,15 @@ static void log_small_io(const char *rw, int hnd, DWORD want, DWORD n,
  * Guest code runs natively, so its pointers are ordinary pointers in this
  * process - but an argument handed to an unimplemented INT 21h service can be
  * anything, and dereferencing garbage kills the host instead of the game.
- * Every string we read out of a guest structure therefore goes through a
- * VirtualQuery check first (PROGRESS.md §8-45). */
+ * Every string we read out of a guest structure therefore goes through the
+ * platform readability probe first (PROGRESS.md §8-45: VirtualQuery on
+ * Windows, process_vm_readv(self) on Linux). */
 
 static int guest_ptr_ok(const void *p, size_t len)
 {
-    MEMORY_BASIC_INFORMATION mbi;
-    const uint8_t *b = (const uint8_t *)p;
-
     if (!p || !len)
         return 0;
-    if (VirtualQuery(b, &mbi, sizeof mbi) != sizeof mbi || mbi.State != MEM_COMMIT)
-        return 0;
-    if (b + len <= (const uint8_t *)mbi.BaseAddress + mbi.RegionSize)
-        return 1;
-    /* crosses a region boundary: the last byte must be committed too */
-    if (VirtualQuery(b + len - 1, &mbi, sizeof mbi) != sizeof mbi)
-        return 0;
-    return mbi.State == MEM_COMMIT;
+    return plat_readable(p, len);
 }
 
 static void guest_str(char *dst, size_t cap, const void *src)
@@ -621,21 +611,44 @@ void dos_set_cmdtail(const char *tail)
            (unsigned)n, tail);
 }
 
-/* Called by the watchdog before ExitProcess: a P_WAIT child is normally
+/* Called by the watchdog before plat_exit: a P_WAIT child is normally
  * reaped by AH=4B itself, but if the parent dies first the child would keep
  * running with nobody watching it. */
 void dos_terminate_child(void)
 {
-    if (!g_child)
+    if (!plat_child_present())
         return;
     printf("dos: terminating child process before shutdown\n");
-    TerminateProcess(g_child, 0);
-    WaitForSingleObject(g_child, 2000);
-    CloseHandle(g_child);
-    g_child = NULL;
+    plat_child_kill();
 }
 
-static void int21(CONTEXT *c)
+/* A block for the guest's INT 21h AH=48 / INT 31h AX=0501/0503 requests:
+ * reserve anywhere + commit RW, like the old VirtualAlloc(NULL, ...,
+ * MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE). The result becomes a 32-bit
+ * linear address the guest dereferences directly, so a block above 4 GiB
+ * (possible only in a 64-bit build - the game itself needs -m32) is
+ * released and refused instead of being handed over truncated. */
+static void *dos_alloc_block(uint32_t bytes)
+{
+    void *p = plat_reserve(0, bytes);
+
+    if (!p)
+        return NULL;
+    if ((uintptr_t)p > 0xFFFFFFFFu) {
+        printf("dos:   block at 0x%zX does not fit a 32-bit linear address "
+               "(a 64-bit build cannot host the game)\n",
+               (size_t)(uintptr_t)p);
+        plat_release((uintptr_t)p, bytes);
+        return NULL;
+    }
+    if (!plat_commit((uintptr_t)p, bytes, PLAT_PROT_RW)) {
+        plat_release((uintptr_t)p, bytes);
+        return NULL;
+    }
+    return p;
+}
+
+static void int21(dos_ctx *c)
 {
     uint8_t ah = (uint8_t)(c->Eax >> 8);
     g_calls[0x21]++;
@@ -684,7 +697,8 @@ static void int21(CONTEXT *c)
 
     case 0x3D: {                                /* open file */
         const char *name = (const char *)(uintptr_t)c->Edx;
-        HANDLE h;
+        plat_file h;
+        unsigned err;
         /* Miles AIL loads 16-bit real-mode sound-card drivers (*.DIG / *.MDI)
          * and jumps straight into them. That code cannot run in this process,
          * so the files are reported as missing: AIL then starts with no digital
@@ -696,11 +710,10 @@ static void int21(CONTEXT *c)
             c->Eax = 2;                         /* file not found */
             break;
         }
-        h = CreateFileA(name, GENERIC_READ | GENERIC_WRITE,
-                        FILE_SHARE_READ, NULL, OPEN_EXISTING,
-                        FILE_ATTRIBUTE_NORMAL, NULL);
-        printf("dos: open '%s' -> %p (%lu)\n", name, h, GetLastError());
-        if (h == INVALID_HANDLE_VALUE) { set_cf(c, 1); c->Eax = 2; break; }
+        h = plat_file_open(name);
+        err = (h == PLAT_FILE_INVALID) ? plat_error() : 0;
+        printf("dos: open '%s' -> %p (%u)\n", name, (void *)(uintptr_t)h, err);
+        if (h == PLAT_FILE_INVALID) { set_cf(c, 1); c->Eax = 2; break; }
         c->Eax = (uint32_t)file_alloc(h, name);
         set_cf(c, c->Eax == (uint32_t)-1);
         break;
@@ -715,22 +728,21 @@ static void int21(CONTEXT *c)
          * the CRT returned NULL FILE* and the game crashed dereferencing
          * it (AV at 0x377B2 reading address 0xC, see PROGRESS.md §12). */
         const char *name = (const char *)(uintptr_t)c->Edx;
-        DWORD err = 0;
-        HANDLE h = CreateFileA(name, GENERIC_READ | GENERIC_WRITE,
-                               FILE_SHARE_READ, NULL, CREATE_ALWAYS,
-                               FILE_ATTRIBUTE_NORMAL, NULL);
+        unsigned err = 0;
+        plat_file h = plat_file_create(name);
         int hnd;
-        if (h == INVALID_HANDLE_VALUE) {
-            err = GetLastError();
-            printf("dos: create '%s' -> FAILED (%lu)\n", name, err);
+        if (h == PLAT_FILE_INVALID) {
+            err = plat_error();
+            printf("dos: create '%s' -> FAILED (%u)\n", name, err);
             set_cf(c, 1);
-            c->Eax = (c->Eax & 0xFFFF0000u) | dos_win_error(err);
+            c->Eax = (c->Eax & 0xFFFF0000u) | plat_error_to_dos(err);
             break;
         }
         hnd = file_alloc(h, name);
-        printf("dos: create '%s' -> %p (dos handle %d)\n", name, h, hnd);
+        printf("dos: create '%s' -> %p (dos handle %d)\n", name,
+               (void *)(uintptr_t)h, hnd);
         if (hnd < 0) {
-            CloseHandle(h);
+            plat_file_close(h);
             set_cf(c, 1);
             c->Eax = (c->Eax & 0xFFFF0000u) | 4;      /* too many open files */
             break;
@@ -742,14 +754,14 @@ static void int21(CONTEXT *c)
 
     case 0x41: {                                /* delete file */
         const char *name = (const char *)(uintptr_t)c->Edx;
-        if (DeleteFileA(name)) {
+        if (plat_file_delete(name) == 0) {
             printf("dos: delete '%s'\n", name);
             set_cf(c, 0);
         } else {
-            DWORD err = GetLastError();
-            printf("dos: delete '%s' -> FAILED (%lu)\n", name, err);
+            unsigned err = plat_error();
+            printf("dos: delete '%s' -> FAILED (%u)\n", name, err);
             set_cf(c, 1);
-            c->Eax = (c->Eax & 0xFFFF0000u) | dos_win_error(err);
+            c->Eax = (c->Eax & 0xFFFF0000u) | plat_error_to_dos(err);
         }
         break;
     }
@@ -757,7 +769,7 @@ static void int21(CONTEXT *c)
     case 0x3E: {                                /* close file */
         int hnd = (int)(c->Ebx & 0xFFFF);
         if (hnd > 4 && hnd < DOS_MAX_FILES && g_files[hnd].used) {
-            CloseHandle(g_files[hnd].h);
+            plat_file_close(g_files[hnd].h);
             g_files[hnd].used = 0;
         }
         set_cf(c, 0);
@@ -767,11 +779,13 @@ static void int21(CONTEXT *c)
     case 0x3F: {                                /* read */
         int hnd = (int)(c->Ebx & 0xFFFF);
         void *buf = (void *)(uintptr_t)c->Edx;
-        DWORD want = c->Ecx, got = 0;
+        unsigned want = c->Ecx, got = 0;
         if (hnd < DOS_MAX_FILES && g_files[hnd].used && !g_files[hnd].is_dev) {
-            if (!ReadFile(g_files[hnd].h, buf, want, &got, NULL)) {
+            if (plat_file_read_at(g_files[hnd].h, g_files[hnd].pos,
+                                  buf, want, &got) != 0) {
                 set_cf(c, 1); c->Eax = 5; break;
             }
+            g_files[hnd].pos += got;
             log_small_io("read ", hnd, want, got, buf);
             set_cf(c, 0); c->Eax = got;
         } else {
@@ -783,41 +797,43 @@ static void int21(CONTEXT *c)
     case 0x40: {                                /* write */
         int hnd = (int)(c->Ebx & 0xFFFF);
         void *buf = (void *)(uintptr_t)c->Edx;
-        DWORD want = c->Ecx, wrote = 0;
+        unsigned want = c->Ecx, wrote = 0;
         if (hnd < DOS_MAX_FILES && g_files[hnd].used) {
             if (want == 0) {
                 /* DOS: a zero-length write truncates the file at the current
                  * file position. Watcom's sopen() implements O_TRUNC (the
                  * "wb" mode of fopen) with exactly this call, right after
                  * opening the file - i.e. it expects the whole file to be
-                 * dropped. Windows' WriteFile(h, ..., 0, ...) is a no-op, so
-                 * the truncation has to be done explicitly. Without it a
-                 * save that shrinks leaves the tail of the old save behind. */
+                 * dropped. WriteFile(h, ..., 0, ...) and write(fd, ..., 0)
+                 * are both no-ops, so the truncation has to be done
+                 * explicitly (PITFALLS §8-31). Without it a save that
+                 * shrinks leaves the tail of the old save behind. */
                 if (!g_files[hnd].is_dev) {
-                    LONG pos = SetFilePointer(g_files[hnd].h, 0, NULL, FILE_CURRENT);
-                    if (pos == INVALID_SET_FILE_POINTER && GetLastError() != NO_ERROR) {
+                    if (plat_file_truncate(g_files[hnd].h,
+                                           g_files[hnd].pos) != 0) {
+                        unsigned err = plat_error();
+                        printf("dos: truncate '%s' to %ld FAILED (%u)\n",
+                               g_files[hnd].name, (long)g_files[hnd].pos, err);
                         set_cf(c, 1);
-                        c->Eax = (c->Eax & 0xFFFF0000u) | dos_win_error(GetLastError());
-                        break;
-                    }
-                    if (!SetEndOfFile(g_files[hnd].h)) {
-                        DWORD err = GetLastError();
-                        printf("dos: truncate '%s' to %ld FAILED (%lu)\n",
-                               g_files[hnd].name, (long)pos, err);
-                        set_cf(c, 1);
-                        c->Eax = (c->Eax & 0xFFFF0000u) | dos_win_error(err);
+                        c->Eax = (c->Eax & 0xFFFF0000u) | plat_error_to_dos(err);
                         break;
                     }
                     printf("dos: truncate '%s' to %ld bytes\n",
-                           g_files[hnd].name, (long)pos);
+                           g_files[hnd].name, (long)g_files[hnd].pos);
                 }
                 set_cf(c, 0); c->Eax = 0;
                 break;
             }
-            WriteFile(g_files[hnd].h, buf, want, &wrote, NULL);
+            if (g_files[hnd].is_dev)
+                plat_file_write_seq(g_files[hnd].h, buf, want, &wrote);
+            else if (plat_file_write_at(g_files[hnd].h, g_files[hnd].pos,
+                                        buf, want, &wrote) != 0)
+                wrote = 0;
             if (want && !wrote)
                 printf("dos: write h=%d -> 0 bytes (handle %p, err %lu)\n",
-                       hnd, g_files[hnd].h, GetLastError());
+                       hnd, (void *)(uintptr_t)g_files[hnd].h,
+                       (unsigned long)plat_error());
+            g_files[hnd].pos += wrote;
             log_small_io("write", hnd, want, wrote, buf);
         }
         set_cf(c, 0); c->Eax = wrote;
@@ -826,19 +842,43 @@ static void int21(CONTEXT *c)
 
     case 0x42: {                                /* lseek */
         int hnd = (int)(c->Ebx & 0xFFFF);
-        /* DOS: CX:DX = unsigned 32-bit offset, AL = origin. The previous
-         * code passed CX as SetFilePointer's *high 32 bits*, so seeking to
+        /* DOS: CX:DX = 32-bit offset, AL = origin. The previous code passed
+         * CX as SetFilePointer's *high 32 bits*, so seeking to
          * CX:DX = 0x002A:1CF3 landed at (0x2A<<32)|0x1CF3 (~171 GB) - a
          * legal 64-bit position past EOF. No error was raised, but the next
          * read returned 0 bytes and the game decompressed stale garbage
-         * (crash: RLE run walked off the VGA window at 0xC0005). */
+         * (crash: RLE run walked off the VGA window at 0xC0005).
+         *
+         * The position now lives here (one arithmetic path on both
+         * platforms), only SEEK_END's file size comes from the platform.
+         * Offsets are added *signed*, exactly like the old (LONG) cast, so a
+         * negative SEEK_CUR/END still works and a negative SEEK_SET still
+         * fails with AX=6. */
         uint32_t pos = ((c->Ecx & 0xFFFFu) << 16) | (c->Edx & 0xFFFFu);
-        DWORD meth = c->Eax & 0xFF;
+        unsigned meth = c->Eax & 0xFF;
         if (hnd < DOS_MAX_FILES && g_files[hnd].used && !g_files[hnd].is_dev) {
-            DWORD r = SetFilePointer(g_files[hnd].h, (LONG)pos, NULL, meth);
-            if (r == INVALID_SET_FILE_POINTER && GetLastError() != NO_ERROR) {
-                set_cf(c, 1); c->Eax = 6; break;
+            int64_t base;
+            int64_t np;
+            uint32_t r;
+            if (meth == 0) {
+                base = 0;
+            } else if (meth == 1) {
+                base = g_files[hnd].pos;
+            } else if (meth == 2) {
+                uint64_t sz;
+                if (plat_file_size(g_files[hnd].h, &sz) != 0) {
+                    set_cf(c, 1); c->Eax = 6; break;
+                }
+                base = (int64_t)sz;
+            } else {
+                set_cf(c, 1); c->Eax = 6; break;   /* invalid origin */
             }
+            np = base + (int32_t)pos;
+            if (np < 0) {
+                set_cf(c, 1); c->Eax = 6; break;   /* before BOF, like Win32 */
+            }
+            r = (uint32_t)(np & 0xFFFFFFFFu);
+            g_files[hnd].pos = r;
             /* New position DX:AX (for callers assembling DX:AX); leaving
              * the full 32-bit value in EAX serves callers that read EAX as
              * one register - for files < 4 GB both readings agree. */
@@ -858,31 +898,31 @@ static void int21(CONTEXT *c)
         uint8_t al = (uint8_t)(c->Eax & 0xFF);
 
         if (al == 0x00) {                       /* get attributes -> AL  */
-            DWORD a = GetFileAttributesA(name);
+            uint32_t flags = 0;
             uint32_t d;
-            if (a == INVALID_FILE_ATTRIBUTES) {
+            if (plat_file_attrs(name, &flags) != 0) {
                 printf("dos: get attributes '%s' -> not found\n", name);
                 set_cf(c, 1);
                 c->Eax = (c->Eax & 0xFFFF0000u) | 2;
                 break;
             }
             d = 0x20;                           /* default: archive      */
-            if (a & FILE_ATTRIBUTE_READONLY)  d |= 0x01;
-            if (a & FILE_ATTRIBUTE_HIDDEN)    d |= 0x02;
-            if (a & FILE_ATTRIBUTE_SYSTEM)    d |= 0x04;
-            if (a & FILE_ATTRIBUTE_DIRECTORY) d = (d & ~0x20u) | 0x10;
+            if (flags & PLAT_FILE_RDONLY)  d |= 0x01;
+            if (flags & PLAT_FILE_HIDDEN)   d |= 0x02;
+            if (flags & PLAT_FILE_SYSTEM)   d |= 0x04;
+            if (flags & PLAT_FILE_DIR)      d = (d & ~0x20u) | 0x10;
             printf("dos: get attributes '%s' -> 0x%X\n", name, (unsigned)d);
             c->Eax = (c->Eax & 0xFFFFFF00u) | d;
             set_cf(c, 0);
         } else if (al == 0x01) {                /* set attributes        */
             uint8_t cl = (uint8_t)(c->Ecx & 0xFF);
-            DWORD a = FILE_ATTRIBUTE_NORMAL;
-            if (cl & 0x01) a = FILE_ATTRIBUTE_READONLY;
-            if (cl & 0x02) a |= FILE_ATTRIBUTE_HIDDEN;
-            if (cl & 0x04) a |= FILE_ATTRIBUTE_SYSTEM;
-            if (!SetFileAttributesA(name, a)) {
+            uint32_t flags = 0;
+            if (cl & 0x01) flags |= PLAT_FILE_RDONLY;
+            if (cl & 0x02) flags |= PLAT_FILE_HIDDEN;
+            if (cl & 0x04) flags |= PLAT_FILE_SYSTEM;
+            if (plat_file_set_attrs(name, flags) != 0) {
                 printf("dos: set attributes '%s' = 0x%X -> failed (%lu)\n",
-                       name, cl, GetLastError());
+                       name, cl, (unsigned long)plat_error());
                 set_cf(c, 1);
                 c->Eax = (c->Eax & 0xFFFF0000u) | 5;
                 break;
@@ -927,16 +967,15 @@ static void int21(CONTEXT *c)
         /* The protected-mode caller dereferences the returned value directly,
          * so it must be a linear address - which also means the block does not
          * have to live below 1 MiB. AIL asks for 512 KiB at a time. */
-        p = VirtualAlloc(NULL, bytes, MEM_RESERVE | MEM_COMMIT,
-                         PAGE_READWRITE);
+        p = dos_alloc_block(bytes);
         if (p) {
             printf("dos: INT21 alloc %u paras -> linear 0x%p\n", paras, p);
             note_alloc((uint32_t)(uintptr_t)p, bytes, "INT21 alloc");
             c->Eax = (uint32_t)(uintptr_t)p;
             set_cf(c, 0);
         } else {
-            printf("dos: INT21 alloc %u paras -> FAILED (%lu)\n",
-                   paras, GetLastError());
+            printf("dos: INT21 alloc %u paras -> FAILED (%u)\n",
+                   paras, plat_error());
             c->Eax = 8; c->Ebx = 0;
             set_cf(c, 1);
         }
@@ -964,19 +1003,19 @@ static void int21(CONTEXT *c)
         break;
 
     case 0x2A: {                                /* get date */
-        SYSTEMTIME st;
-        GetLocalTime(&st);
-        c->Eax = (c->Eax & 0xFFFFFF00u) | (uint32_t)st.wDayOfWeek; /* AL = weekday */
-        c->Ecx = ((uint32_t)st.wYear << 8) | st.wMonth;
-        c->Edx = ((uint32_t)st.wDay << 8) | 0;
+        plat_time t;
+        plat_local_time(&t);
+        c->Eax = (c->Eax & 0xFFFFFF00u) | t.weekday;      /* AL = weekday */
+        c->Ecx = (t.year << 8) | t.month;
+        c->Edx = (t.day << 8) | 0;
         set_cf(c, 0);
         break;
     }
     case 0x2C: {                                /* get time */
-        SYSTEMTIME st;
-        GetLocalTime(&st);
-        c->Ecx = ((uint32_t)st.wHour << 8) | st.wMinute;
-        c->Edx = ((uint32_t)st.wSecond << 8) | (st.wMilliseconds / 10);
+        plat_time t;
+        plat_local_time(&t);
+        c->Ecx = (t.hour << 8) | t.minute;
+        c->Edx = (t.second << 8) | (t.ms / 10);
         c->Eax &= 0xFFFFFF00u;                  /* DOS returns AL = 0 */
         set_cf(c, 0);
         break;
@@ -1023,15 +1062,11 @@ static void int21(CONTEXT *c)
          *   +0 dword env, +4 word seg | +6 dword cmd tail, +10 word seg ...
          * so the tail's linear address is the dword at ES:BX+6. */
         uint8_t al = (uint8_t)(c->Eax & 0xFF);
-        char path[MAX_PATH] = "";
+        char path[PLAT_MAX_PATH] = "";
         char tail[128] = "";
-        char self[MAX_PATH] = "", selfdir[MAX_PATH] = "";
-        char cwd[MAX_PATH] = "", child[MAX_PATH] = "", clog[MAX_PATH] = "";
-        char exitarg[40] = "";
-        char cmdline[MAX_PATH * 4 + 640];
         const uint8_t *blk;
-        STARTUPINFOA si;
-        PROCESS_INFORMATION pi;
+        plat_exec_req req;
+        int child_code = 0;
 
         guest_str(path, sizeof path, (const void *)(uintptr_t)c->Edx);
         blk = (const uint8_t *)(uintptr_t)c->Ebx;
@@ -1047,60 +1082,29 @@ static void int21(CONTEXT *c)
             break;
         }
 
-        GetModuleFileNameA(NULL, self, MAX_PATH);
-        GetCurrentDirectoryA(MAX_PATH, cwd);
-        if (!GetFullPathNameA(path, MAX_PATH, child, NULL))
-            strncpy(child, path, sizeof child - 1)[sizeof child - 1] = 0;
-        strncpy(selfdir, self, sizeof selfdir - 1);
-        selfdir[sizeof selfdir - 1] = 0;
-        {
-            char *slash = strrchr(selfdir, '\\');
-            if (slash) *slash = 0;
-        }
-        /* A child that freopen()s host.log would truncate the parent's log
-         * ("w" mode), so every generation gets its own file. */
-        _snprintf(clog, sizeof clog - 1, "%s\\host.%lu.log", selfdir,
-                  (unsigned long)GetCurrentProcessId());
-        clog[sizeof clog - 1] = 0;
-        if (al == 0) {                          /* P_WAIT: bound the child too */
+        /* Everything OS from here on lives in the platform seam: resolving
+         * our own image/cwd, the per-generation child log, CreateProcess vs
+         * fork+execv, and the wait. */
+        req.guest_path = path;
+        req.cmdtail    = tail;
+        req.wait       = (al == 0);              /* AL=00: P_WAIT       */
+        req.exit_after = -1;
+        if (req.wait) {                           /* bound the child too */
             int rem = host_exit_after_remaining();
-            if (rem > 0) {
-                _snprintf(exitarg, sizeof exitarg - 1, " --exit-after=%d", rem);
-                exitarg[sizeof exitarg - 1] = 0;
-            }
+            if (rem > 0)
+                req.exit_after = rem;
         }
-        _snprintf(cmdline, sizeof cmdline - 1,
-                  "\"%s\" --exe=\"%s\" --gamedir=\"%s\" --log=\"%s\" "
-                  "--cmdtail=\"%s\"%s",
-                  self, child, cwd, clog, tail, exitarg);
-        cmdline[sizeof cmdline - 1] = 0;
 
         printf("dos: INT 21h AH=4B exec al=%u '%s' tail='%s'\n",
                (unsigned)al, path, tail);
-        printf("dos:   child: %s\n", cmdline);
 
-        ZeroMemory(&si, sizeof si);
-        si.cb = sizeof si;
-        if (!CreateProcessA(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL,
-                            &si, &pi)) {
-            printf("dos:   CreateProcess failed (%lu)\n", GetLastError());
+        if (plat_exec_child(&req, &child_code) != 0) {
             set_cf(c, 1);
             c->Eax = (c->Eax & 0xFFFFFF00u) | 1;
             break;
         }
-        CloseHandle(pi.hThread);
-        g_child = pi.hProcess;
-        if (al == 0) {                          /* AL=00: wait for the child */
-            WaitForSingleObject(pi.hProcess, INFINITE);
-            {
-                DWORD code = 0;
-                GetExitCodeProcess(pi.hProcess, &code);
-                g_child_exit = (int)code;
-            }
-            printf("dos:   child exited with %d\n", g_child_exit);
-        }
-        CloseHandle(pi.hProcess);
-        g_child = NULL;
+        if (req.wait)
+            g_child_exit = child_code;
         set_cf(c, 0);
         c->Eax = c->Eax & 0xFFFFFF00u;
         break;
@@ -1125,7 +1129,7 @@ static void int21(CONTEXT *c)
 }
 
 /* INT 31h - DPMI */
-static void int31(CONTEXT *c)
+static void int31(dos_ctx *c)
 {
     uint16_t ax = (uint16_t)c->Eax;
     g_calls[0x31]++;
@@ -1208,11 +1212,11 @@ static void int31(CONTEXT *c)
         break;
 
     case 0x0500: {                              /* get free memory info */
-        MEMORYSTATUS ms;
-        GlobalMemoryStatus(&ms);
-        c->Ebx = (uint32_t)(ms.dwAvailPhys / 0x10000);
+        uint64_t avail = 0, span = 0;
+        plat_mem_status(&avail, &span);
+        c->Ebx = (uint32_t)(avail / 0x10000);
         c->Edx = 0;
-        c->Ecx = (uint32_t)(ms.dwAvailVirtual / 0x10000);
+        c->Ecx = (uint32_t)(span / 0x10000);
         set_cf(c, 0);
         break;
     }
@@ -1221,7 +1225,7 @@ static void int31(CONTEXT *c)
         uint32_t size = ((c->Ebx & 0xFFFFu) << 16) | (c->Ecx & 0xFFFFu);
         void *p;
         if (size == 0) size = 0x1000;
-        p = VirtualAlloc(NULL, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        p = dos_alloc_block(size);
         if (p) {
             uint32_t lin = (uint32_t)(uintptr_t)p;
             printf("dos: INT31 0501 alloc %u bytes -> linear 0x%X\n", size, lin);
@@ -1243,8 +1247,7 @@ static void int31(CONTEXT *c)
         break;
     case 0x0503: {                              /* resize memory block */
         uint32_t size = ((c->Ebx & 0xFFFFu) << 16) | (c->Ecx & 0xFFFFu);
-        void *p = VirtualAlloc(NULL, size ? size : 0x1000,
-                               MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+        void *p = dos_alloc_block(size ? size : 0x1000);
         if (p) {
             uint32_t lin = (uint32_t)(uintptr_t)p;
             c->Ebx = lin >> 16;
@@ -1311,7 +1314,7 @@ static void int31(CONTEXT *c)
 
 /* INT 10h - video BIOS. The frame buffer is real (mapped at 0xA0000), only the
  * mode setting has to be answered. */
-static void int10(CONTEXT *c)
+static void int10(dos_ctx *c)
 {
     uint8_t ah = (uint8_t)(c->Eax >> 8);
     g_calls[0x10]++;
@@ -1378,12 +1381,12 @@ static uint16_t kbd_fetch(int wait_ms)
         }
         if (waited >= wait_ms)
             return 0;                           /* caller may retry     */
-        Sleep(2);
+        plat_sleep_ms(2);
         waited += 2;
     }
 }
 
-static void int16(CONTEXT *c)
+static void int16(dos_ctx *c)
 {
     uint8_t ah = (uint8_t)(c->Eax >> 8);
     g_calls[0x16]++;
@@ -1419,7 +1422,7 @@ static void int16(CONTEXT *c)
 }
 
 /* INT 33h - mouse */
-static void int33(CONTEXT *c)
+static void int33(dos_ctx *c)
 {
     uint16_t ax = (uint16_t)c->Eax;
     g_calls[0x33]++;
@@ -1438,7 +1441,7 @@ static void int33(CONTEXT *c)
  * and exit(1). Everything after that (INT 31h AX=0100 DOS memory, AX=0300
  * simulate-real-mode-int) is already handled by the host, so reporting a
  * plausible MSCDEX 2.10 is enough to get past it. */
-static void int2f(CONTEXT *c)
+static void int2f(dos_ctx *c)
 {
     uint16_t ax = (uint16_t)c->Eax;
 
@@ -1456,7 +1459,7 @@ static void int2f(CONTEXT *c)
 
 /* --------------------------------------------------- privileged port I/O */
 
-static int emulate_priv_instr(CONTEXT *c, const uint8_t *p)
+static int emulate_priv_instr(dos_ctx *c, const uint8_t *p)
 {
     /* handles the forms DOS/4GW and AIL use: in/out with immediate or DX port */
     int handled = 0;
@@ -1468,7 +1471,7 @@ static int emulate_priv_instr(CONTEXT *c, const uint8_t *p)
     case 0xFB:                                  /* sti */
         return 1;
     case 0xF4:                                  /* hlt */
-        Sleep(1);
+        plat_sleep_ms(1);
         return 1;
 
     case 0xE4: port = p[1];                       handled = 2; break; /* in  al, imm8  */
@@ -1591,7 +1594,7 @@ static int emulate_priv_instr(CONTEXT *c, const uint8_t *p)
 
 /* --------------------------------------------------------------- VEH hook */
 
-static uint32_t *ctx_reg(CONTEXT *c, int reg)
+static uint32_t *ctx_reg(dos_ctx *c, int reg)
 {
     switch (reg) {
     case 0: return &c->Eax;
@@ -1612,15 +1615,7 @@ static uint32_t *ctx_reg(CONTEXT *c, int reg)
  * then looked like "EIP is inside fd2_veh". */
 static int guest_readable(const void *p, size_t n)
 {
-    MEMORY_BASIC_INFORMATION mbi;
-    const char *base, *end;
-    if (!p) return 0;
-    if (!VirtualQuery(p, &mbi, sizeof mbi)) return 0;
-    if (mbi.State != MEM_COMMIT) return 0;
-    if (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) return 0;
-    base = (const char *)mbi.BaseAddress;
-    end  = base + mbi.RegionSize;
-    return ((const char *)p + n) <= end;
+    return plat_readable(p, n);
 }
 
 /* String instructions (A4..AF: movs/stos/lods/cmps/scas) run a whole
@@ -1630,7 +1625,7 @@ static int guest_readable(const void *p, size_t n)
  * `rep(re/ne) scasb` starting at 0x81 - unreachable while the tail was empty
  * (FD2), hit as soon as a child host gets --cmdtail= (FD.EXE).
  * Execute the entire iteration here against the low-memory window. */
-static int emulate_lowmem_string(CONTEXT *c, const uint8_t *start)
+static int emulate_lowmem_string(dos_ctx *c, const uint8_t *start)
 {
     const uint8_t *p = start;
     int rep = 0, addr32 = 1, op32 = 1, df, zf;
@@ -1763,7 +1758,7 @@ static int emulate_lowmem_string(CONTEXT *c, const uint8_t *start)
     c->Ecx = (c->Ecx & ~mask) | (count & mask);
     c->Esi = (c->Esi & ~mask) | (si & mask);
     c->Edi = (c->Edi & ~mask) | (di & mask);
-    c->Eip = (DWORD)(uintptr_t)p;
+    c->Eip = (uint32_t)(uintptr_t)p;
     if (s_log++ < 8)
         printf("dos: lowmem string %s%02X, %u left (si=%X di=%X) at 0x%X\n",
                rep == 1 ? "rep " : rep == 2 ? "repne " : "",
@@ -1798,14 +1793,14 @@ static int      s_dumped_handler;
 
 #define KBD_RING 16
 static volatile uint8_t g_kbd_ring[KBD_RING];
-static volatile LONG    g_kbd_w, g_kbd_r;      /* monotonic counters */
+static volatile int32_t g_kbd_w, g_kbd_r;    /* monotonic counters */
 
 /* Queue one keystroke for the game's own INT 9 handler (installed with
  * INT 21h AH=25h AL=09h). Returns 1 when the game owns the key queue, 0 when
  * nobody hooked INT 9 and the caller should use the BIOS buffer instead. */
 int dos_deliver_key(uint8_t scan)
 {
-    LONG w;
+    int32_t w;
 
     if (!g_guest_int9)
         return 0;                               /* nobody hooked INT 9 */
@@ -1824,11 +1819,11 @@ int dos_deliver_key(uint8_t scan)
     return 1;
 }
 
-/* Called from the VEH just before it resumes guest code: turn a queued scan
- * code into an interrupt frame on the *guest's* stack. */
-static void inject_int9(CONTEXT *c)
+/* Called from the fault handler just before it resumes guest code: turn a
+ * queued scan code into an interrupt frame on the *guest's* stack. */
+static void inject_int9(dos_ctx *c)
 {
-    LONG r = g_kbd_r;
+    int32_t r = g_kbd_r;
     uint32_t isr = g_guest_int9, sp;
     uint8_t scan;
 
@@ -1840,7 +1835,7 @@ static void inject_int9(CONTEXT *c)
      * is the crash this design replaced. Keys stay queued until the game
      * thread raises its next exception (it does that constantly: int 21h and
      * port reads are both exceptions here). */
-    if (!g_guest_tid || GetCurrentThreadId() != g_guest_tid)
+    if (!g_guest_tid || plat_thread_id() != g_guest_tid)
         return;
     /* Never re-enter the handler itself: injecting while it is still running
      * restarts it from the top (the return address saved is inside the
@@ -1887,7 +1882,7 @@ static void inject_int9(CONTEXT *c)
  * BIOS data through register-indirect addressing such as `mov cl,es:[edi-1]`.
  * Those cannot be fixed by rewriting an immediate, so the access is executed
  * against the low-memory window and the instruction is stepped over. */
-static int emulate_lowmem_access(CONTEXT *c)
+static int emulate_lowmem_access(dos_ctx *c)
 {
     const uint8_t *start = (const uint8_t *)(uintptr_t)c->Eip;
     const uint8_t *p = start;
@@ -1940,18 +1935,18 @@ static int emulate_lowmem_access(CONTEXT *c)
 
     printf("dos: lowmem read 0x%X (size %d) -> 0x%X, skipping %d bytes at 0x%X\n",
            ea, size, v, (int)(p - start), (unsigned)(uintptr_t)start);
-    c->Eip = (DWORD)(uintptr_t)p;
+    c->Eip = (uint32_t)(uintptr_t)p;
     return 1;
 }
 
 /* Service a software interrupt found at EIP: `int NN` occupies `len` bytes
  * (prefixes + 2). Counted and traced exactly like the old trap sites. */
-static void dispatch_swint(CONTEXT *c, uint8_t vec, uint32_t len)
+static void dispatch_swint(dos_ctx *c, uint8_t vec, uint32_t len)
 {
-    DWORD addr = (DWORD)(uintptr_t)c->Eip;
+    uint32_t addr = (uint32_t)(uintptr_t)c->Eip;
 
     if (!g_guest_tid)
-        g_guest_tid = GetCurrentThreadId();   /* the game thread */
+        g_guest_tid = plat_thread_id();       /* the game thread */
 
     g_last_trap_eip = addr;
     g_int_sites++;
@@ -1967,6 +1962,16 @@ static void dispatch_swint(CONTEXT *c, uint8_t vec, uint32_t len)
                (unsigned)(c->Edi & 0xFFFF), (unsigned)(c->Ebp & 0xFFFF),
                (unsigned)c->SegDs, (unsigned)c->SegEs);
     }
+    dos_service(vec, c);
+}
+
+/* The service switch itself (declared in dos.h): the fault handler reaches
+ * it through dispatch_swint, doscheck drives INT 21h through it directly
+ * without executing a real `int` instruction. The default branch logs
+ * g_last_trap_eip, which dispatch_swint just set to the instruction's
+ * address (stale only for a direct doscheck call, which uses it too). */
+void dos_service(uint8_t vec, dos_ctx *c)
+{
     switch (vec) {
     case 0x21: int21(c); break;
     case 0x31: int31(c); break;
@@ -1980,17 +1985,14 @@ static void dispatch_swint(CONTEXT *c, uint8_t vec, uint32_t len)
     default:
         if (!g_calls[vec] && !g_unknown[vec])
             printf("dos: servicing unhandled int %02X at 0x%X - skipping\n",
-                   vec, addr);
+                   vec, (unsigned)g_last_trap_eip);
         g_unknown[vec]++;
         break;
     }
 }
 
-static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
+fd2_action dos_fault_core(dos_ctx *c, const fd2_fault *f, int *exit_code)
 {
-    EXCEPTION_RECORD *er = ep->ExceptionRecord;
-    CONTEXT *c = ep->ContextRecord;
-
     /* Everything that happens for a while after an INT 9 injection: the
      * reported EIP is part of the evidence, so do not filter on it. */
     if (g_isr_log_left > 0) {
@@ -1998,19 +2000,21 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
         g_isr_log_left--;
         printf("isr: evt code=%08lX eip=%08X esp=%08X eax=%08X ds=%04X "
                "bytes=%02X %02X\n",
-               (unsigned long)er->ExceptionCode, (unsigned)c->Eip,
+               (unsigned long)f->code, (unsigned)c->Eip,
                (unsigned)c->Esp, (unsigned)c->Eax, (unsigned)c->SegDs,
                guest_readable(q, 2) ? q[0] : 0, guest_readable(q + 1, 1) ? q[1] : 0);
     }
 
     /* A software interrupt is a fault whose EIP points *at* the `CD` byte
      * (measured by probe4.c: EXCEPTION_ACCESS_VIOLATION for every vector,
-     * EXCEPTION_BREAKPOINT for int 3). Take it before the ring recording and
-     * before the access-violation rules, otherwise the millions of int 21h the
-     * game makes would flood the ring and be mistaken for real memory faults. */
-    if (er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION ||
-        er->ExceptionCode == EXCEPTION_PRIV_INSTRUCTION ||
-        er->ExceptionCode == EXCEPTION_BREAKPOINT) {
+     * EXCEPTION_BREAKPOINT for int 3 on Windows; faultprobe32.c: SIGSEGV /
+     * si_code=SI_KERNEL, EIP at the instruction on Linux - dos_fault.h has
+     * the full mapping, and the Linux int3 wrapper already moved EIP back).
+     * Take it before the ring recording and before the access-violation
+     * rules, otherwise the millions of int 21h the game makes would flood the
+     * ring and be mistaken for real memory faults. */
+    if (f->kind == FD2_FAULT_ACCESS || f->kind == FD2_FAULT_PRIV ||
+        f->kind == FD2_FAULT_BREAK) {
         const uint8_t *q = (const uint8_t *)(uintptr_t)c->Eip;
         if (guest_readable(q, 8)) {
             const uint8_t *s = q;
@@ -2021,12 +2025,13 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
                 dispatch_swint(c, s[1], (uint32_t)(s - q) + 2);
                 if (dos_exit_requested) {
                     printf("dos: game requested exit\n");
-                    ExitProcess(0);
+                    *exit_code = 0;
+                    return FD2_ACT_EXIT;
                 }
                 if (g_trace_mode && g_trace_left > 0)
                     c->EFlags |= 0x100u;      /* start single-stepping */
                 inject_int9(c);                /* a key may have arrived */
-                return EXCEPTION_CONTINUE_EXECUTION;
+                return FD2_ACT_CONTINUE;
             }
         }
     }
@@ -2034,12 +2039,11 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
     /* Record everything that is not an interrupt service: privileged
      * instructions, access violations and stray breakpoints are what a crash
      * report needs in order to show how the flow went off the rails. */
-    veh_record((uint32_t)c->Eip, er->ExceptionCode,
-               (uint32_t)er->ExceptionInformation[0]);
+    veh_record((uint32_t)c->Eip, f->code, f->info);
 
     /* instruction trace mode: single-step and log, used to follow the DOS/4GW
      * startup code where the disassembly assumptions break down */
-    if (er->ExceptionCode == EXCEPTION_SINGLE_STEP) {
+    if (f->kind == FD2_FAULT_STEP) {
         if (g_trace_left > 0) {
             g_trace_left--;
             printf("t %08X esp=%08X eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X ebp=%08X\n",
@@ -2050,36 +2054,47 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
         } else {
             c->EFlags &= ~0x100u;               /* stop tracing */
         }
-        return EXCEPTION_CONTINUE_EXECUTION;
+        return FD2_ACT_CONTINUE;
     }
 
     /* A breakpoint that is not an `int NN` is a stray 0xCC (execution landed
      * on data): it falls through to the crash report below. */
 
-    if (er->ExceptionCode == EXCEPTION_PRIV_INSTRUCTION) {
+    /* Privileged instruction. Windows raises EXCEPTION_PRIV_INSTRUCTION for
+     * these; Linux delivers the *same* SIGSEGV/SI_KERNEL as an `int`, a
+     * segment load and a plain #GP - told apart here by has_addr: a page
+     * fault carries si_addr, a privilege/segment fault does not
+     * (PITFALLS §8-61). An addressless ACCESS that is not privileged is the
+     * segment-load case and falls through to the rules below. */
+    if (f->kind == FD2_FAULT_PRIV ||
+        (f->kind == FD2_FAULT_ACCESS && !f->has_addr)) {
         const uint8_t *p = (const uint8_t *)(uintptr_t)c->Eip;
-        int len = emulate_priv_instr(c, p);
+        int len = guest_readable(p, 8) ? emulate_priv_instr(c, p) : 0;
         if (len) {
             c->Eip += len;
             inject_int9(c);                    /* port ops are guest boundaries too */
-            return EXCEPTION_CONTINUE_EXECUTION;
+            return FD2_ACT_CONTINUE;
         }
-        printf("cpu: unimplemented privileged instruction %02X at 0x%X\n",
-               p[0], (unsigned)c->Eip);
+        if (f->kind == FD2_FAULT_PRIV)
+            printf("cpu: unimplemented privileged instruction %02X at 0x%X\n",
+                   p[0], (unsigned)c->Eip);
     }
 
-    if (er->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+    if (f->kind == FD2_FAULT_ACCESS) {
         const uint8_t *p = (const uint8_t *)(uintptr_t)c->Eip;
-        ULONG_PTR fault = er->ExceptionInformation[1];
+        uintptr_t fault = f->has_addr ? f->addr : 0;
+        int has_fault = f->has_addr;
 
         /* If the game jumped somewhere unmapped we cannot inspect the
          * instruction at all - report honestly instead of faulting inside the
          * handler (that is what produced the bogus "EIP is in fd2_veh"). */
         if (!guest_readable(p, 16)) {
-            printf("cpu: fault at unreadable EIP=0x%X (%s address 0x%zX)\n",
-                   (unsigned)c->Eip,
-                   fault_kind(er->ExceptionInformation[0]),
-                   (size_t)fault);
+            if (has_fault)
+                printf("cpu: fault at unreadable EIP=0x%X (%s address 0x%zX)\n",
+                       (unsigned)c->Eip, fault_kind(f->access), (size_t)fault);
+            else
+                printf("cpu: fault at unreadable EIP=0x%X (%s, no address reported)\n",
+                       (unsigned)c->Eip, fault_kind(f->access));
             printf("     the game jumped into memory that is not mapped\n");
             printf("     eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X ebp=%08X esp=%08X\n",
                    (unsigned)c->Eax, (unsigned)c->Ebx, (unsigned)c->Ecx,
@@ -2106,7 +2121,8 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
             }
             trap_dump();
             dos_dump_stats();
-            ExitProcess(6);
+            *exit_code = 6;
+            return FD2_ACT_EXIT;
         }
 
         /* (1) Loading a DOS/4GW-private selector. The extender owns its own
@@ -2130,7 +2146,7 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
                         printf("isr: segsub eip=%08X esp=%08X modrm=%02X\n",
                                (unsigned)c->Eip, (unsigned)c->Esp, modrm);
                     *r = (*r & 0xFFFF0000u) | flat;
-                    return EXCEPTION_CONTINUE_EXECUTION;
+                    return FD2_ACT_CONTINUE;
                 }
             } else if ((modrm & 0xC7) == 0x05) {
                 uint32_t disp = *(const uint32_t *)(p + 2);
@@ -2140,7 +2156,7 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
                                disp, *(const uint16_t *)(uintptr_t)disp, flat,
                                (unsigned)c->Eip);
                     *(uint16_t *)(uintptr_t)disp = flat;
-                    return EXCEPTION_CONTINUE_EXECUTION;
+                    return FD2_ACT_CONTINUE;
                 }
             }
         }
@@ -2148,8 +2164,11 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
         /* (2) Absolute access into the first 64 KiB. Windows keeps that range
          * unmapped, so rewrite the operand to point at the low-memory window
          * and retry. The immediate is searchable around EIP because absolute
-         * operands in this flat-model code are always 32-bit. */
-        if (fault < 0x10000) {
+         * operands in this flat-model code are always 32-bit. Gated on a
+         * *reported* address: Linux's SI_KERNEL faults carry none, and
+         * treating 0 as the fault address would match and corrupt an
+         * unrelated immediate (PITFALLS §8-61). */
+        if (has_fault && fault < 0x10000) {
             int off;
             for (off = -8; off <= 4; off++) {
                 uint32_t *w = (uint32_t *)(uintptr_t)(p + off);
@@ -2160,18 +2179,18 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
                     printf("dos: lowmem 0x%zX -> 0x%zX (operand at 0x%X)\n",
                            (size_t)fault, (size_t)fault + DOS_LOWMEM_BASE,
                            (unsigned)(c->Eip + off));
-                    return EXCEPTION_CONTINUE_EXECUTION;
+                    return FD2_ACT_CONTINUE;
                 }
             }
             /* (3) register-indirect access to low memory: emulate the load */
             if (emulate_lowmem_access(c)) {
                 inject_int9(c);
-                return EXCEPTION_CONTINUE_EXECUTION;
+                return FD2_ACT_CONTINUE;
             }
             /* (4) string instructions over low memory (PSP tail scan, ...) */
             if (emulate_lowmem_string(c, p)) {
                 inject_int9(c);
-                return EXCEPTION_CONTINUE_EXECUTION;
+                return FD2_ACT_CONTINUE;
             }
             printf("cpu: unmatched low-memory access: fault=0x%zX eip=0x%X "
                    "bytes=%02X %02X %02X %02X %02X %02X %02X %02X "
@@ -2181,10 +2200,14 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
                    (unsigned)c->Esi, (unsigned)c->Edi, (unsigned)c->Ecx);
         }
 
-        printf("cpu: ACCESS VIOLATION at 0x%X (Eip=0x%X) %s address 0x%zX\n",
-               (unsigned)(uintptr_t)er->ExceptionAddress, (unsigned)c->Eip,
-               fault_kind(er->ExceptionInformation[0]),
-               (size_t)fault);
+        if (has_fault)
+            printf("cpu: ACCESS VIOLATION at 0x%X (Eip=0x%X) %s address 0x%zX\n",
+                   (unsigned)c->Eip, (unsigned)c->Eip,
+                   fault_kind(f->access), (size_t)fault);
+        else
+            printf("cpu: ACCESS VIOLATION at 0x%X (Eip=0x%X) %s, no address "
+                   "reported (segment/privilege fault)\n",
+                   (unsigned)c->Eip, (unsigned)c->Eip, fault_kind(f->access));
         {
             const char *owner = find_alloc((uint32_t)c->Eip);
             printf("     Eip is %s; last trapped call was at 0x%X\n",
@@ -2252,7 +2275,8 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
                *(const uint32_t *)(uintptr_t)0x527F0,
                *(const uint16_t *)(uintptr_t)0x52832);
         dos_dump_stats();
-        ExitProcess(3);
+        *exit_code = 3;
+        return FD2_ACT_EXIT;
     }
 
     {
@@ -2269,14 +2293,14 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
         if (c->Eip >= 0x00100000u && !find_alloc((uint32_t)c->Eip)) {
             if (g_unknown[0xFE] < 8) {
                 printf("host: exception %08lX at 0x%X - not ours, passed to the next handler\n",
-                       (unsigned long)er->ExceptionCode, (unsigned)c->Eip);
+                       (unsigned long)f->code, (unsigned)c->Eip);
             }
             g_unknown[0xFE]++;
-            return EXCEPTION_CONTINUE_SEARCH;
+            return FD2_ACT_SEARCH;
         }
 
         printf("cpu: unhandled exception %08lX at 0x%X\n",
-               (unsigned long)er->ExceptionCode, (unsigned)c->Eip);
+               (unsigned long)f->code, (unsigned)c->Eip);
         printf("     eax=%08X ebx=%08X ecx=%08X edx=%08X esi=%08X edi=%08X ebp=%08X esp=%08X\n",
                (unsigned)c->Eax, (unsigned)c->Ebx, (unsigned)c->Ecx,
                (unsigned)c->Edx, (unsigned)c->Esi, (unsigned)c->Edi,
@@ -2299,20 +2323,15 @@ static LONG CALLBACK fd2_veh(EXCEPTION_POINTERS *ep)
         printf("     last trapped call at 0x%X\n", (unsigned)g_last_trap_eip);
         veh_dump_ring();
         dos_dump_stats();
-        ExitProcess(4);
+        *exit_code = 4;
+        return FD2_ACT_EXIT;
     }
-    return EXCEPTION_CONTINUE_SEARCH;
 }
 
 void dos_install_traps(void)
 {
-    if (!AddVectoredExceptionHandler(1, fd2_veh)) {
-        fprintf(stderr, "dos: AddVectoredExceptionHandler failed: %lu\n",
-                GetLastError());
-    } else {
-        printf("dos: vectored exception handler installed\n");
-        bios_tick_start();
-    }
+    dos_fault_install();               /* platform-specific entry */
+    bios_tick_start();
 }
 
 void dos_set_image(le_image *le)

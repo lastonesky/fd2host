@@ -94,9 +94,11 @@ cmd //c E:\FD2\port\aux_build.bat typecheck
 cmd //c E:\FD2\port\aux_build.bat vmcheck
 cmd //c E:\FD2\port\aux_build.bat platprobe   # 平台自检（内存层）
 
-# Linux 侧（WSL Debian）：加载器 + 平台自检。跨平台判据 = 两边 `letest` 输出的
-# 三个对象 fnv1a 必须逐字相同（参考镜像 build/object*.bin 被 ignore，没有也能判）
-wsl -d Debian -- bash -lc "cd /mnt/e/FD2/port && make -f Makefile.linux && ./build/letest-linux /mnt/e/FD2/FD2.EXE /mnt/e/FD2/port/build"
+# Linux 侧（WSL Debian）：加载器 + 平台自检 + DOS 层自检。跨平台判据 = 两边 `letest` 输出的
+# 三个对象 fnv1a 必须逐字相同（参考镜像 build/object*.bin 被 ignore，没有也能判）；
+# `doscheck-linux` 与 Windows `doscheck.exe` 同套 49 条断言（故障模型探针：build/faultprobe32，
+# freestanding -m32，不需要 gcc-multilib）
+wsl -d Debian -- bash -lc "cd /mnt/e/FD2/port && make -f Makefile.linux && ./build/letest-linux /mnt/e/FD2/FD2.EXE /mnt/e/FD2/port/build && ./build/doscheck-linux"
 
 # 运行（WINDOWS 子系统，无控制台；日志恒写 port/build/host.log）
 Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -WorkingDirectory 'E:\FD2'
@@ -123,6 +125,9 @@ pwsh -File E:\FD2\port\build.ps1 -Target keycheck; & E:\FD2\port\build\keycheck.
 pwsh -File E:\FD2\port\build.ps1 -Target reccheck; & E:\FD2\port\build\reccheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target typecheck; & E:\FD2\port\build\typecheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target vmcheck; & E:\FD2\port\build\vmcheck.exe
+# DOS 层跨平台自检（低内存镜像 + INT 21h 文件服务 + 真 int 0x21 经故障入口分发）：
+# 两平台跑同一套 49 条断言，必须 49/49 + exit 0（docs/rounds/15-dos-and-faults.md）
+pwsh -File E:\FD2\port\build.ps1 -Target doscheck; & E:\FD2\port\build\doscheck.exe
 
 # 一键回归（重建沙箱、删 FD2.TMP、autokey 走 continue、8 项断言）
 pwsh -File E:\FD2\port\regress.ps1

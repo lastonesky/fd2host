@@ -41,6 +41,7 @@
 | `rounds/12-keylog.md` | 明细 | **按键录制/回放**（`--keylog`/`--keyplay`，独立模块 `src/keylog.c`）+ 启动抢焦点混入杂键 | §42 |
 | `rounds/13-portability.md` | 明细 | **跨平台第 1 刀**：`platform.h` 内存层、`le.c` 零 Win32、Win32/Linux 哈希一致、全仓 Win32 依赖面测绘 | §43 |
 | `rounds/14-fixup-boundary.md` | 明细 | **跨页 fixup 两类之辨**：补回 11 处漏掉的重定位，三对象与 Ghidra 逐字节一致 | §44 |
+| `rounds/15-dos-and-faults.md` | 明细 | **跨平台第 2 刀**：`dos_fault.h`（VEH/sigaction 薄包装 + 可移植核心）、`dos_ctx`、platform.h 第 2 切片（`pread/pwrite`）、`faultprobe32` 实测 i386 compat 故障模型、`doscheck` 两平台 49/49 | §45 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。

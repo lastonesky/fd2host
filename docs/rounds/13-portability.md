@@ -96,10 +96,13 @@ POSIX 侧 1:1 映射到 `PROT_*`，Win32 侧翻译成 `PAGE_*` 组合（它没�
 1. **执行游戏代码需要 32 位**：游戏是 32 位 x86，64 位进程里跑不了 ⇒ Linux 侧最终要
    `gcc -m32`（`gcc-multilib` + 32 位 `libx11/alsa` 多架构包）。本轮 `letest`/`platprobe`
    只做内存与字节，不需要执行 guest 代码，所以 64 位即可验证。
-2. **`dos.c`**：VEH（POSIX = `sigaction` + `SIGSEGV`/`SIGILL`，且语义不同——Linux 没有
-   "修完指令长度再继续"的 VEH 等价物，要用 `ucontext_t->uc_mcontext.gregs[REG_EIP]`）、
-   文件服务（`ReadFile/WriteFile/SetFilePointer` → `pread/pwrite/lseek`）、低内存镜像
-   （`0x70000` 那 64 KiB，`mmap` 即可）、`INT 21h` 语义表不变。
+2. ~~**`dos.c`**~~ **已完成（§45，2026-10-07）**：`dos_fault.h` 把“故障怎么来”（VEH /
+   sigaction+sigaltstack 薄包装）与“故障是什么”（可移植 `dos_fault_core`）切开，`dos.h` 去
+   `windows.h` 并引入 `dos_ctx`；文件服务 → `pread/pwrite`（**调用方持位置**），低内存镜像
+   本就走 `plat_*`；实测修正了本轮预判：Linux 的 `sigaction` **可以**改 `ucontext` 的 EIP/寄存器
+   后 `sigreturn` 继续执行（等价于 `EXCEPTION_CONTINUE_EXECUTION`），真正的差异是
+   `SIGSEGV/SI_KERNEL` **三重身份且无 `si_addr`**、int3 的 EIP 已越过 —— 见
+   `rounds/15-dos-and-faults.md` §45.2 与 `PITFALLS` §8-61。
 3. **入口层**：`MapVirtualKeyA`/`ToAscii` 的 ASCII 生成 → X11 `XLookupString`/keysym 表；
    截图（`winshot.c` 是 `PrintWindow`）→ sokol 的 `sapp` 帧缓冲读取。
 4. **`plat_data_selector()` 在 Linux64 返回 `0x0`**（长模式下 DS 就是 0），而 Windows 是 `0x2B`：
@@ -119,5 +122,6 @@ cc -std=gnu11 -DSOKOL_GLCORE -Ivendor/sokol ...
 ```
 （一次性验证探针：`build/sokolbuild_check.c`，与 `build/` 下其它产物一样不入库。）
 
-按 §43.5 顺序：**第 2 刀 = `dos.c`（异常 + 文件服务）**，之后入口层，最后 `-m32` 跑真游戏。
+按 §43.5 顺序：~~第 2 刀 = `dos.c`~~ **已落（§45）**，**下一刀 = 入口层**（键码/截图），
+最后 `-m32` 跑真游戏。
 `Makefile.linux` 是入口（`make -f Makefile.linux`），新增目标记得两边都挂。

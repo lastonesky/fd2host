@@ -47,10 +47,16 @@
 | 查某条 fixup 记录 | `python tools/fixup_dump.py [FD2.EXE] [地址]`：按 `le.c` 的语法走 fixup 表，不带地址时列出**所有会被跳过的记录**（跨页/越界源，`rounds/14` §44.2） |
 | 跨平台（加载器）判据 | 同一份 `letest` 在两个平台跑：**三个对象的 `fnv1a` 必须逐字相同**（Windows `build.ps1 -Target letest` / Linux `make -f Makefile.linux`）；有参考镜像时再逐字节比，**只分两类已知差异**（页边界的跨页 fixup、页数之外的 BSS 尾），分类外差异 → `FAIL` + 退出码 1（`rounds/13-portability.md` §43.4） |
 | 平台层自检 | `platprobe`（Win：`-Target platprobe`；Linux：`make -f Makefile.linux` 后 `./build/platprobe-linux`）：预留对象窗 → 分块 commit → 逐段触碰 → 整窗，两平台都必须 exit 0 且 `prot=0x7` |
+| **DOS 层自检** | `doscheck`（Win：`build.ps1 -Target doscheck` 后 `build\doscheck.exe`；Linux：`./build/doscheck-linux`）：低内存镜像 + BIOS tick 线程 + 平台缝（含 `plat_release` 后必须不可读）+ INT 21h 文件服务 31 项 + **真 `int 0x21` 经 VEH/sigaction 分发**，两平台跑**同一套 49 条断言**，必须 **49/49 + exit 0**（`rounds/15-dos-and-faults.md`） |
+| 故障模型探针 | `faultprobe32`（freestanding `-m32 -nostdlib`，**不需要 gcc-multilib**）实测 i386 compat 下 `int NN`/特权指令/段错误/TF/int3 的 `signal+si_code+si_addr+原始 ucontext 字`；`faultprobe64` 同理（glibc x86-64）。写/改 `dos_fault_posix.c` 前先跑它，输出对照表在 `rounds/15` §45.2 |
 | `re/preflight.py` / `re/fixup_scan.py` | 不运行的静态体检（LE/对象布局/与预留区冲突/AIL 特征；fixup 要 `bad=0 leftover=0`） | 换游戏先跑这个 |
 | `tools/xmi_cc7.py` | 扫 XMIDI `EVNT`，按声道统计 CC7（`--ail-dump` 或直接切 `FDMUS.DAT` 的 FORM/XMID） | 判定“原版 `AIL_set_sequence_volume` 的淡变覆盖哪些声道”——原版只乘 CC7（§35.2④） |
 
 其它要点：
+
+- **经 WSL 取退出码别用 `echo $?`**（实测被上层提前替换成 0，`/bin/false` 也报 0）：
+  用 `python3 -c "import subprocess; print(subprocess.run([...]).returncode)"`，或让程序
+  把 rc 落文件再读（第 45 轮两次被它骗过）。
 
 - 所有走 `le.c` 的 console 对拍 exe 都链 **`/BASE:0x60000000`**（否则自身映像被 ASLR 放进 guest
   窗口导致低地址预留失败，§22.4）。

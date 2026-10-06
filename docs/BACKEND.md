@@ -159,6 +159,15 @@ probe = `sokol_app`（`SOKOL_WIN32_FORCE_MAIN`，建 960×600 窗口）+ `sokol_
    `platform_win32.c`（VEH 暂时仍留 `dos.c`，语义转换见下），POSIX 实现进 `platform_posix.c`
    （`sigaction`/`mmap`/`pthread`）；Linux 侧需要 `libX11-dev` + sokol GL 后端。
    `int NN`/`in out` 的信号语义用 `probe4.c` 的方法在目标机重测 → 首个非 Windows 产物。
+   **第 2 刀已落（2026-10-07，§45）**：`dos.c` 过河 —— `dos_fault.h` 把“故障怎么来”（VEH /
+   sigaction 两个薄包装）与“故障是什么”（可移植 `dos_fault_core`）切开；`dos.h` 去 `windows.h`，
+   引入便携 `dos_ctx` 与自检入口 `dos_service`；platform.h 第 2 切片（文件 `pread/pwrite`
+   由调用方持位置、线程/时间/进程/`plat_readable`）。**信号语义已按计划在目标机实测**
+   （freestanding `-m32` 探针 `src/faultprobe32.c`，不需要 gcc-multilib）：`int NN`/特权指令/
+   段错误在 i386 compat 下**同为 `SIGSEGV SI_KERNEL` 且无 `si_addr`** ⇒ 靠解码 EIP 字节区分
+   （`docs/PITFALLS.md` §8-61、`docs/rounds/15-dos-and-faults.md` §45.2）。判据：新工具
+   **`doscheck`** 两平台同一套 **49/49**（含真 `int 0x21` 经故障入口分发 + CF 回写）、
+   `letest` 三哈希仍逐字相同、回归 8/8、跨版本同 tick A/B **0 px**。
 
 ### 13.7 sokol 后端实测（2026-10-06，`-Render sokol` 真跑了一次）
 

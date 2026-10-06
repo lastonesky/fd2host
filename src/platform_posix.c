@@ -21,14 +21,27 @@
  *                       protection, so a "region" here can be bigger than
  *                       Windows' - the caller only ever commits *within* one,
  *                       so the walk just makes fewer steps.
+ *   slice 2 (files/threads/process) follows the same rule: pread/pwrite with
+ *                       the caller's position, pthread threads, fork+execv.
  */
+#define _GNU_SOURCE              /* process_vm_readv (plat_readable) */
 #include "platform.h"
 
 #include <errno.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/syscall.h>
+#include <sys/time.h>
+#include <sys/uio.h>
+#include <sys/wait.h>
+#include <time.h>
+#include <unistd.h>
 
 #ifndef MAP_FIXED_NOREPLACE
 /* Linux < 4.17. Callers only reach mmap for addresses plat_query() reported
@@ -107,6 +120,14 @@ static void *mmap_fixed(uintptr_t addr, size_t len, int prot)
 
 void *plat_reserve(uintptr_t addr, size_t len)
 {
+    /* addr == 0 means "anywhere", exactly like VirtualAlloc(NULL): callers
+     * (INT 21h AH=48 / INT 31h AX=0501) want a block and its address back.
+     * mmap(0, ..., MAP_FIXED) would mean "the NULL page" - and fail below
+     * mmap_min_addr - so the hint must be dropped, not honored. */
+    if (!addr) {
+        void *p = mmap(NULL, len, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        return (p == MAP_FAILED) ? NULL : p;
+    }
     return mmap_fixed(addr, len, PROT_NONE);
 }
 
@@ -209,4 +230,363 @@ void plat_describe(uintptr_t addr, char *buf, size_t n)
              (unsigned long)addr, e.perms, (size_t)e.start, (size_t)e.end,
              e.path[0] ? "MAPPED" : "PRIVATE",
              e.path[0] ? e.path : "<anonymous>");
+}
+
+/* ------------------------------------------------------- slice 2: the OS
+ * primitives dos.c services INT 21h with - POSIX side. Position always
+ * comes from the caller (pread/pwrite), so both platforms run the same
+ * arithmetic in dos.c. */
+
+int plat_readable(const void *p, size_t n)
+{
+    /* process_vm_readv(self) answers "would this read fault" with EFAULT
+     * instead of raising a signal - one syscall, no /proc/self/maps parse
+     * (guest_readable runs on *every* intercepted int, so parsing maps per
+     * call would be far too slow). Probe the first and the last byte: the
+     * VirtualQuery version this replaces checked the region of p and, when
+     * the range crossed a boundary, the region of p+n-1 - same coverage. */
+    struct iovec lv, rv;
+    unsigned char b[1];
+    ssize_t r;
+
+    if (!p)
+        return 0;
+    if (!n)
+        n = 1;
+    lv.iov_base = b;
+    lv.iov_len  = 1;
+    rv.iov_base = (void *)p;
+    rv.iov_len  = 1;
+    r = process_vm_readv(getpid(), &lv, 1, &rv, 1, 0);
+    if (r != 1)
+        return 0;
+    rv.iov_base = (void *)((const char *)p + n - 1);
+    r = process_vm_readv(getpid(), &lv, 1, &rv, 1, 0);
+    return r == 1;
+}
+
+plat_file plat_console_file(int fd)
+{
+    return (fd >= 0) ? (plat_file)fd : PLAT_FILE_INVALID;
+}
+
+plat_file plat_file_open(const char *name)
+{
+    int fd = open(name, O_RDWR | O_CLOEXEC);
+
+    return (fd < 0) ? PLAT_FILE_INVALID : (plat_file)fd;
+}
+
+plat_file plat_file_create(const char *name)
+{
+    int fd = open(name, O_RDWR | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
+
+    return (fd < 0) ? PLAT_FILE_INVALID : (plat_file)fd;
+}
+
+void plat_file_close(plat_file f)
+{
+    if (f != PLAT_FILE_INVALID)
+        close((int)f);
+}
+
+int plat_file_read_at(plat_file f, uint64_t off, void *buf, unsigned n,
+                      unsigned *got)
+{
+    ssize_t r;
+
+    *got = 0;
+    do {
+        r = pread((int)f, buf, n, (off_t)off);
+    } while (r < 0 && errno == EINTR);
+    if (r < 0)
+        return -1;
+    *got = (unsigned)r;               /* 0 == EOF, like ReadFile */
+    return 0;
+}
+
+int plat_file_write_at(plat_file f, uint64_t off, const void *buf, unsigned n,
+                       unsigned *wrote)
+{
+    ssize_t r;
+
+    *wrote = 0;
+    do {
+        r = pwrite((int)f, buf, n, (off_t)off);
+    } while (r < 0 && errno == EINTR);
+    if (r < 0)
+        return -1;
+    *wrote = (unsigned)r;
+    return 0;
+}
+
+int plat_file_write_seq(plat_file f, const void *buf, unsigned n,
+                        unsigned *wrote)
+{
+    ssize_t r;
+
+    *wrote = 0;
+    do {
+        r = write((int)f, buf, n);
+    } while (r < 0 && errno == EINTR);
+    if (r < 0)
+        return -1;
+    *wrote = (unsigned)r;
+    return 0;
+}
+
+int plat_file_truncate(plat_file f, uint64_t off)
+{
+    return ftruncate((int)f, (off_t)off);
+}
+
+int plat_file_size(plat_file f, uint64_t *size)
+{
+    struct stat st;
+
+    if (fstat((int)f, &st) != 0)
+        return -1;
+    *size = (uint64_t)st.st_size;
+    return 0;
+}
+
+int plat_file_delete(const char *name)
+{
+    return unlink(name);
+}
+
+int plat_file_attrs(const char *name, uint32_t *flags)
+{
+    struct stat st;
+    const char *base = strrchr(name, '/');
+    uint32_t f = 0;
+
+    if (stat(name, &st) != 0)
+        return -1;
+    if (!(st.st_mode & 0222))
+        f |= PLAT_FILE_RDONLY;
+    if (S_ISDIR(st.st_mode))
+        f |= PLAT_FILE_DIR;
+    base = base ? base + 1 : name;
+    if (base[0] == '.')
+        f |= PLAT_FILE_HIDDEN;        /* closest thing to FILE_ATTRIBUTE_HIDDEN */
+    *flags = f;
+    return 0;
+}
+
+int plat_file_set_attrs(const char *name, uint32_t flags)
+{
+    struct stat st;
+    mode_t mode;
+
+    if (stat(name, &st) != 0)
+        return -1;
+    mode = st.st_mode;
+    if (flags & PLAT_FILE_RDONLY)
+        mode &= ~(mode_t)0222;        /* DOS read-only == no write bits */
+    else
+        mode |= 0222;                 /* hidden/system have no POSIX equivalent */
+    return chmod(name, mode);
+}
+
+unsigned plat_error_to_dos(unsigned e)
+{
+    switch (e) {
+    case ENOENT:
+    case ENOTDIR:        return 2;    /* file not found */
+    case EACCES:
+    case EPERM:
+    case EROFS:
+    case EISDIR:         return 5;    /* access denied  */
+    case EBADF:          return 6;    /* invalid handle */
+    case EMFILE:
+    case ENFILE:         return 4;    /* too many open  */
+    default:             return 5;
+    }
+}
+
+void plat_local_time(plat_time *t)
+{
+    struct timeval tv;
+    struct tm tm;
+
+    gettimeofday(&tv, NULL);
+    localtime_r(&tv.tv_sec, &tm);
+    t->year    = (unsigned)(tm.tm_year + 1900);
+    t->month   = (unsigned)(tm.tm_mon + 1);
+    t->day     = (unsigned)tm.tm_mday;
+    t->weekday = (unsigned)tm.tm_wday; /* 0 = Sunday, like wDayOfWeek */
+    t->hour    = (unsigned)tm.tm_hour;
+    t->minute  = (unsigned)tm.tm_min;
+    t->second  = (unsigned)tm.tm_sec;
+    t->ms      = (unsigned)(tv.tv_usec / 1000);
+}
+
+/* ---- threads ---------------------------------------------------------- */
+
+struct plat_thread_req {
+    void (*fn)(void *);
+    void *arg;
+};
+
+static void *plat_thread_thunk(void *p)
+{
+    struct plat_thread_req r = *(struct plat_thread_req *)p;
+
+    free(p);
+    r.fn(r.arg);
+    return NULL;
+}
+
+int plat_thread(void (*fn)(void *), void *arg)
+{
+    struct plat_thread_req *r = malloc(sizeof *r);
+    pthread_t th;
+
+    if (!r)
+        return -1;
+    r->fn = fn;
+    r->arg = arg;
+    if (pthread_create(&th, NULL, plat_thread_thunk, r) != 0) {
+        free(r);
+        return -1;
+    }
+    pthread_detach(th);               /* detached: nobody joins it */
+    return 0;
+}
+
+void plat_sleep_ms(unsigned ms)
+{
+    struct timespec ts;
+
+    ts.tv_sec  = (time_t)(ms / 1000u);
+    ts.tv_nsec = (long)(ms % 1000u) * 1000000L;
+    while (nanosleep(&ts, &ts) != 0 && errno == EINTR)
+        ;
+}
+
+uint64_t plat_thread_id(void)
+{
+    return (uint64_t)syscall(SYS_gettid);
+}
+
+void plat_exit(int code)
+{
+    fflush(NULL);                     /* crash reports must reach the log */
+    _exit(code);
+}
+
+void plat_mem_status(uint64_t *avail, uint64_t *span)
+{
+    long page = sysconf(_SC_PAGESIZE);
+    long av   = sysconf(_SC_AVPHYS_PAGES);
+    long tot  = sysconf(_SC_PHYS_PAGES);
+
+    if (page < 0) page = 4096;
+    *avail = (av   > 0) ? (uint64_t)av   * (uint64_t)page : 0;
+    /* "span" feeds DPMI AX=0500's ECX (address-space figure). Windows gave
+     * dwAvailVirtual; there is no cheap POSIX equivalent, so total RAM
+     * stands in - FD2 never calls this (UNVERIFIED). */
+    *span  = (tot > 0) ? (uint64_t)tot * (uint64_t)page : 0;
+}
+
+/* ---- exec (INT 21h AH=4B) --------------------------------------------- */
+
+static pid_t g_child_pid;
+
+int plat_exec_child(const plat_exec_req *r, int *exit_code)
+{
+    char self[PLAT_MAX_PATH];
+    char cwd[PLAT_MAX_PATH];
+    char child[PLAT_MAX_PATH];
+    char clog[PLAT_MAX_PATH];
+    char exitarg[40];
+    char argvbuf[PLAT_MAX_PATH * 4 + 640];
+    const char *argv[8];
+    int argc = 0;
+    size_t len = 0;
+    ssize_t n;
+    pid_t pid;
+    int i;
+
+    n = readlink("/proc/self/exe", self, sizeof self - 1);
+    if (n <= 0) {
+        printf("dos:   exec: cannot resolve /proc/self/exe\n");
+        return -1;
+    }
+    self[n] = 0;
+    if (!getcwd(cwd, sizeof cwd))
+        cwd[0] = 0;
+    if (!realpath(r->guest_path, child))
+        snprintf(child, sizeof child, "%s", r->guest_path);
+
+    /* One log per generation, next to our own image (the Windows rule: a
+     * child freopen()ing host.log would truncate the parent's file). */
+    {
+        char *slash = strrchr(self, '/');
+        if (slash) {
+            size_t dirlen = (size_t)(slash - self);
+            snprintf(clog, sizeof clog, "%.*s/host.%d.log",
+                     (int)dirlen, self, (int)getpid());
+        } else {
+            snprintf(clog, sizeof clog, "host.%d.log", (int)getpid());
+        }
+    }
+
+    argv[argc++] = self;              /* argv strings are packed below */
+    snprintf(argvbuf + len, sizeof argvbuf - len, "--exe=%s", child);
+    argv[argc++] = argvbuf + len; len += strlen(argvbuf + len) + 1;
+    snprintf(argvbuf + len, sizeof argvbuf - len, "--gamedir=%s", cwd);
+    argv[argc++] = argvbuf + len; len += strlen(argvbuf + len) + 1;
+    snprintf(argvbuf + len, sizeof argvbuf - len, "--log=%s", clog);
+    argv[argc++] = argvbuf + len; len += strlen(argvbuf + len) + 1;
+    snprintf(argvbuf + len, sizeof argvbuf - len, "--cmdtail=%s",
+             r->cmdtail);
+    argv[argc++] = argvbuf + len; len += strlen(argvbuf + len) + 1;
+    if (r->wait && r->exit_after > 0) {
+        snprintf(exitarg, sizeof exitarg, "--exit-after=%d", r->exit_after);
+        argv[argc++] = exitarg;
+    }
+    argv[argc] = NULL;
+
+    printf("dos:   child:");
+    for (i = 0; argv[i]; i++)
+        printf(" %s", argv[i]);
+    printf("\n");
+
+    pid = fork();
+    if (pid < 0) {
+        printf("dos:   fork failed (%d)\n", errno);
+        return -1;
+    }
+    if (pid == 0) {
+        execv(self, (char *const *)argv);
+        printf("dos:   execv failed (%d)\n", errno);
+        _exit(127);
+    }
+    g_child_pid = pid;
+    if (r->wait) {
+        int st = 0;
+
+        while (waitpid(pid, &st, 0) < 0 && errno == EINTR)
+            ;
+        *exit_code = WIFEXITED(st) ? WEXITSTATUS(st) : -1;
+        printf("dos:   child exited with %d\n", *exit_code);
+        g_child_pid = 0;
+    }
+    return 0;
+}
+
+int plat_child_present(void)
+{
+    return g_child_pid != 0;
+}
+
+void plat_child_kill(void)
+{
+    if (!g_child_pid)
+        return;
+    kill(g_child_pid, SIGKILL);
+    waitpid(g_child_pid, NULL, 0);
+    g_child_pid = 0;
 }

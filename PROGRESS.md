@@ -83,6 +83,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 | §42 | 10-06 | **按键录制/回放**（用户需求） | `--keylog` 把“启动后第几毫秒按了什么”逐条落盘（崩溃也留）、`--keyplay` 按绝对时间重跑；独立成 `src/keylog.c`（**非宿主逻辑不进 host.c**，只留 5 个调用点）；判据：**录制↔回放同 tick 抓帧 0 px**、回归 8/8；顺带查清启动抢焦点混入杂键（`§8-57`） | `docs/rounds/12-keylog.md`、`docs/DEBUG-MANUAL.md`、`docs/PITFALLS.md` §8-57 |
 | §44 | 10-07 | **补回 11 处漏掉的重定位**（Ghidra 桥复核） | §43 的"已解释差异"被第三家推翻：`le.c` 跳过的 22 条跨页 fixup 实为**两类** —— 11 条合法跨页（**必须写**，原本留下 11 个未重定位指针）+ 11 条 `src>0xFFF` 越界源（**必须跳**，§8-11 的崩溃出在这半）。修后 `applied=7948`、**三对象与 Ghidra 0 差异 exact match**、两平台一致、回归 8/8、同 tick A/B 0 px | `docs/rounds/14-fixup-boundary.md`、`docs/PITFALLS.md` §8-60 |
 | §43 | 10-06 | **跨平台第 1 刀：`platform.h` + 加载器过河** | 抽出 OS 适配层（内存），`le.c` **零 Win32 依赖**；**`letest` 在 Windows 与 Linux 上三个对象 FNV-1a 哈希完全相同**（`fixups=7937` 同、`entry=0x3CCB4` 同）⇒ 加载器逐字节跨平台；新增 `platprobe`/`Makefile.linux`；踩到 `PROT_EXEC` 单bit坑（`§8-58`）与 `le.c` 里的 MSVC 内联汇编（`§8-59`） | `docs/rounds/13-portability.md`、`docs/PITFALLS.md` §8-58/§8-59 |
+| §45 | 10-07 | **跨平台第 2 刀：`dos.c` 过河（故障分发 + 文件服务）** | 新增 `dos_fault.h` 契约：`dos_fault_core`（可移植，两平台同一套分支）+ `dos_fault_win.c`（VEH）/`dos_fault_posix.c`（sigaction+sigaltstack）；`dos.h` 去 `windows.h`、引入便携 `dos_ctx` 与自检入口 `dos_service`；platform.h 第 2 切片（文件/时间/线程/进程，`pread/pwrite` 调用方持位置）；**先测后写**：`faultprobe32`（freestanding -m32，不需要 multilib）实测 i386 compat 故障模型 = `SIGSEGV/SI_KERNEL` 三重身份且无 `si_addr`（`§8-61`）；新工具 **`doscheck`** 两平台**同套 49 条断言全过**；抓到并修掉 `MEM_RELEASE` 静默失败（`§8-62`）与 64 位上下文回写截断（`§8-63`）；回归 **8/8**、跨版本同 tick A/B **0 px** | `docs/rounds/15-dos-and-faults.md`、`docs/PITFALLS.md` §8-61..63 |
 
 ## 4. 下一步计划（按优先级）
 
@@ -108,10 +109,17 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 6. **存档路径实测**：`FD2.SAV` 从无到有的创建路径、存档变小后的截断对拍；
    `AH=49/4A` 仍是空操作（账本只增不减）。
 7. **跨平台**：单代码库 + 后端选择（**不用 git 分支**），先 Linux x86-64；顺序见 `docs/BACKEND.md`。
-   **第 1 刀已落（§43）**：`platform.h` 内存层 + `le.c` 零 Win32 依赖，`letest` 在
-   Windows/Linux **哈希完全一致**（`Makefile.linux`）。**下一刀 = `dos.c`**（VEH→`sigaction`、
-   文件服务→`pread/pwrite`、低内存镜像），然后入口层（键码/截图），最后 **`-m32`** 跑真游戏
-   （游戏是 32 位 x86，64 位进程跑不了 ⇒ 需要 `gcc-multilib` + 32 位 X11/ALSA）。见 `docs/rounds/13-portability.md` §43.5。
+   **第 1 刀已落（§43）**：`platform.h` 内存层 + `le.c` 零 Win32 依赖，`letest` 两平台哈希完全一致。
+   **第 2 刀已落（§45）**：`dos.c` 过河 —— `dos_fault.h` 故障契约（`dos_fault_core` 可移植 +
+   VEH/sigaction 两个薄包装）、`dos_ctx` 便携寄存器帧、platform.h 第 2 切片（文件 `pread/pwrite`
+   调用方持位置、线程/时间/进程）、低内存镜像本就走 `plat_*`；**Linux 故障模型先实测**
+   （`faultprobe32`：`SIGSEGV/SI_KERNEL` 三重身份、无 `si_addr`、int3 的 EIP 已越过，`§8-61`）；
+   新工具 **`doscheck`**（两平台**同一套 49 条断言**，含真 `int 0x21` 经 VEH/sigaction 分发、
+   CF 回写）两平台全过；回归 8/8、跨版本同 tick A/B 0 px。
+   **下一刀 = 入口层**（`MapVirtualKeyA/ToAscii` → X11 `XLookupString`/keysym；截图
+   `winshot.c` → sokol 帧缓冲），最后 **`-m32`** 跑真游戏（游戏是 32 位 x86，64 位进程跑不了
+   ⇒ 需要 `gcc-multilib` + 32 位 X11/ALSA；届时用 `faultprobe32` 复核故障模型表）。见
+   `docs/rounds/13-portability.md` §43.5、`docs/rounds/15-dos-and-faults.md` §45.7。
 8. ~~FDPS（炎龙外传）~~ **已冻结**（2026-10-05 用户决定）：成果与卡点存档在 `docs/FDPS-ARCHIVE.md`，
    宿主的通用能力（`--exe`、FDPS AIL 表、定时器线程、INT9 注入）留在代码里不再主动维护。
 
