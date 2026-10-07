@@ -442,10 +442,16 @@ const char *host_window_shot_path(void)
  * (scan code translation, extended-key detection) live in main_win32.c; this
  * side only writes the BDA ring buffer, which is the same work any other
  * input backend would do. */
+/* Where the last make code's ascii byte went, so a late CHAR event can patch
+ * it (host_key_set_last_ascii). 0xFFFF = nothing patchable. */
+static uint16_t g_last_ascii_tail = 0xFFFF;
+
 void host_key(uint8_t scan, uint8_t ascii)
 {
     uint8_t *lm;
     uint16_t tail, head, next;
+
+    g_last_ascii_tail = 0xFFFF;
 
     /* Record every make code before anything else: this is the one funnel
      * both backends and both the real keyboard and --autokey go through. */
@@ -470,19 +476,29 @@ void host_key(uint8_t scan, uint8_t ascii)
     lm[tail + 1] = scan;
     lm[0x41C] = (uint8_t)(next & 0xFF);
     lm[0x41D] = (uint8_t)(next >> 8);
+    if (!(scan & 0x80))
+        g_last_ascii_tail = tail;             /* a make code: char may patch */
+}
+
+void host_key_set_last_ascii(uint8_t ascii)
+{
+    uint8_t *lm;
+    uint16_t head;
+
+    if (g_last_ascii_tail == 0xFFFF)
+        return;
+    lm = lowmem();
+    head = (uint16_t)(lm[0x41A] | (lm[0x41B] << 8));
+    if (head == g_last_ascii_tail)            /* still unconsumed */
+        lm[g_last_ascii_tail] = ascii;
+    g_last_ascii_tail = 0xFFFF;
 }
 
 /* ------------------------------------------------------------- game thread */
 
-/* The guest entry is a plain cdecl function; on x86-64 there is no cdecl
- * keyword (and no caller-cleanup difference), so only MSVC/x86 names it. */
-#if defined(_MSC_VER)
-#define FD2_CDECL __cdecl
-#else
-#define FD2_CDECL
-#endif
-
-typedef void (FD2_CDECL *game_entry_fn)(void);
+/* The guest entry is a plain cdecl function; PLAT_CDECL is defined in
+ * platform.h (no-op outside MSVC/x86). */
+typedef void (PLAT_CDECL *game_entry_fn)(void);
 
 static void game_thread(void *param)
 {

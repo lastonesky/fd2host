@@ -54,6 +54,12 @@ int host_wants_frames(void);
  * 0x80 break bit for key releases, `ascii` is 0xE0 for extended keys. */
 void host_key(uint8_t scan, uint8_t ascii);
 
+/* Platforms where the character arrives *after* the key event (sokol_app on
+ * X11: KEY_DOWN then CHAR) patch the ascii byte of the just-written make code
+ * through this. It only takes effect while the guest has not consumed the
+ * entry, so a late CHAR can never overwrite a different key's byte. */
+void host_key_set_last_ascii(uint8_t ascii);
+
 /* The game asked to stop (window close / Ctrl+Esc). */
 void host_request_quit(void);
 

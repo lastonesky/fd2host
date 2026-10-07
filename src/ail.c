@@ -34,11 +34,11 @@
  * device (docs/AUDIO.md §11.10).
  */
 
-#include <windows.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include "platform.h"
 #include "ail.h"
 #include "xmidi.h"
 #include "synth.h"
@@ -82,7 +82,7 @@ static ail_seq     g_seqs[AIL_MAX_SEQS];
 static uint32_t    g_rate    = 11025;   /* AIL default playback rate */
 static int         g_bits    = 8;       /* AIL default sample type: mono 8-bit */
 static int         g_stereo  = 0;
-static char        g_dump_dir[MAX_PATH];
+static char        g_dump_dir[PLAT_MAX_PATH];
 static int         g_dump_seq;
 static int         g_installed;
 /* How often a sample was cut off while still playing (AIL semantics: stop
@@ -127,27 +127,28 @@ typedef struct {
 } ail_timer;
 
 static ail_timer       g_timers[AIL_MAX_TIMERS];
-static CRITICAL_SECTION g_timer_cs;
+static plat_mutex       g_timer_cs;
 static int              g_timer_cs_ready;
-static HANDLE           g_timer_thread;
-static volatile LONG    g_timer_run;
-static volatile LONG    g_timer_fires;
-static DWORD            g_timer_t0;
+static volatile int32_t g_timer_thread_on;
+static volatile int32_t g_timer_thread_done;
+static volatile int32_t g_timer_run;
+static volatile int32_t g_timer_fires;
+static uint64_t         g_timer_t0;
 static int              g_timer_log;
 static int              g_timer_fired_logged;
 
 static void timer_lock(void)
 {
     if (!g_timer_cs_ready) {           /* ail_install_* runs before the game */
-        InitializeCriticalSection(&g_timer_cs);
+        plat_mutex_init(&g_timer_cs);
         g_timer_cs_ready = 1;
     }
-    EnterCriticalSection(&g_timer_cs);
+    plat_mutex_lock(&g_timer_cs);
 }
 
 static void timer_unlock(void)
 {
-    LeaveCriticalSection(&g_timer_cs);
+    plat_mutex_unlock(&g_timer_cs);
 }
 
 /* Handles are byte offsets, exactly like AIL's; -1 and misaligned handles are
@@ -172,23 +173,21 @@ struct ail_fire {
     int          n;
 };
 
-static DWORD WINAPI ail_timer_thread(LPVOID arg)
+static void ail_timer_thread(void *arg)
 {
-    LARGE_INTEGER fq, last, now;
+    uint64_t last, now;
     struct ail_fire batch[AIL_MAX_TIMERS];
     (void)arg;
 
-    QueryPerformanceFrequency(&fq);
-    QueryPerformanceCounter(&last);
-    g_timer_t0 = GetTickCount();
-    while (InterlockedCompareExchange(&g_timer_run, 1, 1) == 1) {
+    last = plat_now_us();
+    g_timer_t0 = plat_now_ms();
+    while (plat_atomic_read(&g_timer_run) == 1) {
         uint32_t us;
         int i, nb = 0, j, k;
 
-        Sleep(AIL_TIMER_TICK_US / 1000);
-        QueryPerformanceFrequency(&fq);
-        QueryPerformanceCounter(&now);
-        us = (uint32_t)(((now.QuadPart - last.QuadPart) * 1000000) / fq.QuadPart);
+        plat_sleep_ms(AIL_TIMER_TICK_US / 1000);
+        now = plat_now_us();
+        us = (uint32_t)(now - last);
         last = now;
         if (us > 250000)                /* clamp a long stall (breakpoint, hitch) */
             us = 250000;
@@ -219,13 +218,13 @@ static DWORD WINAPI ail_timer_thread(LPVOID arg)
         /* Callbacks run outside the lock: guest code may call straight back
          * into AIL (register/stop/release) and must not deadlock. */
         for (j = 0; j < nb; j++) {
-            LONG n = 0;
+            int32_t n = 0;
             for (k = 0; k < batch[j].n; k++) {
                 batch[j].cb(batch[j].user);
-                n = InterlockedIncrement(&g_timer_fires);
+                n = plat_atomic_inc(&g_timer_fires);
                 if (n <= 3 || (n % 100) == 0)
                     printf("ail: timer fire #%ld at +%lu ms (cb=%p)\n",
-                           (long)n, GetTickCount() - g_timer_t0,
+                           (long)n, plat_now_ms() - g_timer_t0,
                            (void *)batch[j].cb);
             }
             if (!g_timer_fired_logged) {
@@ -235,28 +234,40 @@ static DWORD WINAPI ail_timer_thread(LPVOID arg)
             }
         }
     }
-    return 0;
+    plat_atomic_write(&g_timer_thread_done, 1);
 }
 
 static void timer_start_thread(void)
 {
-    if (g_timer_thread)
+    if (g_timer_thread_on)
         return;
     timer_lock();
-    InterlockedExchange(&g_timer_run, 1);
-    g_timer_thread = CreateThread(NULL, 0, ail_timer_thread, NULL, 0, NULL);
+    plat_atomic_write(&g_timer_run, 1);
+    plat_atomic_write(&g_timer_thread_done, 0);
+    g_timer_thread_on = 1;
+    if (plat_thread(ail_timer_thread, NULL) != 0) {
+        plat_atomic_write(&g_timer_run, 0);
+        g_timer_thread_on = 0;
+        timer_unlock();
+        printf("ail: cannot start timer thread\n");
+        return;
+    }
     timer_unlock();
     printf("ail: timer thread started (1 ms tick)\n");
 }
 
 static void timer_stop_thread(void)
 {
-    if (!g_timer_thread)
+    int waited = 0;
+
+    if (!g_timer_thread_on)
         return;
-    InterlockedExchange(&g_timer_run, 0);
-    WaitForSingleObject(g_timer_thread, 1000);
-    CloseHandle(g_timer_thread);
-    g_timer_thread = NULL;
+    plat_atomic_write(&g_timer_run, 0);
+    while (!plat_atomic_read(&g_timer_thread_done) && waited < 1000) {
+        plat_sleep_ms(2);
+        waited += 2;
+    }
+    g_timer_thread_on = 0;
     memset(g_timers, 0, sizeof g_timers);
     printf("ail: timer thread stopped\n");
 }
@@ -390,14 +401,14 @@ static int32_t host_AIL_release_all_timers(void)
 
 static void dump_blob(const char *tag, const void *p, uint32_t len)
 {
-    char path[MAX_PATH];
+    char path[PLAT_MAX_PATH * 2];   /* dir + sep + tag + seq */
     FILE *f;
 
     if (!g_dump_dir[0] || !p || !len)
         return;
     if (len > 512 * 1024)
         len = 512 * 1024;
-    _snprintf(path, sizeof path, "%s\\%s_%d.bin", g_dump_dir, tag, g_dump_seq++);
+    snprintf(path, sizeof path, "%s/%s_%d.bin", g_dump_dir, tag, g_dump_seq++);
     f = fopen(path, "wb");
     if (!f)
         return;
@@ -636,7 +647,7 @@ static void host_AIL_shutdown(void)
     for (i = 0; i < AIL_MAX_SEQS; i++)
         memset(&g_seqs[i], 0, sizeof g_seqs[i]);
     printf("ail: shutdown (timer callbacks fired %lu, %lu samples cut short)\n",
-           g_timer_fires, g_sample_cuts);
+           (unsigned long)g_timer_fires, (unsigned long)g_sample_cuts);
 }
 
 /* The game checks these for non-zero before using any sample/sequence API. */
@@ -1149,7 +1160,7 @@ static void install_table(uint8_t *obj0_base, const char *dump_dir,
         *(int32_t *)(p + 1) = (int32_t)rel;
     }
     if (!g_timer_cs_ready) {
-        InitializeCriticalSection(&g_timer_cs);
+        plat_mutex_init(&g_timer_cs);
         g_timer_cs_ready = 1;
     }
     printf("ail: patched %u AIL entry points (%s) to host implementations"

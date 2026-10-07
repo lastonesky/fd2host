@@ -23,7 +23,6 @@
  * LFOs, filter) is handled by the simple envelopes in synth.c.
  */
 
-#include <windows.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>

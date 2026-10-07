@@ -36,8 +36,25 @@ REFDIR  ?= /mnt/e/FD2/port/build
 DOS_SRCS   := $(SRC)/dos.c $(SRC)/dos_fault_posix.c $(SRC)/le.c $(SRC)/platform_posix.c
 PROBE32_CFLAGS := -m32 -O2 -g -ffreestanding -nostdlib -static -fno-pie -no-pie -Wall -Wextra
 
+# The real host. It runs the original 32-bit guest code, so a *run* needs
+# -m32; the 64-bit build below only proves that every host file compiles and
+# links on POSIX (the guest cannot execute in a 64-bit process yet - see
+# docs/rounds/16-entry-layer.md).
+SOKOL      := vendor/sokol
+GAME_SRCS  := $(SRC)/game/rle.c $(SRC)/game/gfx.c $(SRC)/game/sprite24.c \
+              $(SRC)/game/util.c $(SRC)/game/path.c $(SRC)/game/tables.c \
+              $(SRC)/game/rle2.c $(SRC)/game/dlg.c $(SRC)/game/rec.c \
+              $(SRC)/game/svc.c $(SRC)/game/vm.c
+HOST_SRCS  := $(SRC)/host.c $(SRC)/main_sokol.c $(SRC)/render_sokol.c \
+              $(SRC)/sokol_impl.c $(SRC)/keylog.c $(SRC)/keys.c \
+              $(SRC)/ail.c $(SRC)/xmidi.c $(SRC)/synth.c $(SRC)/dls.c \
+              $(SRC)/audio_sokol.c $(SRC)/repl.c $(DOS_SRCS) $(GAME_SRCS)
+HOST_CFLAGS := $(CFLAGS) -DSOKOL_GLCORE -I$(SRC) -I$(SOKOL)
+HOST_LIBS  := -lX11 -lXi -lXcursor -lGL -lasound -ldl -lm
+
 all: $(OUT)/letest-linux $(OUT)/platprobe-linux $(OUT)/doscheck-linux \
-     $(OUT)/faultprobe32 $(OUT)/faultprobe64
+     $(OUT)/faultprobe32 $(OUT)/faultprobe64 \
+     $(OUT)/fd2host-linux
 
 $(OUT)/platprobe-linux: $(SRC)/platprobe.c $(SRC)/le.c $(SRC)/platform_posix.c $(SRC)/le.h $(SRC)/platform.h
 	@mkdir -p $(OUT)
@@ -63,6 +80,20 @@ $(OUT)/faultprobe32: $(SRC)/faultprobe32.c
 $(OUT)/faultprobe64: $(SRC)/faultprobe64.c
 	@mkdir -p $(OUT)
 	$(CC) -O0 -g -Wall -o $@ $(SRC)/faultprobe64.c
+
+$(OUT)/fd2host-linux: $(HOST_SRCS) $(SRC)/host.h $(SRC)/le.h $(SRC)/dos.h $(SRC)/platform.h $(SRC)/keys.h
+	@mkdir -p $(OUT)
+	$(CC) $(HOST_CFLAGS) -o $@ $(HOST_SRCS) $(HOST_LIBS)
+
+# The real host: 32-bit, so it can execute the guest. Needs the i386 toolchain
+# and 32-bit dev libraries, which do not ship by default:
+#   sudo apt-get install gcc-multilib libc6-dev-i386 \
+#     libx11-dev:i386 libxi-dev:i386 libxcursor-dev:i386 \
+#     libgl1-mesa-dev:i386 libasound2-dev:i386
+# (docs/rounds/16-entry-layer.md §46.7 records that this is the only blocker.)
+host32: $(HOST_SRCS) $(SRC)/host.h $(SRC)/le.h $(SRC)/dos.h $(SRC)/platform.h $(SRC)/keys.h
+	@mkdir -p $(OUT)
+	$(CC) $(HOST_CFLAGS) -m32 -o $(OUT)/fd2host-linux32 $(HOST_SRCS) $(HOST_LIBS)
 
 run: $(OUT)/letest-linux
 	$(OUT)/letest-linux $(GAME) $(REFDIR)

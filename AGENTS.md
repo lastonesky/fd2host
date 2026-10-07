@@ -99,6 +99,10 @@ cmd //c E:\FD2\port\aux_build.bat platprobe   # 平台自检（内存层）
 # `doscheck-linux` 与 Windows `doscheck.exe` 同套 49 条断言（故障模型探针：build/faultprobe32，
 # freestanding -m32，不需要 gcc-multilib）
 wsl -d Debian -- bash -lc "cd /mnt/e/FD2/port && make -f Makefile.linux && ./build/letest-linux /mnt/e/FD2/FD2.EXE /mnt/e/FD2/port/build && ./build/doscheck-linux"
+# Linux 宿主：常青目标 build/fd2host-linux 只证明 POSIX 侧全部源码编译+链接（64 位，跑不了 guest）；
+# 真能跑的 host32 需要 i386 工具链：sudo apt install gcc-multilib libc6-dev-i386
+#   libx11-dev:i386 libxi-dev:i386 libxcursor-dev:i386 libgl1-mesa-dev:i386 libasound2-dev:i386
+#   wsl -d Debian -- bash -lc "cd /mnt/e/FD2/port && make -f Makefile.linux host32"
 
 # 运行（WINDOWS 子系统，无控制台；日志恒写 port/build/host.log）
 Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -WorkingDirectory 'E:\FD2'

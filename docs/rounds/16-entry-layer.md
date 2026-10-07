@@ -156,3 +156,77 @@ Linux 侧两者都没有。而 `--autokey` 用**文本**点名按键、`--keylog
 **此时两边的分工**：`host.c`/`keylog.c`/`dos.c`/`le.c`/`keys.c` 已零 `windows.h`
 （`keys_win32.c` 是唯一带 VK 的文件，只给 Windows 入口层用）；还剩 **入口层**
 （`main_sokol.c` 去 Win32、`winshot.c`）、**AIL 栈**与 **`-m32`**。
+
+## 46.7 第四切片：Linux 宿主（入口层 + 音频栈过河 + `fd2host-linux` 链接）（已落）
+
+**入口层**（`src/main_sokol.c`）按平台分两段：
+
+| | Windows（不变） | POSIX（新） |
+|---|---|---|
+| 键码 | `sapp_keycode → VK`（保留原表） | **`sapp_keycode → fr_key`**（`src/keys.h`，XKB 布局无关） |
+| ascii | `ToAscii` | **`SAPP_EVENTTYPE_CHAR`**（sokol 的 X11 后端内部就是 `XLookupString`）；用 `host_key_set_last_ascii()` 回填刚写的 make code（仅在 guest 未取走时生效，见 `host.c`） |
+| 注入 `--autokey/--keyplay` | `fr_key → VK → push_vk` | `fr_key → (scan, ascii=fr_key_ascii)` 直接 `host_key`（不需要窗口） |
+| `--wshot` | `winshot_capture`（`PrintWindow`） | 打印"不支持，用 `--screenshot`"（后者与后端无关） |
+
+**音频/AIL 栈过河**（`platform.h` slice 4）：
+
+- 新增 `plat_mutex`（Win `CRITICAL_SECTION` / POSIX 递归 `pthread_mutex`）、
+  `plat_atomic_read/write/inc`（`Interlocked*` / `__atomic_*`）、`plat_now_us`（QPC / `CLOCK_MONOTONIC`）。
+- `audio_sokol.c`/`ail.c`/`synth.c`/`xmidi.c`/`dls.c`/`repl.c` 去掉 `windows.h`：
+  `CRITICAL_SECTION→plat_mutex`、`Interlocked*→plat_atomic_*`、`GetTickCount/QPC→plat_now_ms/us`、
+  `CreateThread/WaitForSingleObject→plat_thread + 完成标志`、`_snprintf→snprintf`、
+  `__cdecl→PLAT_CDECL`、`_stricmp→plat_stricmp`；`xmidi.c` 的 winmm 后端（`midiOut*`）用
+  `#if defined(_WIN32)` 包住，POSIX 下 `g_midi` 恒 NULL（默认后端本来就是内置合成器）。
+
+**编译期发现的真问题**：`src/game/svc.c` 用 MSVC 关键字 `__cdecl` 且缺 `uintptr_t` 的来源
+⇒ 在 Linux 编译不过。改成 `PLAT_CDECL` + `#include "../platform.h"`。
+（含义见 §46.8：**转译模块本身也回调原机器码的 32 位地址**，所以整机必须 32 位。）
+
+**构建**（`Makefile.linux`）：
+
+```
+make -f Makefile.linux build/fd2host-linux   # 64 位：全部 POSIX 宿主源码编译+链接通过（不能跑 guest）
+make -f Makefile.linux host32                # 真能跑的宿主（-m32），需要 i386 工具链/库
+```
+
+**判据（本轮实测）**：
+
+| 判据 | 结果 |
+|---|---|
+| Windows：`fd2host`（sokol）、`typecheck` | 0 error；`typecheck` **1616 例 0 失败** |
+| Windows：`regress.ps1` | **8/8 PASS**，`FD2.TMP = 207360`；日志 `audio: device closed (331776 frames mixed)` |
+| Linux：`src/game/*.c` 全部单独编译 | 无错误 |
+| Linux：`build/fd2host-linux` | **链接通过**（`-lX11 -lXi -lXcursor -lGL -lasound -ldl -lm`），0 warning |
+| Linux：`letest-linux` / `doscheck-linux` | 仍 exact match / **49/49** |
+
+**唯一阻塞（需要人工/带 sudo）**：本机 WSL 是普通用户、`sudo` 要密码，装不了 i386 工具链 ⇒
+`make host32` 暂时只能停在"缺 `bits/libc-header-start.h`"。装完即可跑真游戏（见 §46.8）：
+
+```bash
+sudo apt-get install gcc-multilib libc6-dev-i386 \
+  libx11-dev:i386 libxi-dev:i386 libxcursor-dev:i386 \
+  libgl1-mesa-dev:i386 libasound2-dev:i386
+```
+
+## 46.8 为什么"已经源码化了"仍然要 32 位（写下来免得再被误解）
+
+`re/funcmap.csv` 共 **1359** 个函数，`src/repl.c` 只接入 **51 个（≈3.8%）**；**其余 ~96% 还是
+`FD2.EXE` 的原始 32 位机器码**，由宿主进程直接执行。更关键的是：
+**连这 51 个已转译的 C 函数也不独立** —— 它们会回调仍是机器码的兄弟函数
+（`src/game/svc.c` 的 `ORIG_TICK/ORIG_INIT/ORIG_ADDR/ORIG_LOOP/ORIG_START` 就是 `(uintptr_t)0x4E310`…
+这样的**固定 32 位地址**），而且游戏数据段也是按 32 位扁平地址写死的。
+⇒ **整个宿主进程必须在 32 位模式下运行**（Windows WOW64 / Linux `-m32`），
+`fd2host-linux` 那份 64 位产物只能证明"POSIX 侧源码全部编译/链接通过"，跑不了 guest。
+**等 1359 个函数全部源码化、不再有人回调机器码，这个门槛才消失。**
+
+## 46.9 下一步
+
+Linux 侧已到"只差 32 位环境"：
+
+1. **用户执行一次** `sudo apt-get install gcc-multilib libc6-dev-i386 libx11-dev:i386
+   libxi-dev:i386 libxcursor-dev:i386 libgl1-mesa-dev:i386 libasound2-dev:i386`，
+   然后 `make -f Makefile.linux host32` → `build/fd2host-linux32`，在 WSLg 的 XWayland 里
+   跑真游戏，与 Windows 同 tick 抓帧对拍（`--screenshot` 与后端无关）。
+2. 跑通后重跑 `faultprobe32`，复核 `rounds/15` §45.2 的故障表在**游戏真跑**的现场仍成立。
+3. **工作重心转回源码化**（用户决定）：按 `docs/TRANSLATION.md` §5 继续把 1359 个函数里的机器码
+   换成 C（当前 51）。Linux 那两刀不再往前推（Wayland 原生明确不做）。

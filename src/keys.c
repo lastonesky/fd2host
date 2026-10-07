@@ -45,6 +45,40 @@ int fr_key_extended(fr_key k)
     return 0;
 }
 
+uint8_t fr_key_ascii(fr_key k)
+{
+    const char *n = fr_key_name(k);
+
+    if (!n)
+        return 0;
+    /* letters/digits: the canonical name *is* the character */
+    if (n[1] == 0) {
+        if ((n[0] >= 'A' && n[0] <= 'Z') || (n[0] >= '0' && n[0] <= '9'))
+            return (uint8_t)(n[0] >= 'A' ? n[0] - 'A' + 'a' : n[0]);
+    }
+    /* the few named keys that do produce a character, US layout unshifted */
+    switch (k) {
+    case FRK_SPACE:      return 0x20;
+    case FRK_RETURN:     return 0x0D;
+    case FRK_TAB:        return 0x09;
+    case FRK_BACKSPACE:  return 0x08;
+    case FRK_ESCAPE:     return 0x1B;
+    case FRK_MINUS:      return '-';
+    case FRK_EQUAL:      return '=';
+    case FRK_LEFT_BRACKET:  return '[';
+    case FRK_RIGHT_BRACKET: return ']';
+    case FRK_BACKSLASH:  return '\\';
+    case FRK_SEMICOLON:  return ';';
+    case FRK_APOSTROPHE: return '\'';
+    case FRK_GRAVE:      return '`';
+    case FRK_COMMA:      return ',';
+    case FRK_PERIOD:     return '.';
+    case FRK_SLASH:      return '/';
+    case FRK_KP_DECIMAL: return '.';
+    default:             return 0;
+    }
+}
+
 static int name_eq(const char *tab, const char *s, size_t n)
 {
     size_t i;

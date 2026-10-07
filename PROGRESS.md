@@ -15,8 +15,14 @@
 自动走完"片头 → 标题菜单 → continue → 剧情画面"。
 
 **当前重心是路线 C 的主体：逐步源码化。** 已把 51 个函数从机器码还原成 C、经 `src/repl.c`
-接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8），下一个目标是 `sub_15F84` 脚本 VM。
-方法总览见 **`docs/TRANSLATION.md`**。
+接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。
+
+> ⚠ **进度必须看清**：全量函数表 `re/funcmap.csv` 有 **1359** 个函数，已源码化的只有
+> **51 个 ≈ 3.8%**；**其余 ~96% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
+> 直接执行**。这正是宿主必须是 **32 位进程**的原因（x86-64 长模式不能执行 32 位代码，
+> 只有 `-m32`/WOW64 这类 32 位进程才行）；**等全部函数源码化后，这个 32 位门槛才会消失**。
+
+方法总览见 **`docs/TRANSLATION.md`**，下一个转译目标看它的 §5。
 
 ## 1. 任务与路线
 
@@ -41,7 +47,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**51 个函数接入运行中的游戏**             ✅ 详见 docs/TRANSLATION.md
+源码转译：**51 / 1359 个函数接入（≈3.8%）**           ⏳ 其余 ~96% 仍是原始机器码在跑
 ```
 
 ## 3. 轮次时间线
@@ -84,7 +90,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 | §44 | 10-07 | **补回 11 处漏掉的重定位**（Ghidra 桥复核） | §43 的"已解释差异"被第三家推翻：`le.c` 跳过的 22 条跨页 fixup 实为**两类** —— 11 条合法跨页（**必须写**，原本留下 11 个未重定位指针）+ 11 条 `src>0xFFF` 越界源（**必须跳**，§8-11 的崩溃出在这半）。修后 `applied=7948`、**三对象与 Ghidra 0 差异 exact match**、两平台一致、回归 8/8、同 tick A/B 0 px | `docs/rounds/14-fixup-boundary.md`、`docs/PITFALLS.md` §8-60 |
 | §43 | 10-06 | **跨平台第 1 刀：`platform.h` + 加载器过河** | 抽出 OS 适配层（内存），`le.c` **零 Win32 依赖**；**`letest` 在 Windows 与 Linux 上三个对象 FNV-1a 哈希完全相同**（`fixups=7937` 同、`entry=0x3CCB4` 同）⇒ 加载器逐字节跨平台；新增 `platprobe`/`Makefile.linux`；踩到 `PROT_EXEC` 单bit坑（`§8-58`）与 `le.c` 里的 MSVC 内联汇编（`§8-59`） | `docs/rounds/13-portability.md`、`docs/PITFALLS.md` §8-58/§8-59 |
 | §45 | 10-07 | **跨平台第 2 刀：`dos.c` 过河（故障分发 + 文件服务）** | 新增 `dos_fault.h` 契约：`dos_fault_core`（可移植，两平台同一套分支）+ `dos_fault_win.c`（VEH）/`dos_fault_posix.c`（sigaction+sigaltstack）；`dos.h` 去 `windows.h`、引入便携 `dos_ctx` 与自检入口 `dos_service`；platform.h 第 2 切片（文件/时间/线程/进程，`pread/pwrite` 调用方持位置）；**先测后写**：`faultprobe32`（freestanding -m32，不需要 multilib）实测 i386 compat 故障模型 = `SIGSEGV/SI_KERNEL` 三重身份且无 `si_addr`（`§8-61`）；新工具 **`doscheck`** 两平台**同套 49 条断言全过**；抓到并修掉 `MEM_RELEASE` 静默失败（`§8-62`）与 64 位上下文回写截断（`§8-63`）；回归 **8/8**、跨版本同 tick A/B **0 px** | `docs/rounds/15-dos-and-faults.md`、`docs/PITFALLS.md` §8-61..63 |
-| §46 | 10-07 | **跨平台第 3 刀（起头）：入口层 —— 便携键表 + X11/XWayland 判定** | 用户问“Wayland 支不支持”：pin 住的 sokol **只有 X11 后端**（`_SAPP_LINUX` 全文件 0 处 wayland），但 X11 客户端在 Wayland 桌面经 **XWayland** 照跑；本机 WSLg 探针实测 `XWAYLAND=yes` + GLX 1.4 + RGBA visual（`docs/BACKEND.md` §13.11）。且 sokol X11 后端已内含 `XLookupString`（`SAPP_EVENTTYPE_CHAR`）与布局无关键码（`SAPP_KEYCODE`）⇒ 原计划“自己写 XLookupString/keysym 表”**收敛**为“`SAPP_KEYCODE`→便携键 id→BIOS 扫描码 + CHAR→ascii”。第一切片：`src/keys.h`+`keys.c`（`FR_KEY_LIST` 单真源）+`keys_win32.c`（VK 桥）+`keyscheck`（**102 键对拍 `MapVirtualKeyA` PASS**、5 个共享 make code alias）；当场抓到两个真 bug（`§8-64`）。**第二切片（接线）**：`input_post_vk` → `input_post_key(fr_key)`，`host.c` 的 `vk_from_name` 删掉、`keylog.c` 名称/回放全部改成便携键（旧 `#<vk>` 仍可回放），**regress 8/8 + 录制↔回放同 tick 0 px**；注释里 `*/` 踩坑记 `§8-65`。**第三切片（平台层第 3 切片 + host.c/keylog.c 过河）**：`platform.h` 加 `plat_now_ms/plat_thread_stk/plat_set_cwd/plat_module_path/plat_path_size/plat_stricmp/plat_strdup/plat_stdio_pin`，`host.c`/`keylog.c` **零 `windows.h`**（BMP 头手写小端、`__cdecl` → `FD2_CDECL`）；Windows regress **8/8** + 回放 **0 px**，Linux `letest` 三哈希 exact match + `doscheck` **49/49** | `docs/rounds/16-entry-layer.md`、`docs/BACKEND.md` §13.11、`docs/PITFALLS.md` §8-64/§8-65 |
+| §46 | 10-07 | **跨平台第 3 刀（起头）：入口层 —— 便携键表 + X11/XWayland 判定** | 用户问“Wayland 支不支持”：pin 住的 sokol **只有 X11 后端**（`_SAPP_LINUX` 全文件 0 处 wayland），但 X11 客户端在 Wayland 桌面经 **XWayland** 照跑；本机 WSLg 探针实测 `XWAYLAND=yes` + GLX 1.4 + RGBA visual（`docs/BACKEND.md` §13.11）。且 sokol X11 后端已内含 `XLookupString`（`SAPP_EVENTTYPE_CHAR`）与布局无关键码（`SAPP_KEYCODE`）⇒ 原计划“自己写 XLookupString/keysym 表”**收敛**为“`SAPP_KEYCODE`→便携键 id→BIOS 扫描码 + CHAR→ascii”。第一切片：`src/keys.h`+`keys.c`（`FR_KEY_LIST` 单真源）+`keys_win32.c`（VK 桥）+`keyscheck`（**102 键对拍 `MapVirtualKeyA` PASS**、5 个共享 make code alias）；当场抓到两个真 bug（`§8-64`）。**第二切片（接线）**：`input_post_vk` → `input_post_key(fr_key)`，`host.c` 的 `vk_from_name` 删掉、`keylog.c` 名称/回放全部改成便携键（旧 `#<vk>` 仍可回放），**regress 8/8 + 录制↔回放同 tick 0 px**；注释里 `*/` 踩坑记 `§8-65`。**第三切片（平台层第 3 切片 + host.c/keylog.c 过河）**：`platform.h` 加 `plat_now_ms/plat_thread_stk/plat_set_cwd/plat_module_path/plat_path_size/plat_stricmp/plat_strdup/plat_stdio_pin`，`host.c`/`keylog.c` **零 `windows.h`**（BMP 头手写小端、`__cdecl` → `FD2_CDECL`）；Windows regress **8/8** + 回放 **0 px**，Linux `letest` 三哈希 exact match + `doscheck` **49/49**。**第四切片（Linux 宿主）**：`main_sokol.c` 分平台（POSIX 用 `SAPP_KEYCODE→fr_key` + `SAPP_EVENTTYPE_CHAR`），音频/AIL 栈过河（`plat_mutex/plat_atomic_*/plat_now_us`，去掉 `windows.h`），新增 `make -f Makefile.linux build/fd2host-linux`（64 位**链接证明**，0 warning）；**真能跑的 `host32`（-m32）被 i386 工具链阻塞（本机 sudo 要密码）**。顺带修 `game/svc.c` 的 `__cdecl`/`uintptr_t`。**重申：51/1359 ≈ 3.8% 已源码化，其余 ~96% 仍是机器码且 C 函数会回调其固定 32 位地址 ⇒ 必须 32 位**（新写的 `rounds/16` §46.8） | `docs/rounds/16-entry-layer.md`、`docs/BACKEND.md` §13.11、`docs/PITFALLS.md` §8-64/§8-65 |
 
 ## 4. 下一步计划（按优先级）
 
@@ -126,12 +132,15 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
    **平台层第 3 切片已落**：`host.c`/`keylog.c` **零 `windows.h`**（`plat_now_ms/thread_stk/set_cwd/
    module_path/path_size/stricmp/strdup/stdio_pin`），Windows regress 8/8 + 回放 0 px，
    Linux `letest` exact match + `doscheck` 49/49。
-   **剩下的入口层活**：Linux `main_sokol.c` 去 Win32（`SAPP_KEYCODE → fr_key` +
-   `SAPP_EVENTTYPE_CHAR` → ascii，`--screenshot` 不受影响、`--wshot` 先 stub；
-   `host.c` 已就绪，但 `Makefile.linux` 还没有宿主目标），
-   最后 **`-m32`** 跑真游戏（游戏是 32 位 x86，64 位进程跑不了 ⇒ `gcc-multilib` + 32 位
-   X11/ALSA，apt candidate 已确认；届时用 `faultprobe32` 复核故障模型表）。见
-   `docs/rounds/16-entry-layer.md`、`docs/rounds/13-portability.md` §43.5、`docs/rounds/15-dos-and-faults.md` §45.7。
+   **第 4 切片（Linux 宿主）已落**：`main_sokol.c` 分平台（POSIX 用 `SAPP_KEYCODE→fr_key` +
+   `SAPP_EVENTTYPE_CHAR`，`host_key_set_last_ascii` 回填 ascii）；音频/AIL 栈过河
+   （`plat_mutex`/`plat_atomic_*`/`plat_now_us`，`audio_sokol/ail/synth/xmidi/dls/repl` 零 `windows.h`）；
+   `Makefile.linux` 新增 `build/fd2host-linux`（64 位**链接通过**）与 `host32`（-m32，真能跑）。
+   **唯一阻塞**：本机 WSL 普通用户、`sudo` 要密码，装不了 `gcc-multilib` + i386 的
+   X11/GL/ALSA ⇒ `host32` 待用户执行（命令见 `rounds/16-entry-layer.md` §46.7）。
+   **为什么仍要 32 位**：51/1359 已源码化，其余 ~96% 仍是机器码，**且已转译的 C 函数会回调
+   机器码的固定 32 位地址**（`game/svc.c` 的 `ORIG_*`）⇒ 宿主必须 32 位；全部源码化后才消失（§46.8）。
+   下一步：等 32 位环境就位后跑真游戏 + `faultprobe32` 复核故障表；**工作重心转回源码化**（§46.9）。
 8. ~~FDPS（炎龙外传）~~ **已冻结**（2026-10-05 用户决定）：成果与卡点存档在 `docs/FDPS-ARCHIVE.md`，
    宿主的通用能力（`--exe`、FDPS AIL 表、定时器线程、INT9 注入）留在代码里不再主动维护。
 

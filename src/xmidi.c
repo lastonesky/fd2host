@@ -31,11 +31,18 @@
  *   - The resolution is a fixed 120 ticks per beat (not 60).
  */
 
+#if defined(_WIN32)
 #include <windows.h>
+#else
+/* The winmm MIDI backend (--midi-backend=winmidi) is Windows-only; the
+ * default backend is the built-in synthesiser (src/synth.c) on all platforms. */
+typedef void *HMIDIOUT;
+#endif
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include "platform.h"
 #include "xmidi.h"
 #include "synth.h"
 #include "audio.h"
@@ -53,8 +60,8 @@ static xmidi_event  *g_events;
 static int           g_count;
 static int           g_capacity;
 static HMIDIOUT      g_midi;
-static HANDLE        g_thread;
-static volatile LONG g_stop_flag;
+static volatile int32_t g_stop_flag;
+static volatile int32_t g_playing;   /* 1 while the player thread runs */
 static int           g_volume = 127;
 static int           g_loop_count = 1;
 static uint32_t      g_tempo_us = XMIDI_DEFAULT_TEMPO;
@@ -258,14 +265,17 @@ static const uint8_t *find_evnt(const uint8_t *p, uint32_t len, uint32_t *out_le
 
 /* ------------------------------------------------------------ playback -- */
 
+#if defined(_WIN32)
 static int g_midi_err_reported;
+#endif
 static int g_midi_test;
 
 /* Every MIDI message goes through here so failures are visible: earlier the
  * return value was ignored, which made "device present but silent" impossible
  * to diagnose. */
-static void midi_send(DWORD msg)
+static void midi_send(uint32_t msg)
 {
+#if defined(_WIN32)
     MMRESULT r;
 
     if (!g_midi)
@@ -276,6 +286,9 @@ static void midi_send(DWORD msg)
                (unsigned)msg, (unsigned)r);
         g_midi_err_reported++;
     }
+#else
+    (void)msg;                            /* no winmm backend on POSIX */
+#endif
 }
 
 static void midi_all_notes_off(void)
@@ -284,7 +297,7 @@ static void midi_all_notes_off(void)
     if (!g_midi)
         return;
     for (ch = 0; ch < 16; ch++)
-        midi_send((DWORD)(0xB0 | ch) | (123u << 8));                 /* CC123 */
+        midi_send((uint32_t)(0xB0 | ch) | (123u << 8));                 /* CC123 */
 }
 
 static void midi_set_volume(int vol)
@@ -295,16 +308,16 @@ static void midi_set_volume(int vol)
     if (vol < 0) vol = 0;
     if (vol > 127) vol = 127;
     for (ch = 0; ch < 16; ch++)
-        midi_send((DWORD)(0xB0 | ch) | (7u << 8) | ((DWORD)vol << 16));
+        midi_send((uint32_t)(0xB0 | ch) | (7u << 8) | ((uint32_t)vol << 16));
 }
 
 /* Replay the event list. XMIDI sequences in this game carry very few explicit
  * note-offs, so each channel is treated as monophonic: a new note-on releases
  * the previous note on that channel. Without this the music turns into stuck
  * notes. */
-static DWORD WINAPI player_thread(LPVOID param)
+static void player_thread(void *param)
 {
-    DWORD start;
+    uint64_t start;
     int i, loops = 0;
     int active[16];
     double eff = effective_tick_rate();
@@ -314,26 +327,26 @@ static DWORD WINAPI player_thread(LPVOID param)
         active[i] = -1;
 
     for (;;) {
-        start = GetTickCount();
+        start = plat_now_ms();
         for (i = 0; i < g_count; i++) {
-            DWORD target = (DWORD)((double)g_events[i].tick * 1000.0 / eff);
+            uint64_t target = (uint64_t)((double)g_events[i].tick * 1000.0 / eff);
             uint8_t st = g_events[i].msg[0];
             int ch = st & 0x0F;
 
             for (;;) {
-                DWORD elapsed = GetTickCount() - start;
+                uint64_t elapsed = plat_now_ms() - start;
                 if (elapsed >= target)
                     break;
-                if (InterlockedCompareExchange(&g_stop_flag, 0, 0))
+                if (plat_atomic_read(&g_stop_flag))
                     break;
-                Sleep(target - elapsed > 4 ? 2 : 1);
+                plat_sleep_ms(target - elapsed > 4 ? 2 : 1);
             }
-            if (InterlockedCompareExchange(&g_stop_flag, 0, 0))
+            if (plat_atomic_read(&g_stop_flag))
                 break;
 
             if ((st & 0xF0) == 0x90 && g_events[i].msg[2] != 0) {
                 if (active[ch] >= 0)                    /* release previous   */
-                    midi_send((DWORD)(0x80 | ch) | ((DWORD)active[ch] << 8));
+                    midi_send((uint32_t)(0x80 | ch) | ((uint32_t)active[ch] << 8));
                 active[ch] = g_events[i].msg[1];
             } else if ((st & 0xF0) == 0x80 ||
                        ((st & 0xF0) == 0x90 && g_events[i].msg[2] == 0)) {
@@ -341,19 +354,19 @@ static DWORD WINAPI player_thread(LPVOID param)
                     active[ch] = -1;
             }
 
-            midi_send((DWORD)g_events[i].msg[0] |
-                      ((DWORD)g_events[i].msg[1] << 8) |
-                      ((g_events[i].len > 2 ? (DWORD)g_events[i].msg[2] : 0) << 16));
+            midi_send((uint32_t)g_events[i].msg[0] |
+                      ((uint32_t)g_events[i].msg[1] << 8) |
+                      ((g_events[i].len > 2 ? (uint32_t)g_events[i].msg[2] : 0) << 16));
         }
         loops++;
-        if (InterlockedCompareExchange(&g_stop_flag, 0, 0))
+        if (plat_atomic_read(&g_stop_flag))
             break;
         if (g_loop_count > 0 && loops >= g_loop_count)
             break;
         midi_all_notes_off();
     }
     midi_all_notes_off();
-    return 0;
+    plat_atomic_write(&g_playing, 0);
 }
 
 int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
@@ -377,6 +390,7 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
     if (!g_count)
         return 0;
 
+#if defined(_WIN32)
     if (!g_midi) {
         if (midiOutOpen(&g_midi, MIDI_MAPPER, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
             printf("xmidi: midiOutOpen failed - no MIDI synthesiser available\n");
@@ -398,9 +412,12 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
             }
         }
     }
+#else
+    g_midi = NULL;
+#endif
     g_loop_count = loop_count;
     midi_set_volume(g_volume);
-    InterlockedExchange(&g_stop_flag, 0);
+    plat_atomic_write(&g_stop_flag, 0);
 
     /* Default path: render the sequence with our own synthesiser and play it
      * through the software mixer (src/audio.h) - one device shared with the
@@ -420,12 +437,13 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
         printf("xmidi: MIDI test tone (middle C, 1 s) - if this is inaudible the "
                "system synthesiser is muted or unavailable\n");
         midi_send(0x007B3C90);              /* note on ch0, note 60, vel 123 */
-        Sleep(1000);
+        plat_sleep_ms(1000);
         midi_send(0x00003C80);              /* note off */
     }
 
     /* Diagnostics: which MIDI synthesiser are we actually talking to, and does
      * the parsed stream look like music (notes long enough to be heard)? */
+#if defined(_WIN32)
     {
         UINT ndev = midiOutGetNumDevs();
         UINT k;
@@ -438,6 +456,7 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
                        (unsigned)caps.wVoices);
         }
     }
+#endif
     {
         int per_ch[16] = { 0 };
         double gap_sum[16] = { 0.0 };
@@ -475,9 +494,11 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
                    g_events[i2].msg[1], g_events[i2].len > 2 ? g_events[i2].msg[2] : 0);
     }
 
-    g_thread = CreateThread(NULL, 0, player_thread, NULL, 0, NULL);
-    if (!g_thread)
+    plat_atomic_write(&g_playing, 1);
+    if (plat_thread(player_thread, NULL) != 0) {
+        plat_atomic_write(&g_playing, 0);
         return 0;
+    }
     printf("xmidi: %d events, %u ticks, tempo %u us/beat (%.1f BPM) -> %.1f s "
            "at %.1f ticks/s, %d skipped bytes, loop=%d\n",
            g_count, (unsigned)g_events[g_count - 1].tick, (unsigned)g_tempo_us,
@@ -491,11 +512,13 @@ int xmidi_play(const uint8_t *blob, uint32_t len, int loop_count)
 void xmidi_stop(void)
 {
     synth_stop();
-    if (g_thread) {
-        InterlockedExchange(&g_stop_flag, 1);
-        WaitForSingleObject(g_thread, 2000);
-        CloseHandle(g_thread);
-        g_thread = NULL;
+    if (plat_atomic_read(&g_playing)) {
+        int waited = 0;
+        plat_atomic_write(&g_stop_flag, 1);
+        while (plat_atomic_read(&g_playing) && waited < 2000) {
+            plat_sleep_ms(5);
+            waited += 5;
+        }
     }
     midi_all_notes_off();
 }
@@ -527,5 +550,5 @@ void xmidi_set_backend(int backend)
 
 int xmidi_is_playing(void)
 {
-    return g_thread != NULL;
+    return plat_atomic_read(&g_playing);
 }

@@ -160,6 +160,7 @@ void plat_child_kill(void);
  * the watchdog - unlike plat_local_time(), which jumps with the wall clock.
  */
 uint64_t plat_now_ms(void);
+uint64_t plat_now_us(void);   /* same clock, microsecond resolution */
 
 /* Detached thread with an explicit stack size (the game thread asks for
  * 4 MiB; the guest uses a lot of stack). stack == 0 -> platform default. */
@@ -172,15 +173,40 @@ int  plat_module_path(char *buf, size_t n);/* path of this executable, 0=ok */
  * still holds open, so directory metadata is the right source). -1 = missing. */
 int  plat_path_size(const char *path, uint64_t *size);
 
-/* Portable speling helpers (_stricmp/_strdup). */
+/* Portable spelling helpers (_stricmp/_strdup). */
 int   plat_stricmp(const char *a, const char *b);
 char *plat_strdup(const char *s);
+
+/* Calling convention of the original guest code (cdecl on 32-bit x86; the
+ * keyword does not exist on x86-64 / non-MSVC compilers, where it is a no-op). */
+#if defined(_MSC_VER)
+#define PLAT_CDECL __cdecl
+#else
+#define PLAT_CDECL
+#endif
 
 /* Windows GUI-subsystem processes start with fds 0/1/2 closed, so freopen()
  * may land anywhere and the guest's DOS handle 1 derives from a dead fd
  * (PITFALLS S8-35). Re-point fd 1/2 at the (already redirected) stdio
  * streams. No-op on POSIX. */
 void plat_stdio_pin(void);
+
+/* ---------------------------------------------------------------- slice 4 -
+ * recursive mutex + 32-bit atomics (the AIL/audio stack: ail.c, synth.c,
+ * xmidi.c, audio_sokol.c). `plat_mutex` is a handle (zero initialised = not
+ * yet created); every mutex here is *recursive* because the audio device
+ * callback re-enters the producer side (docs/AUDIO.md §11.10).
+ */
+typedef struct plat_mutex { void *h; } plat_mutex;
+
+void plat_mutex_init(plat_mutex *m);
+void plat_mutex_destroy(plat_mutex *m);
+void plat_mutex_lock(plat_mutex *m);
+void plat_mutex_unlock(plat_mutex *m);
+
+int32_t plat_atomic_read(volatile int32_t *p);              /* seq-cst load    */
+void    plat_atomic_write(volatile int32_t *p, int32_t v); /* seq-cst store   */
+int32_t plat_atomic_inc(volatile int32_t *p);              /* returns new val  */
 
 /* Base address of this executable (GetModuleHandleA(NULL) / the PIE base). */
 void *plat_image_base(void);

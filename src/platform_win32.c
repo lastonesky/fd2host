@@ -399,6 +399,16 @@ uint64_t plat_now_ms(void)
     return (uint64_t)GetTickCount64();
 }
 
+uint64_t plat_now_us(void)
+{
+    LARGE_INTEGER fq, now;
+
+    if (!QueryPerformanceFrequency(&fq) || !fq.QuadPart)
+        return plat_now_ms() * 1000u;
+    QueryPerformanceCounter(&now);
+    return (uint64_t)((now.QuadPart * 1000000) / fq.QuadPart);
+}
+
 int plat_set_cwd(const char *dir)
 {
     return SetCurrentDirectoryA(dir) ? 0 : -1;
@@ -440,6 +450,51 @@ void plat_stdio_pin(void)
 {
     _dup2(_fileno(stdout), 1);
     _dup2(_fileno(stderr), 2);
+}
+
+/* ---- mutex + atomics (slice 4) ---------------------------------------- */
+
+void plat_mutex_init(plat_mutex *m)
+{
+    CRITICAL_SECTION *cs = malloc(sizeof *cs);
+
+    if (!cs) return;                  /* m->h stays NULL: lock/unlock no-op */
+    InitializeCriticalSection(cs);
+    m->h = cs;
+}
+
+void plat_mutex_destroy(plat_mutex *m)
+{
+    if (m->h) {
+        DeleteCriticalSection((CRITICAL_SECTION *)m->h);
+        free(m->h);
+        m->h = NULL;
+    }
+}
+
+void plat_mutex_lock(plat_mutex *m)
+{
+    if (m->h) EnterCriticalSection((CRITICAL_SECTION *)m->h);
+}
+
+void plat_mutex_unlock(plat_mutex *m)
+{
+    if (m->h) LeaveCriticalSection((CRITICAL_SECTION *)m->h);
+}
+
+int32_t plat_atomic_read(volatile int32_t *p)
+{
+    return (int32_t)InterlockedCompareExchange((volatile LONG *)p, 0, 0);
+}
+
+void plat_atomic_write(volatile int32_t *p, int32_t v)
+{
+    InterlockedExchange((volatile LONG *)p, (LONG)v);
+}
+
+int32_t plat_atomic_inc(volatile int32_t *p)
+{
+    return (int32_t)InterlockedIncrement((volatile LONG *)p);
 }
 
 uint64_t plat_thread_id(void)

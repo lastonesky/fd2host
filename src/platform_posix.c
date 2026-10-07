@@ -493,6 +493,14 @@ uint64_t plat_now_ms(void)
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
 }
 
+uint64_t plat_now_us(void)
+{
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000u + (uint64_t)ts.tv_nsec / 1000u;
+}
+
 int plat_set_cwd(const char *dir)
 {
     return chdir(dir) == 0 ? 0 : -1;
@@ -531,6 +539,59 @@ char *plat_strdup(const char *s)
 void plat_stdio_pin(void)
 {
     /* POSIX processes always have fds 0/1/2 open */
+}
+
+/* ---- mutex + atomics (slice 4) ---------------------------------------- */
+
+void plat_mutex_init(plat_mutex *m)
+{
+    pthread_mutex_t *mu = malloc(sizeof *mu);
+    pthread_mutexattr_t at;
+
+    if (!mu) return;                  /* m->h stays NULL: lock/unlock no-op */
+    pthread_mutexattr_init(&at);
+    pthread_mutexattr_settype(&at, PTHREAD_MUTEX_RECURSIVE);
+    if (pthread_mutex_init(mu, &at) != 0) {
+        pthread_mutexattr_destroy(&at);
+        free(mu);
+        return;
+    }
+    pthread_mutexattr_destroy(&at);
+    m->h = mu;
+}
+
+void plat_mutex_destroy(plat_mutex *m)
+{
+    if (m->h) {
+        pthread_mutex_destroy((pthread_mutex_t *)m->h);
+        free(m->h);
+        m->h = NULL;
+    }
+}
+
+void plat_mutex_lock(plat_mutex *m)
+{
+    if (m->h) pthread_mutex_lock((pthread_mutex_t *)m->h);
+}
+
+void plat_mutex_unlock(plat_mutex *m)
+{
+    if (m->h) pthread_mutex_unlock((pthread_mutex_t *)m->h);
+}
+
+int32_t plat_atomic_read(volatile int32_t *p)
+{
+    return __atomic_load_n(p, __ATOMIC_SEQ_CST);
+}
+
+void plat_atomic_write(volatile int32_t *p, int32_t v)
+{
+    __atomic_store_n(p, v, __ATOMIC_SEQ_CST);
+}
+
+int32_t plat_atomic_inc(volatile int32_t *p)
+{
+    return __atomic_add_fetch(p, 1, __ATOMIC_SEQ_CST);
 }
 
 void plat_exit(int code)

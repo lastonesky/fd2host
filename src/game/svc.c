@@ -28,6 +28,7 @@
  * full AIL call log with arguments, every global and the VGA frame.
  */
 #include "svc.h"
+#include "../platform.h"    /* PLAT_CDECL (no __cdecl keyword outside MSVC) */
 
 /* --- the game's own data segment (IDA names kept) ---------------------- */
 #define dword_53A2C (*(int32_t *)(uintptr_t)0x00053A2Cu) /* last tick reading  */
@@ -37,11 +38,11 @@
 #define dword_53EE4 (*(void   **)(uintptr_t)0x00053EE4u) /* SFX sample handle  */
 #define dword_53EE8 (*(void   **)(uintptr_t)0x00053EE8u) /* 2nd sample handle  */
 
-typedef uint32_t (__cdecl *tick_fn)(void);
-typedef int32_t  (__cdecl *ail_h_fn)(void *handle);
-typedef int32_t  (__cdecl *ail_addr_fn)(void *handle, const void *start,
+typedef uint32_t (PLAT_CDECL *tick_fn)(void);
+typedef int32_t  (PLAT_CDECL *ail_h_fn)(void *handle);
+typedef int32_t  (PLAT_CDECL *ail_addr_fn)(void *handle, const void *start,
                                         uint32_t len);
-typedef int32_t  (__cdecl *ail_loop_fn)(void *handle, int32_t loops);
+typedef int32_t  (PLAT_CDECL *ail_loop_fn)(void *handle, int32_t loops);
 
 #define ORIG_TICK   ((tick_fn)    (uintptr_t)0x0004E310u)
 #define ORIG_INIT   ((ail_h_fn)   (uintptr_t)0x00039521u)

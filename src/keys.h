@@ -168,6 +168,13 @@ const char *fr_key_name(fr_key k);
 uint8_t     fr_key_scan(fr_key k);       /* 0 for FRK_NONE               */
 int         fr_key_extended(fr_key k);
 
+/* US-layout, unshifted ASCII for a key - what ToAscii() would produce on
+ * Windows with no modifier held (letters lowercase, digits, space, return,
+ * ...). 0 for keys that produce no character (arrows, F-keys, modifiers).
+ * Only used where there is no ToAscii (the POSIX entry layer, --autokey);
+ * Windows keeps using ToAscii so its behaviour is bit-identical. */
+uint8_t     fr_key_ascii(fr_key k);
+
 /* Case-insensitive; accepts the canonical names above plus a few aliases
  * ("ENTER" -> RETURN, single "." / "," etc.). Returns FRK_NONE if unknown. */
 fr_key      fr_key_by_name(const char *s, size_t n);

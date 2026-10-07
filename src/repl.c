@@ -1,7 +1,7 @@
 /* repl.c - install the translated C modules over the original machine code.
  *
  * Every entry in the table below is a function whose C translation passed
- * the machine-code differential test (src/*check.c). The entry point is
+ * the machine-code differential test (the src/...check.c tools). The entry is
  * rewritten to a 5-byte `jmp rel32`; callers (direct or through a function
  * pointer) then reach the C implementation.
  *
@@ -18,11 +18,11 @@
  * See repl.h for why this is safe. Groups: rle, gfx, sprite24, util, path,
  * dlg, rec, svc, vm.
  */
-#include <windows.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 
+#include "platform.h"
 #include "repl.h"
 #include "game/rle.h"
 #include "game/gfx.h"
@@ -39,31 +39,31 @@
 #define OBJ0_BASE 0x00010000u
 
 /* 0x4DED4 hardcodes its table base; the C version takes it as a parameter. */
-static const void *__cdecl rep_rec3(int index)
+static const void *PLAT_CDECL rep_rec3(int index)
 {
     return util_rec3((const void *)(uintptr_t)0x60181u, index);
 }
 
 /* The eleven table accessors 0x4E7DD..0x4E8BC, with the FD2 data bases. */
-static void    *__cdecl rep_t615FE(int i) { return tbl_ptr((void *)(uintptr_t)0x615FEu,  2, i, -64); }
-static void    *__cdecl rep_t626B3(int i) { return tbl_ptr((void *)(uintptr_t)0x626B3u, 12, i,   0); }
-static void    *__cdecl rep_t6238D(int i) { return tbl_ptr((void *)(uintptr_t)0x6238Du, 31, i, -31); }
-static void    *__cdecl rep_t620A1(int i) { return tbl_ptr((void *)(uintptr_t)0x620A1u, 11, i,   0); }
-static void    *__cdecl rep_t61DA1(int i) { return tbl_ptr((void *)(uintptr_t)0x61DA1u, 24, i,   0); }
-static void    *__cdecl rep_t61AF9(int i) { return tbl_ptr((void *)(uintptr_t)0x61AF9u, 10, i,   0); }
-static void    *__cdecl rep_t619FD(int i) { return tbl_ptr((void *)(uintptr_t)0x619FDu,  7, i,   0); }
-static uint32_t __cdecl rep_t61955(int i) { return tbl_u32((const void *)(uintptr_t)0x61955u, i); }
-static void    *__cdecl rep_t6188A(int i) { return tbl_ptr((void *)(uintptr_t)0x6188Au,  7, i,   0); }
-static void    *__cdecl rep_t61646(int i) { return tbl_ptr((void *)(uintptr_t)0x61646u, 20, i,   0); }
-static void    *__cdecl rep_t602AD(int i) { return tbl_ptr((void *)(uintptr_t)0x602ADu, 23, i,   0); }
+static void    *PLAT_CDECL rep_t615FE(int i) { return tbl_ptr((void *)(uintptr_t)0x615FEu,  2, i, -64); }
+static void    *PLAT_CDECL rep_t626B3(int i) { return tbl_ptr((void *)(uintptr_t)0x626B3u, 12, i,   0); }
+static void    *PLAT_CDECL rep_t6238D(int i) { return tbl_ptr((void *)(uintptr_t)0x6238Du, 31, i, -31); }
+static void    *PLAT_CDECL rep_t620A1(int i) { return tbl_ptr((void *)(uintptr_t)0x620A1u, 11, i,   0); }
+static void    *PLAT_CDECL rep_t61DA1(int i) { return tbl_ptr((void *)(uintptr_t)0x61DA1u, 24, i,   0); }
+static void    *PLAT_CDECL rep_t61AF9(int i) { return tbl_ptr((void *)(uintptr_t)0x61AF9u, 10, i,   0); }
+static void    *PLAT_CDECL rep_t619FD(int i) { return tbl_ptr((void *)(uintptr_t)0x619FDu,  7, i,   0); }
+static uint32_t PLAT_CDECL rep_t61955(int i) { return tbl_u32((const void *)(uintptr_t)0x61955u, i); }
+static void    *PLAT_CDECL rep_t6188A(int i) { return tbl_ptr((void *)(uintptr_t)0x6188Au,  7, i,   0); }
+static void    *PLAT_CDECL rep_t61646(int i) { return tbl_ptr((void *)(uintptr_t)0x61646u, 20, i,   0); }
+static void    *PLAT_CDECL rep_t602AD(int i) { return tbl_ptr((void *)(uintptr_t)0x602ADu, 23, i,   0); }
 
 /* 0x16559 / 0x16E24 read the FD2 globals dword_53A85 / dword_53C67. */
-static void __cdecl rep_dlg_blit(int idx)
+static void PLAT_CDECL rep_dlg_blit(int idx)
 {
     dlg_blit_dato((const void *)(uintptr_t)(*(const uint32_t *)(uintptr_t)0x53A85u),
                   (int)(*(const uint32_t *)(uintptr_t)0x53C67u), idx);
 }
-static void __cdecl rep_dlg_scroll(void)
+static void PLAT_CDECL rep_dlg_scroll(void)
 {
     dlg_scroll_text((int)(*(const uint32_t *)(uintptr_t)0x53C67u));
 }
@@ -179,23 +179,23 @@ unsigned repl_parse(const char *spec)
     char *tok;
     unsigned mask = 0;
 
-    if (!spec || !spec[0] || !_stricmp(spec, "all"))
+    if (!spec || !spec[0] || !plat_stricmp(spec, "all"))
         return REPL_ALL;
-    if (!_stricmp(spec, "none"))
+    if (!plat_stricmp(spec, "none"))
         return 0;
 
     strncpy(buf, spec, sizeof buf - 1);
     buf[sizeof buf - 1] = '\0';
     for (tok = strtok(buf, ", "); tok; tok = strtok(NULL, ", ")) {
-        if      (!_stricmp(tok, "rle"))      mask |= REPL_RLE;
-        else if (!_stricmp(tok, "gfx"))      mask |= REPL_GFX;
-        else if (!_stricmp(tok, "sprite24")) mask |= REPL_SPRITE24;
-        else if (!_stricmp(tok, "util"))     mask |= REPL_UTIL;
-        else if (!_stricmp(tok, "path"))     mask |= REPL_PATH;
-        else if (!_stricmp(tok, "dlg"))      mask |= REPL_DLG;
-        else if (!_stricmp(tok, "rec"))      mask |= REPL_REC;
-        else if (!_stricmp(tok, "svc"))      mask |= REPL_SVC;
-        else if (!_stricmp(tok, "vm"))       mask |= REPL_VM;
+        if      (!plat_stricmp(tok, "rle"))      mask |= REPL_RLE;
+        else if (!plat_stricmp(tok, "gfx"))      mask |= REPL_GFX;
+        else if (!plat_stricmp(tok, "sprite24")) mask |= REPL_SPRITE24;
+        else if (!plat_stricmp(tok, "util"))     mask |= REPL_UTIL;
+        else if (!plat_stricmp(tok, "path"))     mask |= REPL_PATH;
+        else if (!plat_stricmp(tok, "dlg"))      mask |= REPL_DLG;
+        else if (!plat_stricmp(tok, "rec"))      mask |= REPL_REC;
+        else if (!plat_stricmp(tok, "svc"))      mask |= REPL_SVC;
+        else if (!plat_stricmp(tok, "vm"))       mask |= REPL_VM;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

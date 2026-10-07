@@ -13,7 +13,11 @@
 #define SOKOL_NO_ENTRY
 #define SOKOL_IMPL
 
-#if defined(_WIN32)
+/* A build system may already have picked the backend (-DSOKOL_GLCORE on
+ * Linux, see Makefile.linux); only fill in a default when it did not. */
+#if defined(SOKOL_D3D11) || defined(SOKOL_METAL) || defined(SOKOL_GLCORE) ||     defined(SOKOL_GLES3) || defined(SOKOL_VULKAN) || defined(SOKOL_WGPU)
+    /* backend chosen by the build */
+#elif defined(_WIN32)
     #define SOKOL_D3D11
 #elif defined(__APPLE__)
     #define SOKOL_METAL

@@ -221,7 +221,7 @@ int keylog_init(const char *log_path, const char *play_path, uint64_t base)
     g_base = base;
 
     if (log_path && log_path[0]) {
-        char full[PLAT_MAX_PATH];
+        char full[PLAT_MAX_PATH * 2];   /* dir + sep + name */
         char mod[PLAT_MAX_PATH];
 
         /* The host chdirs to the game directory, so a bare name would land

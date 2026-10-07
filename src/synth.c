@@ -20,12 +20,12 @@
  * comes from the event list's tick stamps.
  */
 
-#include <windows.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
+#include "platform.h"
 #include "synth.h"
 #include "audio.h"
 #include "dls.h"
@@ -484,7 +484,7 @@ static int render(const synth_event *ev, int count, double tick_rate,
  * the AIL 0..127 domain and interpolated in wall-clock time. */
 static double   g_seq_from = 127.0;
 static double   g_seq_to   = 127.0;
-static DWORD    g_ramp_t0;
+static uint64_t g_ramp_t0;
 static int      g_ramp_ms;
 
 /* Start-of-stream gate (docs/PITFALLS.md §8-52): the game states the level
@@ -495,16 +495,16 @@ static int      g_ramp_ms;
  * synth_play arms the gate through audio_hold_music(); the first
  * synth_set_sequence_volume opens it. The stamp only exists so the log can
  * say how long the silence lasted. */
-static DWORD g_arm_t0;
+static uint64_t g_arm_t0;
 
 static double seq_volume_now(void)
 {
-    DWORD e;
+    uint64_t e;
 
     if (g_ramp_ms <= 0)
         return g_seq_to;
-    e = GetTickCount() - g_ramp_t0;
-    if (e >= (DWORD)g_ramp_ms)
+    e = plat_now_ms() - g_ramp_t0;
+    if (e >= (uint64_t)g_ramp_ms)
         return g_seq_to;
     return g_seq_from + (g_seq_to - g_seq_from) * (double)e / (double)g_ramp_ms;
 }
@@ -517,13 +517,13 @@ static double stream_gain(void);
  * only audible - "did the ramp actually happen" is the whole point. */
 static unsigned synth_music_fill(int16_t *dst, unsigned nframes)
 {
-    DWORD now;
-    static DWORD last_fade_log;
+    uint64_t now;
+    static uint64_t last_fade_log;
 
     stream_fill(dst, (uint32_t)nframes, stream_gain());
 
-    now = GetTickCount();
-    if (g_ramp_ms > 0 && now - g_ramp_t0 < (DWORD)g_ramp_ms &&
+    now = plat_now_ms();
+    if (g_ramp_ms > 0 && now - g_ramp_t0 < (uint64_t)g_ramp_ms &&
         now - last_fade_log >= 500) {
         last_fade_log = now;
         printf("synth: fading %.0f -> %.0f over %d ms: now %.1f/127 "
@@ -545,7 +545,7 @@ void synth_set_sequence_volume(int volume, int ms)
     g_seq_from = seq_volume_now();
     g_seq_to   = (double)volume;
     g_ramp_ms  = ms > 0 ? ms : 0;
-    g_ramp_t0  = GetTickCount();
+    g_ramp_t0  = plat_now_ms();
 
     /* First request for a freshly started stream: open the gate so the mixer
      * starts pulling - at this level, not at the stale one it armed with. */
@@ -553,7 +553,7 @@ void synth_set_sequence_volume(int volume, int ms)
         audio_release_music();
         printf("synth: stream released after %lu ms -> sequence volume %.0f/127, "
                "gain %.3f\n",
-               (unsigned long)(GetTickCount() - g_arm_t0),
+               (unsigned long)(plat_now_ms() - g_arm_t0),
                seq_volume_now(), stream_gain());
     }
 }
@@ -623,7 +623,7 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
 {
     int16_t *pcm = NULL;
     uint32_t samples = 0;
-    DWORD t0;
+    uint64_t t0;
 
     synth_stop();
     if (!ev || count <= 0 || tick_rate <= 0.0)
@@ -637,7 +637,7 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
         else
             printf("synth: no GM sound bank available - waveform synthesis only\n");
     }
-    t0 = GetTickCount();
+    t0 = plat_now_ms();
 
     /* Offline full render, exactly as before streaming existed: the --midi-dump
      * WAV and the render statistics document what the synthesiser produced, so
@@ -668,7 +668,7 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
                (unsigned)sample_rate,
                (double)(samples * 2) / (1024.0 * 1024.0), loop,
                100.0 * (double)nonzero / (double)samples, (int)peak,
-               g_peak_voices, (unsigned)(GetTickCount() - t0));
+               g_peak_voices, (unsigned)(plat_now_ms() - t0));
     }
     free(pcm);
     pcm = NULL;
@@ -681,7 +681,7 @@ int synth_play(const synth_event *ev, int count, double tick_rate,
     audio_set_music(NULL);
     g_loop = loop;
     stream_init(ev, count, tick_rate, sample_rate);
-    g_arm_t0 = GetTickCount();
+    g_arm_t0 = plat_now_ms();
     audio_hold_music();
     audio_set_music(synth_music_fill);
     printf("synth: music source installed (%u Hz, loop=%d), gate held until "

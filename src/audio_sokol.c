@@ -20,12 +20,12 @@
  */
 #define SOKOL_AUDIO_IMPL
 
-#include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include "sokol_audio.h"
+#include "platform.h"
 #include "audio.h"
 
 #define MAX_VOICES   8                  /* AIL_MAX_SAMPLES: one per handle  */
@@ -40,14 +40,14 @@ typedef struct {
     int       active;
 } voice;
 
-static CRITICAL_SECTION g_cs;
+static plat_mutex       g_cs;
 static int              g_cs_ready;
 static int              g_up;
 static unsigned         g_rate;
 
 static audio_music_fn   g_music;
 static int              g_hold;          /* silence until the game says go    */
-static DWORD            g_arm_t0;        /* when the gate was closed          */
+static uint64_t         g_arm_t0;        /* when the gate was closed          */
 static int16_t          g_mus[MUS_FRAMES];
 static unsigned         g_mus_len, g_mus_pos;
 
@@ -57,7 +57,7 @@ static uint64_t         g_mixed;         /* frames handed to the device       */
 static int              g_music_peak;    /* last block, int16 scale, sources  */
 static int              g_sfx_peak;
 static int              g_sfx;           /* voices still sounding             */
-static DWORD            g_last_tel;
+static uint64_t         g_last_tel;
 static unsigned long    g_tel_mixed;     /* frames at the previous telemetry  */
 
 /* Optional record of exactly what went to the device (int16 mono WAV). */
@@ -66,8 +66,8 @@ static uint64_t         g_dump_frames;
 static int16_t          g_dump_buf[DUMP_FRAMES];
 static unsigned         g_dump_n;
 
-void audio_lock(void)   { if (g_cs_ready) EnterCriticalSection(&g_cs); }
-void audio_unlock(void) { if (g_cs_ready) LeaveCriticalSection(&g_cs); }
+void audio_lock(void)   { if (g_cs_ready) plat_mutex_lock(&g_cs); }
+void audio_unlock(void) { if (g_cs_ready) plat_mutex_unlock(&g_cs); }
 
 /* ---------------------------------------------------------- convert ----- */
 /* 8-bit waveOut PCM is unsigned (silence 128), 16-bit signed; both already
@@ -211,7 +211,7 @@ static void mix_cb(float *out, int nframes, int nch)
     /* Start gate safety net: play_bgm asks for a level within microseconds,
      * so a gate still closed here means nobody ever asked (docs/AUDIO.md
      * §11.10). 200 ms of silence is the worst case; forever would be a bug. */
-    if (g_hold && (GetTickCount() - g_arm_t0) >= AUDIO_ARM_MS) {
+    if (g_hold && (plat_now_ms() - g_arm_t0) >= AUDIO_ARM_MS) {
         printf("audio: no volume request after %d ms - opening the music gate "
                "anyway\n", AUDIO_ARM_MS);
         g_hold = 0;
@@ -280,7 +280,7 @@ static void mix_cb(float *out, int nframes, int nch)
     g_sfx_peak    = (int)(peak_s * 32767.0f);
     g_sfx         = sfx;
     {
-        DWORD now = GetTickCount();
+        uint64_t now = plat_now_ms();
         if (now - g_last_tel >= AUDIO_TELEMETRY_MS) {
             g_last_tel  = now;
             g_tel_mixed = (unsigned long)g_mixed;
@@ -309,7 +309,7 @@ int audio_init(unsigned want_rate)
 
     if (g_up)
         return 1;
-    InitializeCriticalSection(&g_cs);
+    plat_mutex_init(&g_cs);
     g_cs_ready = 1;
     memset(&desc, 0, sizeof desc);
     desc.sample_rate    = (int)(want_rate ? want_rate : 22050);
@@ -325,7 +325,7 @@ int audio_init(unsigned want_rate)
     }
     g_up      = 1;
     g_rate    = (unsigned)saudio_sample_rate();
-    g_last_tel = GetTickCount();
+    g_last_tel = plat_now_ms();
     printf("audio: device up - WASAPI via sokol_audio, %u Hz, mono, "
            "%d frames/buffer (opened once, music + SFX mixed here)\n",
            g_rate, saudio_buffer_frames());
@@ -353,7 +353,7 @@ void audio_close(void)
     printf("audio: device closed (%llu frames mixed)\n",
            (unsigned long long)g_mixed);
     dump_close();
-    DeleteCriticalSection(&g_cs);
+    plat_mutex_destroy(&g_cs);
     g_cs_ready = 0;
 }
 
@@ -381,7 +381,7 @@ void audio_hold_music(void)
 {
     audio_lock();
     g_hold   = 1;
-    g_arm_t0 = GetTickCount();
+    g_arm_t0 = plat_now_ms();
     audio_unlock();
 }
 
