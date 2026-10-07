@@ -59,6 +59,7 @@
 | `rounds/30-scene-states.md` | 明细 | 主状态机转移 handler 五件套 `0x22EF6`/`0x231BC`/`0x23790`/`0x2389F`/`0x23E39`（`funcs_25E23` 5 表项）+ `--shot-tick=500` 需 >30 s | §60 |
 | `rounds/31-scene-state-14.md` | 明细 | `funcs_25E23[14]` handler `0x239BD` + 队伍身份查询叶子 `0x33499`（闭合第 6 个表项） | §61 |
 | `rounds/32-fx-handlers.md` | 明细 | `funcs_30469` 效果动画 handler 四件套 `0x2C217`/`0x2CAFC`/`0x2CCF4`/`0x2CE1A`（新模块 `fx.c`，新分组 `REPL_FX`）+ 栈探针伪像藏立即数 | §62 |
+| `rounds/33-fx-tail.md` | 明细 | `funcs_30469` 收尾 5 handler + 辅助 `0x2B996`/`0x2BB33`/`0x2BD6C`+`0x2BF83`/`0x2BFD9`/`0x2C441`（整表 9/10）+ `fx_advance` 资源块直测 + A/B 需 autokey 配方 | §63 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。

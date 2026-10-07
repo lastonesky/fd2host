@@ -578,3 +578,15 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     `res_blit(buf,index,dst,pitch,mode)` 的 index 在 `push <index>` 那一行，别信第一参数。
     与 `rounds/08` §37.3（`vm_run` 的 9 参 ABI）是同一现象的两种后果（那里是参数个数，
     这里是参数**值**）。判据：把机器码 `push` 序列抄成实参清单后，`*check` 0 failure。
+
+76. **规划稿的伪代码会略去分支细节（边界比较、无条件置位）；实参/谓词必须回机器码定案**（第 63 轮）：
+    `funcs_30469` 收尾时 `fxcheck` 连抓两个真 bug，全部出在“伪代码没写全”而非“读错机器码”：
+    - `fx_dots8` 的 blit 上界是 **`< 0xF`（≤0xE）**，不是 `< 0x10`——规划稿 §3.2 写的是 `<= 0xE`，
+      但执行者容易顺手改成 `< 0x10`；机器码两处都是 `cmp …,0Fh; jge skip`（`0x2BBE8`/`0x2BC36`）。
+      profile 全 `0xF` 时机器“不画”、C 画 8 次，报 `event count 0/8`。
+    - `fx_dots12` 的 `++phase==3` 时 **`r=1` 是无条件的**；`svc_play_sfx2` 才看
+      `v20[slot]==0`。规划稿把 `r=1` 写进了 `v20[slot]==0` 分支。机器码 `0x2C193 jnz 0x2C1A7`
+      跳过的只是 sfx2，`0x2C1A7 mov [var_14],1` 照执行。报 `return 1/0`。
+    **做法**：规划稿是“语义骨架”，**每一次 `cmp` 的边界、每一个置位/自增是在条件内还是外**
+    都要回反汇编定案；harness 的 profile 必须覆盖边界值（`0xE/0xF`、`2/3`）才能把这类
+    差一/差一个分支的错误逼出来。判据：`fxcheck` 修正后 **12884/0**。

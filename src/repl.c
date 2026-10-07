@@ -283,7 +283,12 @@ static const struct repl_entry g_repl[] = {
      * res_blit / svc_play_sfx(2) / util_rand through their original addresses
      * (already C in the host), so no wrapper is needed - plain cdecl, the
      * five stack arguments map one to one. */
+    { 0x2B996, "fx_dots7",           (void *)fx_dots7,            REPL_FX },
+    { 0x2BB33, "fx_dots8",           (void *)fx_dots8,            REPL_FX },
+    { 0x2BD6C, "fx_blob",            (void *)fx_blob,             REPL_FX },
+    { 0x2BFD9, "fx_dots12",          (void *)fx_dots12,           REPL_FX },
     { 0x2C217, "fx_dots6",           (void *)fx_dots6,            REPL_FX },
+    { 0x2C441, "fx_dots6b",          (void *)fx_dots6b,           REPL_FX },
     { 0x2CAFC, "fx_dots3",           (void *)fx_dots3,            REPL_FX },
     { 0x2CCF4, "fx_dots16",          (void *)fx_dots16,           REPL_FX },
     { 0x2CE1A, "fx_toggle",          (void *)fx_toggle,           REPL_FX },
