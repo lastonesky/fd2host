@@ -46,6 +46,7 @@
 #include "game/unit.h"
 #include "game/fx.h"
 #include "game/msg.h"
+#include "game/ev.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -199,6 +200,22 @@ static const struct repl_entry g_repl[] = {
     { 0x32975, "rec_flag_set1",        (void *)rec_flag_set1,           REPL_REC },
     { 0x34D64, "rec_status_mask_records", (void *)rec_status_mask_records, REPL_REC },
     { 0x35009, "rec_status_set_record14", (void *)rec_status_set_record14, REPL_REC },
+
+    /* The funcs_1199C event handlers (src/game/ev.c): the dependency-closed
+     * half of the dispatch table at 0x51B91. They only touch the record table
+     * / dword_53AD5 and call the already-translated vm_run / record services
+     * at their original addresses, so they share the `rec` group. */
+    { 0x34738, "ev_rec13_set1",       (void *)ev_rec13_set1,       REPL_REC },
+    { 0x348EA, "ev_status24_27",      (void *)ev_status24_27,      REPL_REC },
+    { 0x34A6C, "ev_status7_36",       (void *)ev_status7_36,       REPL_REC },
+    { 0x34B2F, "ev_flag8_gate",       (void *)ev_flag8_gate,       REPL_REC },
+    { 0x34CF1, "ev_rec6_gate",        (void *)ev_rec6_gate,        REPL_REC },
+    { 0x34D92, "ev_mask_records",     (void *)ev_mask_records,     REPL_REC },
+    { 0x34F74, "ev_clear_status12_13",(void *)ev_clear_status12_13,REPL_REC },
+    { 0x35123, "ev_slot8_claim",      (void *)ev_slot8_claim,      REPL_REC },
+    { 0x35191, "ev_status16_71",      (void *)ev_status16_71,      REPL_REC },
+    { 0x351E6, "ev_clear64_73",       (void *)ev_clear64_73,       REPL_REC },
+    { 0x35258, "ev_status16_34",      (void *)ev_status16_34,      REPL_REC },
 
     /* The persistent party roster (src/game/unit.c): the three functions
      * that build/sync/recalc its 80-byte records. They call each other, so

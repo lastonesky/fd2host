@@ -17,11 +17,11 @@
 **同一份源码也能在 Linux 上跑**（`build/fd2host-linux32`，X11/XWayland + sokol GLCORE）：
 与 Windows 同 guest tick 抓帧**逐像素 0 差异**（`rounds/16-entry-layer.md` §46.10）。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 114 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 125 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。
 
 > ⚠ **进度必须看清**：全量函数表 `re/funcmap.csv` 有 **1359** 个函数，已源码化的只有
-> **114 个 ≈ 8.4%**；**其余 ~92% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
+> **125 个 ≈ 9.2%**；**其余 ~91% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
 > 直接执行**。这正是宿主必须是 **32 位进程**的原因（x86-64 长模式不能执行 32 位代码，
 > 只有 `-m32`/WOW64 这类 32 位进程才行）；**等全部函数源码化后，这个 32 位门槛才会消失**。
 
@@ -50,7 +50,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**111 / 1359 个函数接入（≈8.2%）**           ⏳ 其余 ~92% 仍是原始机器码在跑
+源码转译：**125 / 1359 个函数接入（≈9.2%）**           ⏳ 其余 ~91% 仍是原始机器码在跑
 Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 px** ✅（§46.10）
 ```
 
@@ -115,6 +115,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
 
 | §64 | 10-07 | **角色记录表七个数据叶子（第 105–111 个）** | 第 28 轮排好队的依赖闭合叶子：`rec_slot_free`(0x1B8A6，八槽 state bit7 清零个数)/`rec_slot_find`(0x1B83D，bit6 + 按 `want_high` 比 value `<0x80` 或 `>=0x80`，无则 -1)/`rec_sub_table5`(0x1CA89，**16 位字** `+68 -= 0x619FD` 表项字节 5，返回记录地址)/`rec_flag_or80`(0x13512)/`rec_flag_set1`(0x32975)/`rec_status_mask_records`(0x34D64，固定记录 10..27)/`rec_status_set_record14`(0x35009)，共 375 B、69 个到达点；**6 个返回值语义只有 1 个是记录地址**（`0x13512`/`0x32975` 返回 `80*index` 偏移，`0x34D64` 返回表基址，`0x35009` 返回 `base+1120`）。收 `funcs_1199C`(`0x51B91`) `[28]`/`[36]`；排除 `0x205BE`（真入口是 `0x205B4`，条目不合法）。`reccheck` **37398→42225/0**（+4827）。顺手修 2 个工具 bug：`repl_parse()` 漏认 `map` 组名（`--replace=map` 静默等同 `none`，§8-77）；`rec.c` 新引 `tbl_ptr` 使 5 个 check target **链接期**缺 `tables.c`（§8-78）。`regress 8/8`、`repl: installed 111`、静态帧 A/B **0/64000 px**、Linux 自检全过 | `docs/rounds/34-rec-leaves.md`、`docs/PITFALLS.md` §8-77/§8-78、`re/RE_MAP.md` |
 | §65 | 10-07 | **对话框/头像合成三件套（第 112–114 个）** | 第 28 轮显式后置的 `0x1956B`(`msg_open_portrait`)/`0x1974C`(`msg_blit_band`)/`0x26996`(`msg_close_portrait`)，共 **624 B / 103 个直接调用点**；新模块 `game/msg.c/.h`，接入既有 `REPL_DLG`（原子开关，`--replace=dlg` → 21）。三个 64000 B 屏缓冲留在原地址全局 `dword_53C5B/F/63`（48/62/91 个未转译点共享），堆走 `guest_mem`——这正是当年后置的唯一理由。真 ABI=cdecl（栈探针伪像），`0x16F04` 只是共享尾声→`return`。`msgcheck` **465/0**（事件序列归一化指针 + 整幅 VGA + 三屏缓冲逐字节；`0x1974C` 故意不钩，open/close 两侧跑真条带；故障注入 2 次均当场抓到）。`regress 8/8`、`repl: installed 114`、静态帧 A/B **0/64000 px**、Linux 自检全过 | `docs/rounds/35-msg-portrait.md`、`docs/TRANSLATION.md` §4/§5、`re/RE_MAP.md` |
+| §66 | 10-07 | **`funcs_1199C` 事件 handler 闭合子集（第 115–125 个）** | 第 35 轮点名的 `funcs_1199C`(`0x51B91`) 里**现在就能闭合的 11 个 handler**（`0x34738`/`0x348EA`/`0x34A6C`/`0x34B2F`/`0x34CF1`/`0x34D92`/`0x34F74`/`0x35123`/`0x35191`/`0x351E6`/`0x35258`，共 944 B / 99 个直接到达点 + 表项），纯整数事件序列（`status_set` + `vm_run` + `rec_flag` + 一次性标志），依赖全闭合（只调已接入的 `vm.c`/`rec.c`）；新模块 `game/ev.c/.h`，接入既有 `REPL_REC`（`--replace=rec` → 29）。**`_chkstk` 保持 EAX ⇒ 4 个函数的 EAX 是调用者垃圾值 / 服务返回值**，逐个由入口 `retn` 定案为 `void`。`evcheck` **2940/0**（6 服务记录桩 + 256×80 记录表逐字节 + 事件序列 + 归一化返回值；故障注入 3/3 抓到）。`regress 8/8`、`repl: installed 114 → 125`、静态帧 A/B **0/64000 px**、Linux 自检全过 | `docs/rounds/36-ev-handlers.md`、`docs/TRANSLATION.md` §4/§5、`docs/PITFALLS.md` §8-79、`re/RE_MAP.md` |
 
 ## 4. 下一步计划（按优先级）
 
@@ -157,7 +158,11 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    `msgcheck` 465/0；`guest_mem` 堆缝是解锁条件。
    下一批主候选：**`funcs_1199C`(`0x51B91`) 表项**（同族 80 字节记录服务，依赖待逐个闭合）；
    `funcs_30469` 仍只差 `[6] 0x2C67D`（含 CRT 浮点）。
-   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 114/1359）。
+   ~~`funcs_1199C`(`0x51B91`) 表项的依赖闭合子集~~
+   **已完成（§66，接入 114→125）**——11 个事件 handler（944 B，`game/ev.c/.h`，`evcheck` 2940/0）；
+   表里其余 **34 项**全部挂在同一个约 **13 KB 的“场景渲染核”**（`0x10B4E`/`0x135DD`/`0x1366A`/
+   `0x11CAC`/`0x11EEE`/`0x122DC`/`0x1ACF3` + 传递闭包），**这是下一个大里程碑，单独立项**。
+   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 125/1359）。
 2. ~~**补 autokey 配方**~~ **已完成（§40，2026-10-06）**：标准配方 + `--shot-tick=326..334`
    即可落在“打字进行中”，抓到 3 张不同进度的逐字画面（框区差异 455→327→325→0），
    且 **15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽 ⇒ `vm_run`+`dlg_type_step`

@@ -616,3 +616,17 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     `tables.c` 一起编（`HOST_SRC`），所以只有 Windows 侧会中招。
     **做法**：见 `docs/TRANSLATION.md` §1 第 7 步“回归”——动了模块间依赖就先
     `-Target all` 再跑逐个 check。
+
+79. **`_chkstk`（`0x3702F`）保持 EAX ⇒ “返回值”可能只是调用者的 EAX，不是游戏值**（第 36 轮）：
+    Watcom 栈探针的机器码是 `xchg eax,[esp+4]; call 0x37042; mov eax,[esp+4]; retn 4` ——
+    它把帧大小暂存进 EAX 槽又**原样还原**，所以被它守卫的函数**入口 EAX == 调用者的 EAX**。
+    对提前返回（`jnz` 直接 `retn`）的路径，EAX 就是那个垃圾值。
+    `funcs_1199C` 的 11 个 handler 里，`0x34738` 返回 `vm_run` 的结果、`0x34A6C`/`0x34B2F`
+    返回 `vm_run`/`rec_flag` 的结果、`0x35123` 的 `arg!=0` 提前返回直接就是调用者 EAX ——
+    **这 4 个没有可复现的游戏返回值**，C 写 `void` 才精确（实测全部 9 个调用点
+    `call funcs_1199C[eax*4]; add esp,4` 都丢弃 EAX）。
+    **做法**：给函数定签名前，先反汇编每一条 `retn` 前的 EAX，并用 `ida` 查所有调用点是否读它；
+    “有定义”的返回值（如 `dword_53AD5`、`base+80*end`、服务转发的 EAX）才写 `uint32_t` 并对拍。
+    **判据**：`evcheck` 只用 `cmp_read` 比 7 个有定义返回值（归一化 `ret-base`），4 个 `void`
+    只比事件序列/记录表；故障注入把 `0x34CF1` 的 `dword_53AD5` 改成字节值立刻报 480 例失败。
+    与 §8-75（栈探针把实参藏进“寄存器参数”）是同一探针的两面：那里是**入参**，这里是**返回**。

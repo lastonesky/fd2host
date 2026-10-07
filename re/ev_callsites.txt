@@ -1,0 +1,143 @@
+### around 0001197B
+  00011963  mov     dword_53EC8, 63h ; 'c'
+  0001196C  push    esi
+  0001196D  call    sub_1E292
+  00011972  add     esp, 4
+  00011975  mov     eax, dword_53C03
+  0001197A  push    esi
+  0001197B  call    funcs_1197B[eax*4]
+  00011982  add     esp, 4
+  00011985  call    sub_13565
+  0001198A  cmp     dword_51A8F, 0FFh
+  00011994  jz      short loc_119A6
+  00011996  mov     eax, dword_51A8F
+  0001199B  push    esi
+  0001199C  call    funcs_1199C[eax*4]
+
+### around 0001199C
+  00011984  add     esp, 4
+  00011985  call    sub_13565
+  0001198A  cmp     dword_51A8F, 0FFh
+  00011994  jz      short loc_119A6
+  00011996  mov     eax, dword_51A8F
+  0001199B  push    esi
+  0001199C  call    funcs_1199C[eax*4]
+  000119A3  add     esp, 4
+  000119A6  mov     dword_51A8F, 0FFh
+  000119B0  jmp     loc_1187A
+  000119B5  cmp     eax, 22h ; '"'
+  000119B8  jz      loc_11AA3
+  000119BE  cmp     eax, 3Bh ; ';'
+  000119C1  jz      short loc_119C8
+
+### around 0001712D
+  00017115  call    sub_14B78
+  00017118  add     esp, 10h
+  0001711B  cmp     dword_51A8F, 0FFh
+  00017125  jz      short loc_17137
+  00017127  mov     eax, dword_51A8F
+  0001712C  push    ebx
+  0001712D  call    funcs_1199C[eax*4]
+  00017134  add     esp, 4
+  00017137  call    sub_134E4
+  0001713C  push    ebx
+  0001713D  call    sub_13512
+  00017142  add     esp, 4
+  00017145  jmp     loc_170C5
+  0001714A  push    0
+
+### around 00019511
+  000194F9  jmp     loc_19268
+  000194FC  push    0C8h
+  00019501  call    j___delay
+  00019506  add     esp, 4
+  00019509  call    sub_196CB
+  0001950E  mov     eax, ebx
+  00019510  push    ebp
+  00019511  call    funcs_1199C[eax*4]
+  00019518  add     esp, 4
+  0001951B  add     esp, 14h
+  0001951E  pop     ebp
+  0001951F  pop     edi
+  00019520  pop     esi
+  00019521  pop     ebx
+
+### around 0001A85A
+  0001A842  movzx   edx, byte ptr [eax+3]
+  0001A844  cmp     edx, dword_53BEF
+  0001A84A  jnz     short loc_1A827
+  0001A84C  movzx   edx, byte ptr [eax+5]
+  0001A850  cmp     edx, esi
+  0001A852  jnz     short loc_1A827
+  0001A854  movzx   eax, byte ptr [eax+4]
+  0001A858  push    0
+  0001A85A  call    funcs_1199C[eax*4]
+  0001A861  add     esp, 4
+  0001A864  jmp     short loc_1A827
+  0001A866  push    38h ; '8'
+  0001A86B  call    sub_3702F
+  0001A870  push    ebx
+
+### around 0001AC1A
+  0001AC02  add     dword_53BF3, eax
+  0001AC03  jmp     short loc_1AC51
+  0001AC05  cmp     eax, 2
+  0001AC08  jnz     short loc_1AC26
+  0001AC0A  push    0C8h
+  0001AC0F  call    j___delay
+  0001AC14  add     esp, 4
+  0001AC17  mov     eax, ebx
+  0001AC19  push    edi
+  0001AC1A  call    funcs_1199C[eax*4]
+  0001AC21  add     esp, 4
+  0001AC24  jmp     short loc_1AC51
+  0001AC26  cmp     eax, 3
+  0001AC29  jnz     short loc_1AC51
+
+### around 0001D890
+  0001D878  call    sub_13A9F
+  0001D87B  add     esp, 8
+  0001D87E  cmp     dword_51A8F, 0FFh
+  0001D888  jz      short loc_1D89A
+  0001D88A  mov     eax, dword_51A8F
+  0001D88F  push    esi
+  0001D890  call    funcs_1199C[eax*4]
+  0001D897  add     esp, 4
+  0001D89A  mov     eax, dword_53C03
+  0001D89F  push    esi
+  0001D8A0  call    funcs_1197B[eax*4]
+  0001D8A7  add     esp, 4
+  0001D8AA  cmp     dword_53ECC, 0
+  0001D8B1  jz      loc_1D825
+
+### around 0001D95C
+  0001D944  call    sub_13A9F
+  0001D947  add     esp, 8
+  0001D94A  cmp     dword_51A8F, 0FFh
+  0001D954  jz      short loc_1D966
+  0001D956  mov     eax, dword_51A8F
+  0001D95B  push    esi
+  0001D95C  call    funcs_1199C[eax*4]
+  0001D963  add     esp, 4
+  0001D966  mov     eax, dword_53C03
+  0001D96B  push    esi
+  0001D96C  call    funcs_1197B[eax*4]
+  0001D973  add     esp, 4
+  0001D976  cmp     dword_53ECC, 0
+  0001D97D  jnz     loc_1DA13
+
+### around 0001D9EC
+  0001D9D4  call    sub_13A9F
+  0001D9D7  add     esp, 8
+  0001D9DA  cmp     dword_51A8F, 0FFh
+  0001D9E4  jz      short loc_1D9F6
+  0001D9E6  mov     eax, dword_51A8F
+  0001D9EB  push    esi
+  0001D9EC  call    funcs_1199C[eax*4]
+  0001D9F3  add     esp, 4
+  0001D9F6  mov     eax, dword_53C03
+  0001D9FB  push    esi
+  0001D9FC  call    funcs_1197B[eax*4]
+  0001DA03  add     esp, 4
+  0001DA06  cmp     dword_53ECC, 0
+  0001DA0D  jz      loc_1D98C

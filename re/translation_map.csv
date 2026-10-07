@@ -70,9 +70,20 @@ addr,c_name,source_file,group,check,cases,status,note
 0x32975,rec_flag_set1,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x33499,unit_exists,src/game/unit.c,rec,reccheck,36327,wired (repl.c),persistent party roster (0x1145A/0x11506/0x112A5)
 0x344F2,rec_status_set,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x34738,ev_rec13_set1,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
 0x34894,rec_flag,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x348EA,ev_status24_27,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x34A6C,ev_status7_36,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x34B2F,ev_flag8_gate,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x34CF1,ev_rec6_gate,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
 0x34D64,rec_status_mask_records,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x34D92,ev_mask_records,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x34F74,ev_clear_status12_13,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
 0x35009,rec_status_set_record14,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x35123,ev_slot8_claim,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x35191,ev_status16_71,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x351E6,ev_clear64_73,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x35258,ev_status16_34,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
 0x4DED4,util_rec3,src/game/util.c,util,utilcheck,2200,wired (repl.c),byte/palette utilities
 0x4DEEC,util_translate,src/game/util.c,util,utilcheck,2200,wired (repl.c),byte/palette utilities
 0x4DF09,util_sum_tail4,src/game/util.c,util,utilcheck,2200,wired (repl.c),byte/palette utilities

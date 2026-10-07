@@ -1,0 +1,118 @@
+============================================================
+### 0x344F2
+  000344F2  push    0Ch
+  000344F7  call    sub_3702F
+  000344FC  push    ebx
+  000344FD  push    esi
+  000344FE  mov     esi, [esp+8+arg_4]
+  00034502  mov     ecx, [esp+8+arg_8]
+  00034506  mov     edx, [esp+8+arg_0]
+  0003450A  jmp     short loc_3452A
+  0003450C  mov     eax, edx
+  0003450E  shl     eax, 2
+  00034511  add     eax, edx
+  00034513  shl     eax, 4
+  00034516  mov     ebx, dword_53A45
+  0003451C  add     eax, ebx
+  0003451E  mov     bl, [eax+34h]
+  00034521  and     bl, 0F0h
+  00034524  or      bl, cl
+  00034526  mov     [eax+34h], bl
+  00034529  inc     edx
+  0003452A  cmp     edx, esi
+  0003452C  jle     short loc_3450C
+  0003452E  pop     esi
+  0003452F  pop     ebx
+  00034530  retn
+============================================================
+### 0x34D64
+  00034D64  push    8
+  00034D69  call    sub_3702F
+  00034D6E  push    ebx
+  00034D6F  xor     edx, edx
+  00034D71  jmp     short loc_34D8B
+  00034D73  lea     ebx, [edx+0Ah]
+  00034D76  mov     eax, ebx
+  00034D78  shl     eax, 2
+  00034D7B  add     ebx, eax
+  00034D7D  shl     ebx, 4
+  00034D80  mov     eax, dword_53A45
+  00034D85  and     byte ptr [ebx+eax+34h], 80h
+  00034D8A  inc     edx
+  00034D8B  cmp     edx, 12h
+  00034D8E  jl      short loc_34D73
+  00034D90  pop     ebx
+  00034D91  retn
+============================================================
+### 0x34894
+  00034894  push    4
+  00034899  call    sub_3702F
+  0003489E  mov     edx, [esp+arg_0]
+  000348A2  mov     eax, edx
+  000348A4  shl     eax, 2
+  000348A7  add     edx, eax
+  000348A9  shl     edx, 4
+  000348AC  mov     eax, dword_53A45
+  000348B1  mov     al, [edx+eax+5]
+  000348B5  and     al, 1
+  000348B7  movzx   eax, al
+  000348BA  retn
+============================================================
+### 0x1B8A6
+  0001B8A6  push    8
+  0001B8AB  call    sub_3702F
+  0001B8B0  push    ebx
+  0001B8B1  xor     ebx, ebx
+  0001B8B3  mov     edx, [esp+4+arg_0]
+  0001B8B7  mov     eax, edx
+  0001B8B9  shl     eax, 2
+  0001B8BC  add     eax, edx
+  0001B8BE  shl     eax, 4
+  0001B8C1  mov     ecx, dword_53A45
+  0001B8C7  add     ecx, eax
+  0001B8C9  xor     eax, eax
+  0001B8CB  jmp     short loc_1B8CE
+  0001B8CD  inc     eax
+  0001B8CE  cmp     eax, 8
+  0001B8D1  jge     short loc_1B8E3
+  0001B8D3  lea     edx, [eax+eax]
+  0001B8D6  add     edx, ecx
+  0001B8D8  add     edx, 0Ah
+  0001B8DB  test    byte ptr [edx], 80h
+  0001B8DE  jnz     short loc_1B8CD
+  0001B8E0  inc     ebx
+  0001B8E1  jmp     short loc_1B8CD
+  0001B8E3  mov     eax, ebx
+  0001B8E5  pop     ebx
+  0001B8E6  retn
+============================================================
+### 0x1BB8C
+  0001BB8C  push    8
+  0001BB91  call    sub_3702F
+  0001BB96  push    ebx
+  0001BB97  mov     edx, [esp+4+arg_0]
+  0001BB9B  mov     eax, edx
+  0001BB9D  shl     eax, 2
+  0001BBA0  add     eax, edx
+  0001BBA2  shl     eax, 4
+  0001BBA5  mov     ebx, dword_53A45
+  0001BBAB  add     ebx, eax
+  0001BBAD  xor     edx, edx
+  0001BBAF  jmp     short loc_1BBB2
+  0001BBB1  inc     edx
+  0001BBB2  cmp     edx, 8
+  0001BBB5  jge     short loc_1BBD5
+  0001BBB7  lea     eax, [edx+edx]
+  0001BBBA  add     eax, ebx
+  0001BBBC  add     eax, 0Ah
+  0001BBBF  test    byte ptr [eax], 80h
+  0001BBC2  jz      short loc_1BBB1
+  0001BBC4  mov     byte ptr [eax], 0
+  0001BBC7  mov     dl, [esp+4+arg_4]
+  0001BBCB  mov     [eax+1], dl
+  0001BBCE  mov     eax, 1
+  0001BBD3  pop     ebx
+  0001BBD4  retn
+  0001BBD5  mov     eax, 0FFFFFFFFh
+  0001BBDA  pop     ebx
+  0001BBDB  retn

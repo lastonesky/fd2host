@@ -1,0 +1,775 @@
+======================================================================
+### 0x34738
+  00034738  push    28h ; '('
+  0003473D  call    sub_3702F
+  00034742  mov     eax, dword_53A45
+  00034747  add     eax, 410h
+  0003474C  mov     byte ptr [eax+6], 1
+  00034750  push    1
+  00034752  push    13h
+  00034754  push    4Ah ; 'J'
+  00034756  push    4Ch ; 'L'
+  00034758  push    0CDh
+  0003475D  push    140h
+  00034762  push    0A0000h
+  00034767  push    7
+  00034769  push    dword_53A79
+  0003476F  call    sub_15F84
+  00034774  add     esp, 24h
+  00034777  retn
+======================================================================
+### 0x348EA
+  000348EA  push    28h ; '('
+  000348EF  call    sub_3702F
+  000348F4  mov     eax, dword_53AD5
+  000348F9  movzx   eax, byte ptr [eax+10h]
+  000348FD  test    eax, eax
+  000348FF  jnz     short locret_3493F
+  00034901  push    7
+  00034903  push    1Bh
+  00034905  push    18h
+  00034907  call    sub_344F2
+  0003490C  add     esp, 0Ch
+  0003490F  push    1
+  00034911  push    13h
+  00034913  push    4Ah ; 'J'
+  00034915  push    4Ch ; 'L'
+  00034917  push    0CDh
+  0003491C  push    140h
+  00034921  push    0A0000h
+  00034926  push    3
+  00034928  push    dword_53A79
+  0003492E  call    sub_15F84
+  00034933  add     esp, 24h
+  00034936  mov     eax, dword_53AD5
+  0003493B  mov     byte ptr [eax+10h], 1
+  0003493F  retn
+======================================================================
+### 0x34A6C
+  00034A6C  push    30h ; '0'
+  00034A71  call    sub_3702F
+  00034A76  push    ebx
+  00034A77  sub     esp, 4
+  00034A7A  mov     [esp+8+var_8], 0
+  00034A7E  push    7
+  00034A80  push    24h ; '$'
+  00034A82  push    7
+  00034A84  call    sub_344F2
+  00034A89  add     esp, 0Ch
+  00034A8C  push    1
+  00034A8E  push    13h
+  00034A90  push    4Ah ; 'J'
+  00034A92  push    4Ch ; 'L'
+  00034A94  push    0CDh
+  00034A99  push    140h
+  00034A9E  push    0A0000h
+  00034AA3  push    8
+  00034AA5  push    dword_53A79
+  00034AAB  call    sub_15F84
+  00034AB0  add     esp, 24h
+  00034AB3  mov     ebx, 7
+  00034AB8  jmp     short loc_34ABB
+  00034ABA  inc     ebx
+  00034ABB  cmp     ebx, 25h ; '%'
+  00034ABE  jge     short loc_34AD3
+  00034AC0  push    ebx
+  00034AC1  call    sub_34894
+  00034AC6  add     esp, 4
+  00034AC9  test    eax, eax
+  00034ACB  jnz     short loc_34ABA
+  00034ACD  mov     [esp+8+var_8], 1
+  00034AD1  jmp     short loc_34ABA
+  00034AD3  movzx   eax, [esp+8+var_8]
+  00034AD7  cmp     eax, 1
+  00034ADA  jnz     short loc_34B02
+  00034ADC  push    eax
+  00034ADD  push    13h
+  00034ADF  push    4Ah ; 'J'
+  00034AE1  push    4Ch ; 'L'
+  00034AE3  push    0CDh
+  00034AE8  push    140h
+  00034AED  push    0A0000h
+  00034AF2  push    0Bh
+  00034AF4  push    dword_53A79
+  00034AFA  call    sub_15F84
+  00034AFF  add     esp, 24h
+  00034B02  add     esp, 4
+  00034B05  pop     ebx
+  00034B06  retn
+======================================================================
+### 0x34B2F
+  00034B2F  push    28h ; '('
+  00034B34  call    sub_3702F
+  00034B39  push    8
+  00034B3B  call    sub_34894
+  00034B40  add     esp, 4
+  00034B43  test    eax, eax
+  00034B45  jnz     short locret_34B6E
+  00034B47  push    1
+  00034B49  push    13h
+  00034B4B  push    4Ah ; 'J'
+  00034B4D  push    4Ch ; 'L'
+  00034B4F  push    0CDh
+  00034B54  push    140h
+  00034B59  push    0A0000h
+  00034B5E  push    2
+  00034B60  push    dword_53A79
+  00034B66  call    sub_15F84
+  00034B6B  add     esp, 24h
+  00034B6E  retn
+======================================================================
+### 0x34CF1
+  00034CF1  push    10h
+  00034CF6  call    sub_3702F
+  00034CFB  mov     edx, [esp+arg_0]
+  00034CFF  mov     eax, edx
+  00034D01  shl     eax, 2
+  00034D04  add     edx, eax
+  00034D06  shl     edx, 4
+  00034D09  mov     eax, dword_53A45
+  00034D0E  movzx   eax, byte ptr [edx+eax+6]
+  00034D13  test    eax, eax
+  00034D15  jz      short locret_34D2E
+  00034D17  push    0
+  00034D19  push    1Bh
+  00034D1B  push    9
+  00034D1D  call    sub_344F2
+  00034D22  add     esp, 0Ch
+  00034D25  mov     eax, dword_53AD5
+  00034D2A  mov     byte ptr [eax+10h], 1
+  00034D2E  retn
+======================================================================
+### 0x34D92
+  00034D92  push    28h ; '('
+  00034D97  call    sub_3702F
+  00034D9C  push    1
+  00034D9E  push    13h
+  00034DA0  push    4Ah ; 'J'
+  00034DA2  push    4Ch ; 'L'
+  00034DA4  push    0CDh
+  00034DA9  push    140h
+  00034DAE  push    0A0000h
+  00034DB3  push    2
+  00034DB5  push    dword_53A79
+  00034DBB  call    sub_15F84
+  00034DC0  add     esp, 24h
+  00034DC3  push    [esp+arg_0]
+  00034DC7  call    sub_34D64
+  00034DCC  add     esp, 4
+  00034DCF  retn
+======================================================================
+### 0x34F74
+  00034F74  push    28h ; '('
+  00034F79  call    sub_3702F
+  00034F7E  push    1
+  00034F80  push    13h
+  00034F82  push    4Ah ; 'J'
+  00034F84  push    4Ch ; 'L'
+  00034F86  push    0CDh
+  00034F8B  push    140h
+  00034F90  push    0A0000h
+  00034F95  push    2
+  00034F97  push    dword_53A79
+  00034F9D  call    sub_15F84
+  00034FA2  add     esp, 24h
+  00034FA5  mov     eax, dword_53A45
+  00034FAA  add     eax, 3C0h
+  00034FAF  mov     byte ptr [eax+34h], 0
+  00034FB3  mov     eax, dword_53A45
+  00034FB8  add     eax, 410h
+  00034FBD  mov     byte ptr [eax+34h], 0
+  00034FC1  retn
+======================================================================
+### 0x35123
+  00035123  push    28h ; '('
+  00035128  call    sub_3702F
+  0003512D  cmp     [esp+arg_0], 0
+  00035132  jnz     short locret_35190
+  00035134  push    [esp+arg_0]
+  00035138  call    sub_1B8A6
+  0003513D  add     esp, 4
+  00035140  cmp     eax, 8
+  00035143  jz      short locret_35190
+  00035145  mov     eax, dword_53AD5
+  0003514A  movzx   eax, byte ptr [eax+10h]
+  0003514E  test    eax, eax
+  00035150  jnz     short locret_35190
+  00035152  push    59h ; 'Y'
+  00035154  push    [esp+4+arg_0]
+  00035158  call    sub_1BB8C
+  0003515D  add     esp, 8
+  00035160  push    1
+  00035162  push    13h
+  00035164  push    4Ah ; 'J'
+  00035166  push    4Ch ; 'L'
+  00035168  push    0CDh
+  0003516D  push    140h
+  00035172  push    0A0000h
+  00035177  push    0Bh
+  00035179  push    dword_53A79
+  0003517F  call    sub_15F84
+  00035184  add     esp, 24h
+  00035187  mov     eax, dword_53AD5
+  0003518C  mov     byte ptr [eax+10h], 1
+  00035190  retn
+======================================================================
+### 0x35191
+  00035191  push    28h ; '('
+  00035196  call    sub_3702F
+  0003519B  mov     eax, dword_53AD5
+  000351A0  movzx   eax, byte ptr [eax+10h]
+  000351A4  test    eax, eax
+  000351A6  jnz     short locret_351E5
+  000351A8  push    eax
+  000351A9  push    47h ; 'G'
+  000351AB  push    10h
+  000351AD  call    sub_344F2
+  000351B2  add     esp, 0Ch
+  000351B5  push    1
+  000351B7  push    13h
+  000351B9  push    4Ah ; 'J'
+  000351BB  push    4Ch ; 'L'
+  000351BD  push    0CDh
+  000351C2  push    140h
+  000351C7  push    0A0000h
+  000351CC  push    1
+  000351CE  push    dword_53A79
+  000351D4  call    sub_15F84
+  000351D9  add     esp, 24h
+  000351DC  mov     eax, dword_53AD5
+  000351E1  mov     byte ptr [eax+10h], 1
+  000351E5  retn
+======================================================================
+### 0x351E6
+  000351E6  push    2Ch ; ','
+  000351EB  call    sub_3702F
+  000351F0  push    ebx
+  000351F1  push    1
+  000351F3  push    13h
+  000351F5  push    4Ah ; 'J'
+  000351F7  push    4Ch ; 'L'
+  000351F9  push    0CDh
+  000351FE  push    140h
+  00035203  push    0A0000h
+  00035208  push    6
+  0003520A  push    dword_53A79
+  00035210  call    sub_15F84
+  00035215  add     esp, 24h
+  00035218  mov     edx, 40h ; '@'
+  0003521D  jmp     short loc_35235
+  0003521F  mov     eax, edx
+  00035221  shl     eax, 2
+  00035224  lea     ebx, [edx+eax]
+  00035227  shl     ebx, 4
+  0003522A  mov     eax, dword_53A45
+  0003522F  mov     byte ptr [ebx+eax+35h], 0
+  00035234  inc     edx
+  00035235  cmp     edx, 49h ; 'I'
+  00035238  jle     short loc_3521F
+  0003523A  push    3
+  0003523C  push    49h ; 'I'
+  0003523E  push    40h ; '@'
+  00035240  call    sub_344F2
+  00035245  add     esp, 0Ch
+  00035248  push    0
+  0003524A  push    31h ; '1'
+  0003524C  push    23h ; '#'
+  0003524E  call    sub_344F2
+  00035253  add     esp, 0Ch
+  00035256  pop     ebx
+  00035257  retn
+======================================================================
+### 0x35258
+  00035258  push    28h ; '('
+  0003525D  call    sub_3702F
+  00035262  push    1
+  00035264  push    13h
+  00035266  push    4Ah ; 'J'
+  00035268  push    4Ch ; 'L'
+  0003526A  push    0CDh
+  0003526F  push    140h
+  00035274  push    0A0000h
+  00035279  push    8
+  0003527B  push    dword_53A79
+  00035281  call    sub_15F84
+  00035286  add     esp, 24h
+  00035289  push    0
+  0003528B  push    22h ; '"'
+  0003528D  push    10h
+  0003528F  call    sub_344F2
+  00035294  add     esp, 0Ch
+  00035297  retn
+======================================================================
+### helper 0x3702F
+  0003702F  xchg    eax, [esp+arg_0]
+  00037033  call    sub_37042
+  00037038  mov     eax, [esp+arg_0]
+  0003703C  retn    4
+======================================================================
+### helper 0x15F84
+  00015F84  push    5Ch ; '\'
+  00015F89  call    sub_3702F
+  00015F8E  push    ebx
+  00015F8F  push    esi
+  00015F90  push    edi
+  00015F91  push    ebp
+  00015F92  sub     esp, 24h
+  00015F95  mov     esi, [esp+34h+arg_0]
+  00015F99  mov     [esp+34h+var_18], 0
+  00015FA1  mov     [esp+34h+var_1C], 0
+  00015FA9  mov     [esp+34h+var_20], 0
+  00015FB1  mov     ebp, [esp+34h+arg_8]
+  00015FB5  mov     eax, [esp+34h+arg_4]
+  00015FB9  movsx   eax, word ptr [esi+eax*2]
+  00015FBD  add     esi, eax
+  00015FBF  jmp     loc_1630D
+  00015FC4  cmp     eax, 0FFFFFFFDh
+  00015FC7  jnz     loc_16049
+  00015FCD  cmp     dword_53C67, 728h
+  00015FD7  jz      short loc_15FE5
+  00015FD9  cmp     dword_53C67, 9017h
+  00015FE3  jnz     short loc_15FF5
+  00015FE5  cmp     [esp+34h+var_18], 3
+  00015FEA  jnz     short loc_15FF5
+  00015FEC  call    sub_16E24
+  00015FF1  dec     [esp+34h+var_18]
+  00015FF5  mov     eax, [esp+34h+arg_C]
+  00015FF9  imul    eax, [esp+34h+arg_1C]
+  00015FFE  inc     [esp+34h+var_18]
+  00016002  imul    eax, [esp+34h+var_18]
+  00016007  mov     ebp, [esp+34h+arg_8]
+  0001600B  add     ebp, eax
+  0001600D  add     esi, 2
+  00016010  cmp     dword_53C67, 728h
+  0001601A  jz      short loc_16028
+  0001601C  cmp     dword_53C67, 9017h
+  00016026  jnz     short loc_16032
+  00016028  push    0
+  0001602A  call    sub_16559
+  0001602F  add     esp, 4
+  00016032  push    1
+  00016034  call    sub_16C57
+  00016039  add     esp, 4
+  0001603C  mov     [esp+34h+arg_20], 1
+  00016044  jmp     loc_1630D
+  00016049  lea     edx, [esi+2]
+  0001604C  mov     [esp+34h+var_28], edx
+  00016050  cmp     eax, 0FFFFFFFCh
+  00016053  jnz     short loc_16086
+  00016055  push    1
+  00016057  push    13h
+  00016059  push    4Ah ; 'J'
+  0001605B  push    4Ch ; 'L'
+  0001605D  push    0CDh
+  00016062  push    [esp+48h+arg_C]
+  00016066  push    ebp
+  00016067  push    dword_53AD9
+  0001606D  push    dword_53A7D
+  00016073  call    sub_15F84
+  00016078  add     esp, 24h
+  0001607B  mov     ebp, eax
+  0001607D  mov     esi, [esp+34h+var_28]
+  00016081  jmp     loc_1630D
+  00016086  cmp     eax, 0FFFFFFFBh
+  00016089  jnz     short loc_160A5
+  0001608B  push    1
+  0001608D  push    13h
+  0001608F  push    4Ah ; 'J'
+  00016091  push    4Ch ; 'L'
+  00016093  push    0CDh
+  00016098  push    [esp+48h+arg_C]
+  0001609C  push    ebp
+  0001609D  push    dword_53ADD
+  000160A3  jmp     short loc_1606D
+  000160A5  cmp     eax, 0FFFFFFFAh
+  000160A8  jnz     loc_16140
+  000160AE  push    dword_53AE1
+  000160B4  push    offset aD_0; "%d"
+  000160B9  lea     eax, [esp+3Ch+var_34]
+  000160BD  push    eax
+  000160BE  call    sprintf
+  000160C3  add     esp, 0Ch
+  000160C6  mov     eax, esp
+  000160C8  push    eax
+  000160C9  call    strlen
+  000160CE  add     esp, 4
+  000160D1  mov     [esp+34h+var_14], al
+  000160D5  mov     [esp+34h+var_24], 0
+  000160DD  jmp     short loc_160E6
+  000160DF  add     ebp, 10h
+  000160E2  inc     [esp+34h+var_24]
+  000160E6  movzx   eax, [esp+34h+var_14]
+  000160EB  cmp     eax, [esp+34h+var_24]
+  000160EF  jle     loc_16362
+  000160F5  push    [esp+34h+arg_18]
+  000160F9  push    [esp+38h+arg_14]
+  000160FD  push    [esp+3Ch+arg_10]
+  00016101  push    [esp+40h+arg_C]
+  00016105  push    ebp
+  00016106  mov     eax, [esp+48h+var_24]
+  0001610A  movzx   eax, [esp+eax+48h+var_34]
+  0001610F  sub     eax, 30h ; '0'
+  00016112  push    eax
+  00016113  push    dword_53A75
+  00016119  call    sub_4ED7A
+  0001611E  add     esp, 1Ch
+  00016121  call    sub_10620
+  00016126  test    eax, eax
+  00016128  jz      short loc_16132
+  0001612A  mov     [esp+34h+arg_20], 0
+  00016132  cmp     [esp+34h+arg_20], 0
+  00016137  jz      short loc_160DF
+  00016139  call    sub_164E8
+  0001613E  jmp     short loc_160DF
+  00016140  cmp     eax, 0FFFFFFEFh
+  00016143  jnz     loc_1622A
+  00016149  cmp     [esp+34h+var_1C], 0
+  0001614E  jz      short loc_16174
+  00016150  push    0
+  00016152  call    sub_16559
+  00016157  add     esp, 4
+  0001615A  push    0
+  0001615C  call    sub_16C57
+  00016161  add     esp, 4
+  00016164  push    [esp+34h+var_20]
+  00016168  push    [esp+38h+var_1C]
+  0001616C  call    sub_16B43
+  00016171  add     esp, 8
+  00016174  mov     dword_53C67, 728h
+  0001617E  movzx   ebp, word ptr [esi+2]
+  00016182  push    ebp
+  00016183  call    sub_12C60
+  00016188  add     esp, 4
+  0001618B  cmp     eax, 0FFFFFFFFh
+  0001618E  jz      short loc_1619A
+  00016190  mov     [esp+34h+var_20], 2
+  00016198  jmp     short loc_161A2
+  0001619A  mov     [esp+34h+var_20], 0
+  000161A2  cmp     ebp, 27h ; '''
+  000161A5  jz      short loc_161B1
+  000161A7  mov     edi, dword_53C1B
+  000161AD  movzx   ebp, byte ptr [edi+7]
+  000161B1  push    ebp
+  000161B2  push    dword_53A85
+  000161B8  push    offset aDatoDat; "DATO.DAT"
+  000161BD  call    sub_111BA
+  000161C2  add     esp, 0Ch
+  000161C5  mov     dword_53A85, eax
+  000161CA  push    [esp+34h+var_20]
+  000161CE  movzx   eax, byte ptr [edi+1]
+  000161D2  push    eax
+  000161D3  movzx   eax, byte ptr [edi]
+  000161D6  push    eax
+  000161D7  call    sub_165AC
+  000161DC  add     esp, 0Ch
+  000161DF  mov     [esp+34h+var_1C], eax
+  000161E3  mov     edi, dword_53A85
+  000161E9  movzx   eax, byte ptr [edi]
+  000161EC  add     edi, eax
+  000161EE  push    140h
+  000161F3  push    edi
+  000161F4  mov     eax, 0A0000h
+  000161F9  add     eax, dword_53C67
+  000161FF  push    eax
+  00016200  call    sub_4EBFF
+  00016205  add     esp, 0Ch
+  00016208  mov     [esp+34h+arg_20], 1
+  00016210  mov     [esp+34h+var_18], 0
+  00016218  mov     [esp+34h+arg_8], 0A0B4Fh
+  00016220  mov     ebp, 0A0B4Fh
+  00016225  jmp     loc_1630A
+  0001622A  cmp     eax, 0FFFFFFEEh
+  0001622D  jnz     loc_16367
+  00016233  cmp     [esp+34h+var_1C], 0
+  00016238  jz      short loc_1625E
+  0001623A  push    0
+  0001623C  call    sub_16559
+  00016241  add     esp, 4
+  00016244  push    0
+  00016246  call    sub_16C57
+  0001624B  add     esp, 4
+  0001624E  push    [esp+34h+var_20]
+  00016252  push    [esp+38h+var_1C]
+  00016256  call    sub_16B43
+  0001625B  add     esp, 8
+  0001625E  mov     dword_53C67, 9017h
+  00016268  movzx   ebp, word ptr [esi+2]
+  0001626C  push    ebp
+  0001626D  call    sub_12C60
+  00016272  add     esp, 4
+  00016275  cmp     eax, 0FFFFFFFFh
+  00016278  jz      short loc_16284
+  0001627A  mov     [esp+34h+var_20], 70h ; 'p'
+  00016282  jmp     short loc_1628C
+  00016284  mov     [esp+34h+var_20], 0
+  0001628C  mov     edi, dword_53C1B
+  00016292  movzx   ebp, byte ptr [edi+7]
+  00016296  push    ebp
+  00016297  push    dword_53A85
+  0001629D  push    offset aDatoDat; "DATO.DAT"
+  000162A2  call    sub_111BA
+  000162A7  add     esp, 0Ch
+  000162AA  mov     dword_53A85, eax
+  000162AF  push    [esp+34h+var_20]
+  000162B3  movzx   eax, byte ptr [edi+1]
+  000162B7  push    eax
+  000162B8  movzx   eax, byte ptr [edi]
+  000162BB  push    eax
+  000162BC  call    sub_165AC
+  000162C1  add     esp, 0Ch
+  000162C4  mov     [esp+34h+var_1C], eax
+  000162C8  mov     edi, dword_53A85
+  000162CE  movzx   eax, byte ptr [edi]
+  000162D1  add     edi, eax
+  000162D3  push    140h
+  000162D8  push    edi
+  000162D9  mov     eax, 0A0000h
+  000162DE  add     eax, dword_53C67
+  000162E4  push    eax
+  000162E5  call    sub_4EC31
+  000162EA  add     esp, 0Ch
+  000162ED  mov     [esp+34h+arg_20], 1
+  000162F5  mov     [esp+34h+var_18], 0
+  000162FD  mov     [esp+34h+arg_8], 0A951Fh
+  00016305  mov     ebp, 0A951Fh
+  0001630A  add     esi, 4
+  0001630D  movsx   eax, word ptr [esi]
+  00016310  cmp     eax, 0FFFFFFFFh
+  00016313  jz      loc_164AC
+  00016319  cmp     eax, 0FFFFFFFEh
+  0001631C  jnz     loc_15FC4
+  00016322  cmp     dword_53C67, 728h
+  0001632C  jz      short loc_1633A
+  0001632E  cmp     dword_53C67, 9017h
+  00016338  jnz     short loc_1634A
+  0001633A  cmp     [esp+34h+var_18], 3
+  0001633F  jnz     short loc_1634A
+  00016341  call    sub_16E24
+  00016346  dec     [esp+34h+var_18]
+  0001634A  mov     eax, [esp+34h+arg_C]
+  0001634E  imul    eax, [esp+34h+arg_1C]
+  00016353  inc     [esp+34h+var_18]
+  00016357  imul    eax, [esp+34h+var_18]
+  0001635C  mov     ebp, [esp+34h+arg_8]
+  00016360  add     ebp, eax
+  00016362  add     esi, 2
+  00016365  jmp     short loc_1630D
+  00016367  cmp     eax, 0FFFFFFEDh
+  0001636A  jnz     short loc_163E3
+  0001636C  cmp     [esp+34h+var_1C], 0
+  00016371  jz      short loc_16397
+  00016373  push    0
+  00016375  call    sub_16559
+  0001637A  add     esp, 4
+  0001637D  push    0
+  0001637F  call    sub_16C57
+  00016384  add     esp, 4
+  00016387  push    [esp+34h+var_20]
+  0001638B  push    [esp+38h+var_1C]
+  0001638F  call    sub_16B43
+  00016394  add     esp, 8
+  00016397  mov     dword_53C67, 728h
+  000163A1  movzx   edi, word ptr [esi+2]
+  000163A5  mov     eax, edi
+  000163A7  shl     eax, 2
+  000163AA  add     eax, edi
+  000163AC  shl     eax, 4
+  000163AF  mov     edi, dword_53A45
+  000163B5  add     edi, eax
+  000163B7  movzx   ebp, byte ptr [edi+7]
+  000163BB  mov     [esp+34h+var_20], 2
+  000163C3  push    ebp
+  000163C4  push    dword_53A85
+  000163CA  push    offset aDatoDat; "DATO.DAT"
+  000163CF  call    sub_111BA
+  000163D4  add     esp, 0Ch
+  000163D7  mov     dword_53A85, eax
+  000163DC  push    2
+  000163DE  jmp     loc_161CE
+  000163E3  cmp     eax, 0FFFFFFECh
+  000163E6  jnz     short loc_1645F
+  000163E8  cmp     [esp+34h+var_1C], 0
+  000163ED  jz      short loc_16413
+  000163EF  push    0
+  000163F1  call    sub_16559
+  000163F6  add     esp, 4
+  000163F9  push    0
+  000163FB  call    sub_16C57
+  00016400  add     esp, 4
+  00016403  push    [esp+34h+var_20]
+  00016407  push    [esp+38h+var_1C]
+  0001640B  call    sub_16B43
+  00016410  add     esp, 8
+  00016413  mov     dword_53C67, 9017h
+  0001641D  movzx   edi, word ptr [esi+2]
+  00016421  mov     eax, edi
+  00016423  shl     eax, 2
+  00016426  add     eax, edi
+  00016428  shl     eax, 4
+  0001642B  mov     edi, dword_53A45
+  00016431  add     edi, eax
+  00016433  movzx   ebp, byte ptr [edi+7]
+  00016437  mov     [esp+34h+var_20], 70h ; 'p'
+  0001643F  push    ebp
+  00016440  push    dword_53A85
+  00016446  push    offset aDatoDat; "DATO.DAT"
+  0001644B  call    sub_111BA
+  00016450  add     esp, 0Ch
+  00016453  mov     dword_53A85, eax
+  00016458  push    70h ; 'p'
+  0001645A  jmp     loc_162B3
+  0001645F  push    [esp+34h+arg_18]
+  00016463  push    [esp+38h+arg_14]
+  00016467  push    [esp+3Ch+arg_10]
+  0001646B  push    [esp+40h+arg_C]
+  0001646F  push    ebp
+  00016470  push    eax
+  00016471  push    dword_53A75
+  00016477  call    sub_4ED7A
+  0001647C  add     esp, 1Ch
+  0001647F  add     ebp, 10h
+  00016482  mov     esi, [esp+34h+var_28]
+  00016486  call    sub_10620
+  0001648B  test    eax, eax
+  0001648D  jz      short loc_16497
+  0001648F  mov     [esp+34h+arg_20], 0
+  00016497  cmp     [esp+34h+arg_20], 0
+  0001649C  jz      loc_1630D
+  000164A2  call    sub_164E8
+  000164A7  jmp     loc_1630D
+  000164AC  cmp     [esp+34h+var_1C], 0
+  000164B1  jz      short loc_164E1
+  000164B3  push    0
+  000164B5  call    sub_16559
+  000164BA  add     esp, 4
+  000164BD  push    0
+  000164BF  call    sub_16C57
+  000164C4  add     esp, 4
+  000164C7  push    [esp+34h+var_20]
+  000164CB  push    [esp+38h+var_1C]
+  000164CF  call    sub_16B43
+  000164D4  add     esp, 8
+  000164D7  mov     dword_53C67, 0
+  000164E1  mov     eax, ebp
+  000164E3  jmp     loc_15309
+======================================================================
+### helper 0x344F2
+  000344F2  push    0Ch
+  000344F7  call    sub_3702F
+  000344FC  push    ebx
+  000344FD  push    esi
+  000344FE  mov     esi, [esp+8+arg_4]
+  00034502  mov     ecx, [esp+8+arg_8]
+  00034506  mov     edx, [esp+8+arg_0]
+  0003450A  jmp     short loc_3452A
+  0003450C  mov     eax, edx
+  0003450E  shl     eax, 2
+  00034511  add     eax, edx
+  00034513  shl     eax, 4
+  00034516  mov     ebx, dword_53A45
+  0003451C  add     eax, ebx
+  0003451E  mov     bl, [eax+34h]
+  00034521  and     bl, 0F0h
+  00034524  or      bl, cl
+  00034526  mov     [eax+34h], bl
+  00034529  inc     edx
+  0003452A  cmp     edx, esi
+  0003452C  jle     short loc_3450C
+  0003452E  pop     esi
+  0003452F  pop     ebx
+  00034530  retn
+======================================================================
+### helper 0x34894
+  00034894  push    4
+  00034899  call    sub_3702F
+  0003489E  mov     edx, [esp+arg_0]
+  000348A2  mov     eax, edx
+  000348A4  shl     eax, 2
+  000348A7  add     edx, eax
+  000348A9  shl     edx, 4
+  000348AC  mov     eax, dword_53A45
+  000348B1  mov     al, [edx+eax+5]
+  000348B5  and     al, 1
+  000348B7  movzx   eax, al
+  000348BA  retn
+======================================================================
+### helper 0x1B8A6
+  0001B8A6  push    8
+  0001B8AB  call    sub_3702F
+  0001B8B0  push    ebx
+  0001B8B1  xor     ebx, ebx
+  0001B8B3  mov     edx, [esp+4+arg_0]
+  0001B8B7  mov     eax, edx
+  0001B8B9  shl     eax, 2
+  0001B8BC  add     eax, edx
+  0001B8BE  shl     eax, 4
+  0001B8C1  mov     ecx, dword_53A45
+  0001B8C7  add     ecx, eax
+  0001B8C9  xor     eax, eax
+  0001B8CB  jmp     short loc_1B8CE
+  0001B8CD  inc     eax
+  0001B8CE  cmp     eax, 8
+  0001B8D1  jge     short loc_1B8E3
+  0001B8D3  lea     edx, [eax+eax]
+  0001B8D6  add     edx, ecx
+  0001B8D8  add     edx, 0Ah
+  0001B8DB  test    byte ptr [edx], 80h
+  0001B8DE  jnz     short loc_1B8CD
+  0001B8E0  inc     ebx
+  0001B8E1  jmp     short loc_1B8CD
+  0001B8E3  mov     eax, ebx
+  0001B8E5  pop     ebx
+  0001B8E6  retn
+======================================================================
+### helper 0x1BB8C
+  0001BB8C  push    8
+  0001BB91  call    sub_3702F
+  0001BB96  push    ebx
+  0001BB97  mov     edx, [esp+4+arg_0]
+  0001BB9B  mov     eax, edx
+  0001BB9D  shl     eax, 2
+  0001BBA0  add     eax, edx
+  0001BBA2  shl     eax, 4
+  0001BBA5  mov     ebx, dword_53A45
+  0001BBAB  add     ebx, eax
+  0001BBAD  xor     edx, edx
+  0001BBAF  jmp     short loc_1BBB2
+  0001BBB1  inc     edx
+  0001BBB2  cmp     edx, 8
+  0001BBB5  jge     short loc_1BBD5
+  0001BBB7  lea     eax, [edx+edx]
+  0001BBBA  add     eax, ebx
+  0001BBBC  add     eax, 0Ah
+  0001BBBF  test    byte ptr [eax], 80h
+  0001BBC2  jz      short loc_1BBB1
+  0001BBC4  mov     byte ptr [eax], 0
+  0001BBC7  mov     dl, [esp+4+arg_4]
+  0001BBCB  mov     [eax+1], dl
+  0001BBCE  mov     eax, 1
+  0001BBD3  pop     ebx
+  0001BBD4  retn
+  0001BBD5  mov     eax, 0FFFFFFFFh
+  0001BBDA  pop     ebx
+  0001BBDB  retn
+======================================================================
+### helper 0x34D64
+  00034D64  push    8
+  00034D69  call    sub_3702F
+  00034D6E  push    ebx
+  00034D6F  xor     edx, edx
+  00034D71  jmp     short loc_34D8B
+  00034D73  lea     ebx, [edx+0Ah]
+  00034D76  mov     eax, ebx
+  00034D78  shl     eax, 2
+  00034D7B  add     ebx, eax
+  00034D7D  shl     ebx, 4
+  00034D80  mov     eax, dword_53A45
+  00034D85  and     byte ptr [ebx+eax+34h], 80h
+  00034D8A  inc     edx
+  00034D8B  cmp     edx, 12h
+  00034D8E  jl      short loc_34D73
+  00034D90  pop     ebx
+  00034D91  retn
+### data 0x53A45 : dword_53A45
+### data 0x53AD5 : dword_53AD5
+### data 0x53A79 : dword_53A79
