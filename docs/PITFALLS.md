@@ -514,3 +514,11 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     只在**写入**时 `(uint8_t)track` 截断。
     **判据**：`bgmcheck` 第 81 例（`track=-1, byte_51A11=0xFF`）当场 `event count 1/0`；
     改前 FAIL、改后 **6000/0**。教训：反编译出来的 `(unsigned __int8)` 比较要回看汇编确认是谁被截断。
+70. **`rle_decode` 的目的地偏移用实参 `x/y`，解码尺寸却来自 RLE 流自己的头**（第 52 轮）：
+    `0x4E98D` 的序言是 `dst += y*pitch + x`（x=arg_4、y=arg_8），随后 `mov ax,word_627B4`
+    取**流里**的宽、`row = pitch - 流宽`。而 `0x2EB9F` 传给它的 x/y 是**子图头**里的 w/h，
+    两者不一定相等（实测该资源头 69×61、流 181×75）。
+    给这种调用准备对拍缓冲时，**必须按整个画面大小开**（`320*200+`），按"头里的 h 行"开会越界，
+    越界后比较读到的是垃圾（表现为 `first diff @166 (AA/75)` 这种莫名其妙的偏移）。
+    **判据**：`leafcheck` 的 `res_blit` 段（真实 FDOTHER.DAT 第 79 号资源）改成整幅缓冲后
+    **72008/0**；`PITFALLS` §8-70。

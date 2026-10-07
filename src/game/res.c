@@ -11,6 +11,7 @@
  */
 #include "res.h"
 #include "guest_mem.h"
+#include "rle.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -51,4 +52,21 @@ void *res_load(const char *filename, void *old_buffer, int index)
     fclose(f);
 
     return buf;
+}
+
+/* 0x2EB9F - blit sub-image `index` of an LMI buffer.
+ *
+ *   hdr = buf + *(u32 *)(buf + 8 + 4*index);     offset table starts at +8
+ *   w   = *(u16 *)hdr;  h = *(u16 *)(hdr + 2);
+ *   rle_decode(hdr + 9, w, h, dst, pitch, mode);
+ *
+ * The 9-byte header (w, h, plus 5 bytes the decoder does not need here) and
+ * the RLE stream are the format rle_decode already handles. */
+void res_blit(void *buf, int index, void *dst, int pitch, int mode)
+{
+    uint8_t *hdr = (uint8_t *)buf + *(uint32_t *)((uint8_t *)buf + 4 * index + 8);
+    uint16_t w   = *(uint16_t *)hdr;
+    uint16_t h   = *(uint16_t *)(hdr + 2);
+
+    rle_decode(hdr + 9, w, h, dst, pitch, mode);
 }

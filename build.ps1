@@ -58,7 +58,7 @@ $targets = @{
     pathcheck = @{ srcs = @("pathcheck.c", "le.c", "game\path.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/res.c (LMI resource loader) vs 0x111BA,
     # with the game's CRT file/memory entry points redirected to the host libc
-    rescheck = @{ srcs = @("rescheck.c", "le.c", "game\res.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    rescheck = @{ srcs = @("rescheck.c", "le.c", "game\res.c", "game\rle.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/tables.c (table accessors) vs 0x4E7DD..0x4E8BC
     tablescheck = @{ srcs = @("tablescheck.c", "le.c", "game\tables.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/rle2.c (0xC0-range RLE blits) vs 0x4EBFF/0x4EC31/0x4EBAB
@@ -76,6 +76,10 @@ $targets = @{
     # portable key table (src/keys.c) pinned against MapVirtualKeyA - the
     # Windows reference the entry layers use; see src/keyscheck.c
     keyscheck = @{ srcs = @("keyscheck.c", "keys.c", "keys_win32.c"); libs = @("user32.lib"); subsystem = "console"; link = "" }
+    # differential test: the six hot leaves (kbd/util/gfx/res/dlg) vs their
+    # machine code - low-mem redirect for the BDA pair, real FDOTHER sub-image
+    # for res_blit; see src/leafcheck.c
+    leafcheck = @{ srcs = @("leafcheck.c", "le.c", "game\kbd.c", "game\util.c", "game\gfx.c", "game\res.c", "game\rle.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: palette fades 0x11D40/0x1F882/0x1F525 vs game/fade.c
     fadecheck = @{ srcs = @("fadecheck.c", "le.c", "game\fade.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: 0x22E5C scene_card vs game/scene.c - services hooked
@@ -97,7 +101,7 @@ $targets = @{
     # low-memory mirror, the bios tick thread and a real `int 0x21` serviced
     # by the VEH - same expectations as the Linux build (src/doscheck.c)
     doscheck = @{ srcs = @("doscheck.c", "le.c", "dos.c", "dos_fault_win.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
-    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "dos_fault_win.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "audio_sokol.c", "keylog.c", "keys.c", "keys_win32.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c", "game\svc.c", "game\vm.c", "game\res.c", "game\bgm.c", "game\scene.c", "game\fade.c", "game\guest_mem.c");
+    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "dos_fault_win.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "audio_sokol.c", "keylog.c", "keys.c", "keys_win32.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c", "game\svc.c", "game\vm.c", "game\res.c", "game\bgm.c", "game\scene.c", "game\fade.c", "game\kbd.c", "game\guest_mem.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";
                  # ASLR must stay on (with /DYNAMICBASE:NO Windows reserves the

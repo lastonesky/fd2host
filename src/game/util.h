@@ -55,3 +55,7 @@ unsigned char util_mask_recolor(void *dst, const void *header, int stride,
                                 const void *palette);
 
 #endif /* GAME_UTIL_H */
+
+/* 0x4EBE3 - the game's random generator (returns a zero-extended 16-bit word;
+ * the state lives in word_627B8). */
+uint32_t util_rand(void);

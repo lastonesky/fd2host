@@ -89,3 +89,7 @@ int dlg_type_step(void);
 void dlg_wait_key(int speaker);
 
 #endif /* GAME_DLG_H */
+
+/* 0x12D7B - glide the portrait to the position in record `idx`
+ * (dword_53A45 + 80*idx, first two bytes = x, y). */
+void dlg_portrait_glide(int idx);

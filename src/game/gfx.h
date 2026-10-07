@@ -79,3 +79,8 @@ void gfx_draw_glyph(const void *glyph_table, int index, void *dest, int stride,
 void gfx_expand_scanlines(const void *src, void *dest, int start);
 
 #endif /* GAME_GFX_H */
+
+/* 0x11EB0 - copy `rows` rows of `len` bytes between two strided surfaces
+ * (non-positive `rows` copies nothing). */
+void gfx_copy_rows(void *dst, int dst_stride, const void *src, int src_stride,
+                   int len, int rows);

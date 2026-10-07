@@ -114,3 +114,22 @@ unsigned char util_mask_recolor(void *dst, const void *header, int stride,
 
     return v;
 }
+
+/* 0x4EBE3 - the game's random generator.
+ *
+ *   ax = word_627B8;  ax += 0x9014;  rol ax,1 x3;  word_627B8 = ax;  return ax
+ *
+ * (The decompiler prints the add as `- 28652`, which is 0x9014 mod 0x10000.)
+ * Returns a zero-extended 16-bit value (`xor eax,eax; mov ax,...`). */
+#define word_627B8 (*(uint16_t *)(uintptr_t)0x000627B8u)
+
+uint32_t util_rand(void)
+{
+    uint16_t v = (uint16_t)(word_627B8 + 0x9014u);
+    int i;
+
+    for (i = 0; i < 3; i++)
+        v = (uint16_t)((v << 1) | (v >> 15));
+    word_627B8 = v;
+    return (uint32_t)v;
+}

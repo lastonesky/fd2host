@@ -60,6 +60,7 @@
 #define dword_53A51 (*(int32_t *)(uintptr_t)0x00053A51u) /* text line step     */
 #define dword_53A81 (*(void **)(uintptr_t)0x00053A81u)   /* box frame resource */
 #define dword_53A85 (*(void **)(uintptr_t)0x00053A85u)   /* DATO sub-images    */
+#define dword_53A45 (*(void **)(uintptr_t)0x00053A45u)   /* portrait records   */
 #define dword_53EEC (*(void **)(uintptr_t)0x00053EECu)   /* SFX bank resource  */
 #define dword_53A10 (*(int32_t *)(uintptr_t)0x00053A10u) /* mouth phase 0..3   */
 #define dword_53A14 (*(int32_t *)(uintptr_t)0x00053A14u) /* chars since blit   */
@@ -377,4 +378,13 @@ void dlg_scroll_text(int box_pos)
     for (k = 0; k < 72; k++)
         memmove(base + 320 * k - 1, base + 320 * (k + 4) - 1, 208);
     memset(base + 23040, 0x4A, 208);
+}
+
+/* 0x12D7B - glide the portrait to the position stored in record `idx`
+ * (dword_53A45 + 80*idx, first two bytes = x, y) via 0x12CEA. */
+void dlg_portrait_glide(int idx)
+{
+    const uint8_t *e = (const uint8_t *)(uintptr_t)dword_53A45 + 80 * idx;
+
+    ORIG_GLIDE(e[0], e[1]);
 }

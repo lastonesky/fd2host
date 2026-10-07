@@ -208,3 +208,19 @@ void gfx_expand_scanlines(const void *src, void *dest, int start)
             idx = 0;
     }
 }
+
+/* 0x11EB0 - copy `rows` rows of `len` bytes between two strided surfaces.
+ * Pure memmove loop; the original zeroes ebx and tests `ebx < rows`, so a
+ * non-positive row count copies nothing. */
+void gfx_copy_rows(void *dst, int dst_stride, const void *src, int src_stride,
+                   int len, int rows)
+{
+    uint8_t *d = (uint8_t *)dst;
+    const uint8_t *s = (const uint8_t *)src;
+
+    while (rows-- > 0) {
+        memmove(d, s, (size_t)len);
+        d += dst_stride;
+        s += src_stride;
+    }
+}

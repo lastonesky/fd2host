@@ -39,6 +39,7 @@
 #include "game/bgm.h"
 #include "game/scene.h"
 #include "game/fade.h"
+#include "game/kbd.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -209,6 +210,15 @@ static const struct repl_entry g_repl[] = {
     { 0x11D40, "pal_fade_range",     (void *)pal_fade_range,      REPL_FADE },
     { 0x1F882, "pal_fade_out",       (void *)pal_fade_out,        REPL_FADE },
     { 0x1F525, "pal_fade_in",        (void *)pal_fade_in,         REPL_FADE },
+
+    /* --- hot leaves (round 52, src/leafcheck.c) --------------------------
+     * Small, frequently called helpers found by tools/func_ranking.py. */
+    { 0x4E381, "kbd_flush",          (void *)kbd_flush,           REPL_SVC },
+    { 0x10620, "kbd_pending",        (void *)kbd_pending,         REPL_SVC },
+    { 0x4EBE3, "util_rand",          (void *)util_rand,           REPL_UTIL },
+    { 0x11EB0, "gfx_copy_rows",      (void *)gfx_copy_rows,       REPL_GFX },
+    { 0x2EB9F, "res_blit",           (void *)res_blit,            REPL_RES },
+    { 0x12D7B, "dlg_portrait_glide", (void *)dlg_portrait_glide,  REPL_DLG },
 };
 
 unsigned repl_parse(const char *spec)

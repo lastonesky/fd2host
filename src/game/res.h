@@ -36,4 +36,9 @@
 
 void *res_load(const char *filename, void *old_buffer, int index);
 
+/* 0x2EB9F - decode and blit sub-image `index` of an LMI buffer straight to
+ * `dst`: the buffer's offset table starts at +8, the sub-image header carries
+ * w/h (u16 each) and the RLE stream starts at +9 (see src/leafcheck.c). */
+void res_blit(void *buf, int index, void *dst, int pitch, int mode);
+
 #endif /* GAME_RES_H */
