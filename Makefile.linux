@@ -58,6 +58,7 @@ SOKOL      := vendor/sokol
 GAME_SRCS  := $(SRC)/game/rle.c $(SRC)/game/gfx.c $(SRC)/game/sprite24.c \
               $(SRC)/game/util.c $(SRC)/game/path.c $(SRC)/game/tables.c \
               $(SRC)/game/rle2.c $(SRC)/game/dlg.c $(SRC)/game/rec.c \
+              $(SRC)/game/unit.c \
               $(SRC)/game/svc.c $(SRC)/game/vm.c $(SRC)/game/res.c \
               $(SRC)/game/bgm.c $(SRC)/game/scene.c $(SRC)/game/fade.c \
               $(SRC)/game/kbd.c $(SRC)/game/map.c $(SRC)/game/anim.c $(SRC)/game/guest_mem.c

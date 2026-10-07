@@ -1,6 +1,9 @@
 addr,c_name,source_file,group,check,cases,status,note
 0x10620,kbd_pending,src/game/fade.c,svc,leafcheck,72000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x111BA,res_load,src/game/res.c,res,rescheck,160,wired (repl.c),LMI resource loader; heap via guest_mem
+0x112A5,unit_add,src/game/unit.c,rec,reccheck,36327,wired (repl.c),persistent party roster (0x1145A/0x11506/0x112A5)
+0x1145A,unit_recalc,src/game/unit.c,rec,reccheck,36327,wired (repl.c),persistent party roster (0x1145A/0x11506/0x112A5)
+0x11506,unit_refresh_all,src/game/unit.c,rec,reccheck,36327,wired (repl.c),persistent party roster (0x1145A/0x11506/0x112A5)
 0x11D40,pal_fade_range,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x11DF2,pal_fade_add,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x11EB0,gfx_copy_rows,src/game/fade.c,gfx,leafcheck,72000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
@@ -11,7 +14,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x129EC,map_refresh_records,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x12AC6,map_blit_cell_sprite,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x12C0D,dlg_portrait_find,src/game/fade.c,dlg,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
-0x12C60,rec_find,src/game/rec.c,rec,reccheck,28739,wired (repl.c),character record table
+0x12C60,rec_find,src/game/rec.c,rec,reccheck,36327,wired (repl.c),character record table
 0x12D7B,dlg_portrait_glide,src/game/fade.c,dlg,leafcheck,72000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x12E38,map_cell_info,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x134E4,dlg_portrait_clear,src/game/fade.c,dlg,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
@@ -31,9 +34,9 @@ addr,c_name,source_file,group,check,cases,status,note
 0x1875D,dlg_draw_number_pair,src/game/fade.c,dlg,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x187D6,dlg_draw_number,src/game/fade.c,dlg,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x1AEB1,dlg_draw_number_signed,src/game/fade.c,dlg,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
-0x1B722,rec_field_byte,src/game/rec.c,rec,reccheck,28739,wired (repl.c),character record table
-0x1B8E7,rec_slot_remove,src/game/rec.c,rec,reccheck,28739,wired (repl.c),character record table
-0x1BB8C,rec_slot_claim,src/game/rec.c,rec,reccheck,28739,wired (repl.c),character record table
+0x1B722,rec_field_byte,src/game/rec.c,rec,reccheck,36327,wired (repl.c),character record table
+0x1B8E7,rec_slot_remove,src/game/rec.c,rec,reccheck,36327,wired (repl.c),character record table
+0x1BB8C,rec_slot_claim,src/game/rec.c,rec,reccheck,36327,wired (repl.c),character record table
 0x1F183,rec_skip,src/game/fade.c,rec,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x1F525,pal_fade_in,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x1F882,pal_fade_out,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
@@ -42,8 +45,8 @@ addr,c_name,source_file,group,check,cases,status,note
 0x25A96,svc_play_sfx,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
 0x25B45,svc_play_sfx2,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
 0x2EB9F,res_blit,src/game/fade.c,res,leafcheck,72000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
-0x344F2,rec_status_set,src/game/rec.c,rec,reccheck,28739,wired (repl.c),character record table
-0x34894,rec_flag,src/game/rec.c,rec,reccheck,28739,wired (repl.c),character record table
+0x344F2,rec_status_set,src/game/rec.c,rec,reccheck,36327,wired (repl.c),character record table
+0x34894,rec_flag,src/game/rec.c,rec,reccheck,36327,wired (repl.c),character record table
 0x4DED4,util_rec3,src/game/util.c,util,utilcheck,2200,wired (repl.c),byte/palette utilities
 0x4DEEC,util_translate,src/game/util.c,util,utilcheck,2200,wired (repl.c),byte/palette utilities
 0x4DF09,util_sum_tail4,src/game/util.c,util,utilcheck,2200,wired (repl.c),byte/palette utilities

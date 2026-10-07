@@ -91,7 +91,7 @@ $targets = @{
     # services hooked to recording stubs, event sequence + globals compared
     bgmcheck = @{ srcs = @("bgmcheck.c", "le.c", "game\bgm.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/rec.c (80-byte record table) vs 0x34894/0x12C60
-    reccheck = @{ srcs = @("reccheck.c", "le.c", "game\rec.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    reccheck = @{ srcs = @("reccheck.c", "le.c", "game\rec.c", "game\unit.c", "game\tables.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: dlg_type_step (0x164E8) plus the two services it ends
     # with - svc_play_sfx (0x25A96) and svc_wait_ticks (0x17AA9). Low-memory
     # mirror + a tick stub that both sides read through (see src/typecheck.c)
@@ -104,7 +104,7 @@ $targets = @{
     # low-memory mirror, the bios tick thread and a real `int 0x21` serviced
     # by the VEH - same expectations as the Linux build (src/doscheck.c)
     doscheck = @{ srcs = @("doscheck.c", "le.c", "dos.c", "dos_fault_win.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
-    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "dos_fault_win.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "audio_sokol.c", "keylog.c", "keys.c", "keys_win32.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c", "game\svc.c", "game\vm.c", "game\res.c", "game\bgm.c", "game\scene.c", "game\fade.c", "game\kbd.c", "game\map.c", "game\anim.c", "game\guest_mem.c");
+    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "dos_fault_win.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "audio_sokol.c", "keylog.c", "keys.c", "keys_win32.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c", "game\unit.c", "game\svc.c", "game\vm.c", "game\res.c", "game\bgm.c", "game\scene.c", "game\fade.c", "game\kbd.c", "game\map.c", "game\anim.c", "game\guest_mem.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";
                  # ASLR must stay on (with /DYNAMICBASE:NO Windows reserves the

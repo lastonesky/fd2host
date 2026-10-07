@@ -2,7 +2,9 @@
  *
  * Runs the original machine code (0x34894 rec_flag, 0x12C60 rec_find,
  * 0x1B722 rec_field_byte, 0x344F2 rec_status_set, 0x1BB8C rec_slot_claim,
- * 0x1B8E7 rec_slot_remove) and the C translation (src/game/rec.c) on the same
+ * 0x1B8E7 rec_slot_remove, 0x1145A unit_recalc, 0x11506 unit_refresh_all,
+ * 0x112A5 unit_add) and the C translation (src/game/rec.c, src/game/unit.c)
+ * on the same
  * tables and compares the return value plus every byte both sides touch.
  *
  * The two tables are synthetic buffers, but the globals are the real game
@@ -37,6 +39,7 @@
 #include <string.h>
 #include "le.h"
 #include "game/rec.h"
+#include "game/unit.h"
 
 typedef int (__cdecl *flag_fn)(int);
 typedef int (__cdecl *find_fn)(int);
@@ -51,6 +54,14 @@ typedef void *(__cdecl *remove_fn)(int, int);
 #define ORIG_STATUS ((status_fn)(uintptr_t)0x344F2)
 #define ORIG_CLAIM  ((claim_fn)(uintptr_t)0x1BB8C)
 #define ORIG_REMOVE ((remove_fn)(uintptr_t)0x1B8E7)
+
+typedef int  (__cdecl *recalc_fn)(int);
+typedef void (__cdecl *refresh_fn)(void);
+typedef int  (__cdecl *add_fn)(int);
+
+#define ORIG_RECALC  ((recalc_fn)(uintptr_t)0x1145A)
+#define ORIG_REFRESH ((refresh_fn)(uintptr_t)0x11506)
+#define ORIG_ADD     ((add_fn)(uintptr_t)0x112A5)
 
 #define G53A45 (*(uint32_t *)(uintptr_t)0x00053A45u)
 #define G53BEB (*(int32_t *)(uintptr_t)0x00053BEBu)
@@ -67,6 +78,11 @@ static uint8_t tbl2[MAXREC * REC_STRIDE];
 static uint8_t inbuf[MAXREC * REC_STRIDE];
 static uint8_t obuf[MAXREC * REC_STRIDE];
 static uint8_t cbuf[MAXREC * REC_STRIDE];
+
+/* Character table for unit_refresh_all (read-only on both sides) plus a copy
+ * kept to prove neither implementation touches it. */
+static uint8_t unit_ch[MAXREC * REC_STRIDE];
+static uint8_t unit_ch0[MAXREC * REC_STRIDE];
 
 static uint32_t seed = 0x0B0C6E5u;
 static uint32_t rnd(void)
@@ -323,6 +339,277 @@ static void test_remove(unsigned ncases)
     }
 }
 
+/* ---- persistent party roster (0x1145A / 0x11506 / 0x112A5) ---------- */
+
+/* Fill the eight slots of record `index` in inbuf:
+ *   0 all inactive (state bit 6 clear)
+ *   1 active with item ids 0..31
+ *   2 random states / valid item ids
+ *   3 active with a fixed item id */
+static void recalc_slots(int index, unsigned mode)
+{
+    int i;
+
+    for (i = 0; i < 8; i++) {
+        uint8_t *slot = inbuf + (size_t)index * REC_STRIDE + 10 + 2 * i;
+        switch (mode) {
+        case 0:  slot[0] = (uint8_t)(rnd() & 0xBFu); slot[1] = (uint8_t)rnd(); break;
+        case 1:  slot[0] = (uint8_t)(0x40u | (rnd() & 0x3Fu)); slot[1] = (uint8_t)(rnd() % 32); break;
+        case 3:  slot[0] = (uint8_t)(0x40u | (rnd() & 0x3Fu)); slot[1] = 31; break;
+        default: slot[0] = (uint8_t)rnd(); slot[1] = (uint8_t)(rnd() % 32); break;
+        }
+    }
+}
+
+/* Run both implementations of unit_recalc on byte-identical copies of inbuf
+ * and compare the return value plus the whole buffer. */
+static void run_recalc(unsigned id, int index)
+{
+    int r1, r2;
+
+    memcpy(obuf, inbuf, sizeof inbuf);
+    G53BF7 = (uint32_t)(uintptr_t)obuf;
+    r1 = ORIG_RECALC(index);
+
+    memcpy(cbuf, inbuf, sizeof inbuf);
+    G53BF7 = (uint32_t)(uintptr_t)cbuf;
+    r2 = unit_recalc(index);
+
+    cmp_mem("unit_recalc", id, r1, r2);
+}
+
+static void test_recalc(unsigned ncases)
+{
+    unsigned c;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        int index = (int)(rnd() % MAXREC);
+        unsigned mode = rnd() % 4;
+
+        fill_all();
+        recalc_slots(index, mode);
+        run_recalc(7000 + c, index);
+    }
+
+    /* constructed: the four slot-shape modes on one record, with extreme
+     * signed base stats so the sign extension is exercised */
+    {
+        static const unsigned modes[4] = { 0, 1, 3, 2 };
+        unsigned k;
+        for (k = 0; k < 4 && !failures; k++) {
+            int index = 5;
+            fill_all();
+            recalc_slots(index, modes[k]);
+            *(int16_t *)(inbuf + (size_t)index * REC_STRIDE + 0x37) =
+                (k & 1) ? (int16_t)0x8000 : (int16_t)0x7FFF;
+            *(int16_t *)(inbuf + (size_t)index * REC_STRIDE + 0x39) = (int16_t)0x8000;
+            *(int16_t *)(inbuf + (size_t)index * REC_STRIDE + 0x3E) = (int16_t)0x7FFF;
+            run_recalc(7500 + k, index);
+        }
+        /* every slot active, a few item ids */
+        for (k = 0; k < 4 && !failures; k++) {
+            int index = 7, i;
+            fill_all();
+            for (i = 0; i < 8; i++) {
+                uint8_t *slot = inbuf + (size_t)index * REC_STRIDE + 10 + 2 * i;
+                slot[0] = 0x40;
+                slot[1] = (uint8_t)(k * 7);
+            }
+            run_recalc(7550 + k, index);
+        }
+    }
+}
+
+/* Run both implementations of unit_refresh_all on byte-identical party
+ * copies (ch table is read-only and shared) and compare the whole party
+ * buffer; also assert the character table is untouched. */
+static void run_refresh(unsigned id, int n1, int n2)
+{
+    int i;
+
+    memcpy(obuf, inbuf, sizeof inbuf);
+    G53A45 = (uint32_t)(uintptr_t)unit_ch;
+    G53BEB = n1;
+    G53BF7 = (uint32_t)(uintptr_t)obuf;
+    G53BFB = n2;
+    ORIG_REFRESH();
+
+    memcpy(cbuf, inbuf, sizeof inbuf);
+    G53A45 = (uint32_t)(uintptr_t)unit_ch;
+    G53BEB = n1;
+    G53BF7 = (uint32_t)(uintptr_t)cbuf;
+    G53BFB = n2;
+    unit_refresh_all();
+
+    cmp_mem("unit_refresh_all", id, 0, 0);
+
+    for (i = 0; i < MAXREC * REC_STRIDE; i++) {
+        if (unit_ch[i] != unit_ch0[i]) {
+            printf("FAIL unit_refresh_all case %u: character table byte %d "
+                   "changed %02X -> %02X\n", id, i, unit_ch0[i], unit_ch[i]);
+            failures++;
+            cases_run++;
+            return;
+        }
+    }
+}
+
+static void test_refresh(unsigned ncases)
+{
+    unsigned c;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        int n1 = (int)(rnd() % (MAXREC + 1));
+        int n2 = (int)(rnd() % (MAXREC + 1));
+        int i, j;
+
+        fill_all();
+        for (i = 0; i < MAXREC * REC_STRIDE; i++) unit_ch[i] = (uint8_t)rnd();
+        for (i = 0; i < n1; i++) {
+            unit_ch[i * REC_STRIDE + 8] = (uint8_t)(rnd() % 8);
+            unit_ch[i * REC_STRIDE + 5] = (uint8_t)(rnd() & 1);
+        }
+        for (j = 0; j < n2; j++) {
+            uint8_t *un = inbuf + (size_t)j * REC_STRIDE;
+            if (n1 && (rnd() & 1))
+                un[8] = unit_ch[(rnd() % (unsigned)n1) * REC_STRIDE + 8];
+            else
+                un[8] = (uint8_t)(rnd() % 8);
+        }
+        memcpy(unit_ch0, unit_ch, sizeof unit_ch);
+        run_refresh(8000 + c, n1, n2);
+    }
+
+    /* constructed: a zero identity is copied only when rec_flag(i) == 0 */
+    {
+        int i;
+        for (i = 0; i < 2 && !failures; i++) {
+            memset(inbuf, 0, sizeof inbuf);
+            memset(unit_ch, 0, sizeof unit_ch);
+            unit_ch[5] = (uint8_t)(i ? 1 : 0);
+            *(uint16_t *)(inbuf + 0x40) = 0x1111;
+            *(uint16_t *)(inbuf + 0x42) = 0x2222;
+            *(uint16_t *)(inbuf + 0x44) = 0x3333;
+            *(uint16_t *)(inbuf + 0x46) = 0x4444;
+            unit_ch[0x40] = 0xAA; unit_ch[0x42] = 0xBB;
+            unit_ch[0x44] = 0xCC; unit_ch[0x46] = 0xDD;
+            memcpy(unit_ch0, unit_ch, sizeof unit_ch);
+            run_refresh(8100 + i, 1, 1);
+        }
+    }
+
+    /* constructed: a non-zero identity always copies; +5 bit 0 controls the
+     * +40<-+42 sync (+44<-+46 happens unconditionally) */
+    {
+        int i;
+        for (i = 0; i < 2 && !failures; i++) {
+            memset(inbuf, 0, sizeof inbuf);
+            memset(unit_ch, 0, sizeof unit_ch);
+            unit_ch[8] = 7; inbuf[8] = 7;
+            unit_ch[5] = (uint8_t)(i ? 1 : 2);   /* bit 0 = 1 or 0 */
+            *(uint16_t *)(inbuf + 0x40) = 0x1111;
+            *(uint16_t *)(inbuf + 0x42) = 0x2222;
+            *(uint16_t *)(inbuf + 0x44) = 0x3333;
+            *(uint16_t *)(inbuf + 0x46) = 0x4444;
+            memcpy(unit_ch0, unit_ch, sizeof unit_ch);
+            run_refresh(8200 + i, 1, 1);
+        }
+    }
+
+    /* constructed: several characters match one party record - the inner
+     * loop order means the last matching character wins */
+    {
+        int i;
+        memset(inbuf, 0, sizeof inbuf);
+        memset(unit_ch, 0, sizeof unit_ch);
+        for (i = 0; i < 3; i++) {
+            unit_ch[i * REC_STRIDE + 8] = 9;
+            unit_ch[i * REC_STRIDE + 7] = (uint8_t)(10 + i);
+            unit_ch[i * REC_STRIDE]     = (uint8_t)(0x30 + i);
+        }
+        inbuf[8] = 9;
+        memcpy(unit_ch0, unit_ch, sizeof unit_ch);
+        run_refresh(8300, 3, 1);
+    }
+
+    /* constructed: identities that do not all match, plus an untouched
+     * non-matching party record */
+    {
+        memset(inbuf, 0, sizeof inbuf);
+        memset(unit_ch, 0, sizeof unit_ch);
+        unit_ch[8] = 1; unit_ch[7] = 0x51;
+        unit_ch[REC_STRIDE + 8] = 2; unit_ch[REC_STRIDE + 7] = 0x52;
+        inbuf[8] = 2; inbuf[REC_STRIDE + 8] = 3;
+        memcpy(unit_ch0, unit_ch, sizeof unit_ch);
+        run_refresh(8400, 2, 2);
+    }
+}
+
+/* Run both implementations of unit_add with `dword_53BFB = idx` on
+ * byte-identical party copies and compare the return value, the record count
+ * and the whole buffer. */
+static void run_add(unsigned id, int case_id, int idx)
+{
+    int r1, r2, n1, n2;
+
+    memcpy(obuf, inbuf, sizeof inbuf);
+    G53BF7 = (uint32_t)(uintptr_t)obuf;
+    G53BFB = idx;
+    r1 = ORIG_ADD(id);
+    n1 = G53BFB;
+
+    memcpy(cbuf, inbuf, sizeof inbuf);
+    G53BF7 = (uint32_t)(uintptr_t)cbuf;
+    G53BFB = idx;
+    r2 = unit_add(id);
+    n2 = G53BFB;
+
+    if (n1 != n2) {
+        printf("FAIL unit_add case %d: count orig=%d ours=%d\n", case_id, n1, n2);
+        failures++;
+        return;
+    }
+    cmp_mem("unit_add", (unsigned)case_id, r1, r2);
+}
+
+static void test_add(unsigned ncases)
+{
+    unsigned c;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        fill_all();
+        run_add((int)(rnd() % 32), 9000 + (int)c, (int)(rnd() % MAXREC));
+    }
+}
+
+/* unit_add edge cases that need the default table mutated in place: levels
+ * 0/1/255 (L == 0 makes the growth term negative) and the 0xFF "empty slot"
+ * branch of the four trailing item slots. The table is restored afterwards. */
+static void test_add_edges(void)
+{
+    static const int levels[3] = { 0, 1, 255 };
+    unsigned k;
+
+    for (k = 0; k < 3 && !failures; k++) {
+        const int id = 0;
+        uint8_t *D = (uint8_t *)(uintptr_t)(0x61DA1u + 24u * (uint32_t)id);
+        uint8_t save_l = D[2];
+        uint8_t save_slots[4];
+        int s;
+
+        for (s = 0; s < 4; s++) save_slots[s] = D[0x0E + s];
+        D[2] = (uint8_t)levels[k];
+        if (k == 2)
+            for (s = 0; s < 4; s++) D[0x0E + s] = 0xFF;
+
+        fill_all();
+        run_add(id, 9500 + (int)k, 3);
+
+        D[2] = save_l;
+        for (s = 0; s < 4; s++) D[0x0E + s] = save_slots[s];
+    }
+}
+
 int main(int argc, char **argv)
 {
     le_image le;
@@ -408,6 +695,12 @@ int main(int argc, char **argv)
     if (!failures) test_status(800);
     if (!failures) test_claim(800);
     if (!failures) test_remove(800);
+
+    /* ---- persistent party roster (0x1145A / 0x11506 / 0x112A5) --------- */
+    if (!failures) test_recalc(2000);
+    if (!failures) test_refresh(1500);
+    if (!failures) test_add(800);
+    if (!failures) test_add_edges();
 
     printf("paths: random=%u none=%u table2=%u flag0=%u flag1_only=%u want>255=%u empty=%u\n",
            path_count[P_RANDOM], path_count[P_NONE], path_count[P_TABLE2], path_count[P_FLAG0],
