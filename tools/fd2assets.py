@@ -67,6 +67,23 @@ def load_palette(gamedir):
 
 
 # --------------------------------------------------------------------- image
+def _rle_doc(src, need):
+    """The knowledge-base "§2" byte RLE: c>=0x80 -> (c&0x7F)+1 literals,
+    c<0x80 -> next byte repeated c+1 times. Stops at `need` pixels."""
+    out = bytearray()
+    i = 0
+    while len(out) < need and i < len(src):
+        c = src[i]; i += 1
+        if c >= 0x80:
+            n = (c & 0x7F) + 1
+            out += src[i:i + n]; i += n
+        else:
+            if i >= len(src):
+                break
+            out += bytes([src[i]]) * (c + 1); i += 1
+    return bytes(out)
+
+
 def decode_image(body):
     """Return (w, h, bytes) or raise ValueError if it is not a full image."""
     if len(body) < 4:
@@ -77,22 +94,90 @@ def decode_image(body):
     need = w * h
     if len(body) - 4 == need:                      # uncompressed
         return w, h, body[4:4 + need]
+    px = _rle_doc(body[4:], need)
+    if len(px) != need:
+        raise ValueError("RLE produced %d of %d pixels" % (len(px), need))
+    return w, h, px
+
+
+def decode_sprite24(body, cols, rows):
+    """The 24x24 "four-mode" sprite RLE - the same token scheme the game's
+    sprite24.c / rle_decode() implement (tok>>6: 0 solid run, 1 odd run,
+    2 literal, 3 special). Colour mapping is identity here; the game may blit
+    a tileset through a ramp/palette mode to recolour terrain, which the
+    exporter deliberately does not guess. Returns exactly cols*rows bytes.
+    Raises ValueError if the stream does not fill the block exactly."""
+    out = bytearray()
+    i = 0
+    src = body
+    for _r in range(rows):
+        left = cols
+        while left != 0:
+            if i >= len(src):
+                raise ValueError("sprite24 stream ran out")
+            tok = src[i]; i += 1
+            cnt = (tok & 63) + 1
+            m = tok >> 6
+            if m == 0:                       # solid run
+                if i >= len(src):
+                    raise ValueError("sprite24 run without colour")
+                out += bytes([src[i]]) * cnt; i += 1; left -= cnt
+            elif m == 1:                     # odd run: writes p[1] only
+                if i >= len(src):
+                    raise ValueError("sprite24 odd run without colour")
+                v = src[i]; i += 1
+                for _ in range(cnt):
+                    out += bytes([0, v])     # p[0] left untouched
+                left -= 2 * cnt
+            elif m == 2:                     # literal
+                if i + cnt > len(src):
+                    raise ValueError("sprite24 literal overruns")
+                out += src[i:i + cnt]; i += cnt; left -= cnt
+            else:                            # special: skipped pixels
+                out += bytes(cnt); left -= cnt
+    if len(out) != cols * rows:
+        raise ValueError("sprite24 produced %d of %d pixels" % (len(out), cols * rows))
+    return bytes(out), i
+
+
+def decode_dato_frame(body):
+    """DATO portrait frame: u16 W, u16 H, then the portrait RLE
+    (b <= 0xC0 -> one literal pixel of value b; b > 0xC0 -> next byte repeated
+    b-0xC0 times). Returns (w, h, bytes)."""
+    if len(body) < 4:
+        raise ValueError("too short")
+    w, h = struct.unpack_from("<HH", body, 0)
+    need = w * h
     src = body[4:]
     out = bytearray()
     i = 0
     while len(out) < need and i < len(src):
-        c = src[i]; i += 1
-        if c >= 0x80:                              # literal
-            n = (c & 0x7F) + 1
-            out += src[i:i + n]; i += n
-        else:                                      # run
+        b = src[i]; i += 1
+        if b <= 0xC0:
+            out.append(b)
+        else:
             if i >= len(src):
                 break
-            out += bytes([src[i]]) * (c + 1); i += 1
+            out += bytes([src[i]]) * (b - 0xC0); i += 1
     if len(out) != need:
-        raise ValueError("RLE produced %d of %d pixels" % (len(out), need))
+        raise ValueError("portrait RLE produced %d of %d pixels" % (len(out), need))
     return w, h, bytes(out)
 
+
+def write_sheet(path, tiles, tw, th, cols, palette, indices=None):
+    """Lay `tiles` (list of bytes, each tw*th) out in a `cols`-wide grid.
+    `indices` optionally selects which tiles to place (default: all)."""
+    sel = list(range(len(tiles))) if indices is None else indices
+    rows = (len(sel) + cols - 1) // cols
+    sw, sh = cols * tw, rows * th
+    sheet = bytearray(sw * sh)
+    for n, t in enumerate(sel):
+        gx, gy = (n % cols) * tw, (n // cols) * th
+        for y in range(th):
+            sheet[(gy + y) * sw + gx:(gy + y) * sw + gx + tw] = \
+                tiles[t][y * tw:(y + 1) * tw]
+    write_png(path, sw, sh, bytes(sheet), palette)
+    return sw, sh
 
 def write_png(path, w, h, indices, palette):
     """8-bit palette PNG (color type 3)."""
@@ -315,6 +400,92 @@ def cmd_image(args):
     return 0
 
 
+def cmd_dato(args):
+    data = open(args.file, "rb").read()
+    res, _ = read_container(data)
+    pal = load_palette(args.gamedir)
+    out = args.out or os.path.join("build", "assets", "portraits")
+    os.makedirs(out, exist_ok=True)
+    index, n = [], 0
+    for i, (off, size) in enumerate(res):
+        body = data[off:off + size]
+        if size < 16:
+            continue
+        offs = struct.unpack_from("<IIII", body, 0)
+        if not (16 <= offs[0] < offs[1] < offs[2] < offs[3] < size):
+            continue
+        frames = []
+        for k in range(4):
+            s = offs[k]
+            e = offs[k + 1] if k < 3 else size
+            try:
+                w, h, px = decode_dato_frame(body[s:e])
+            except ValueError as ex:
+                frames.append({"frame": k, "error": str(ex)})
+                continue
+            f = "DATO_%03d_%d.png" % (i, k)
+            write_png(os.path.join(out, f), w, h, px, pal)
+            frames.append({"frame": k, "w": w, "h": h, "file": f})
+            n += 1
+        index.append({"index": i, "size": size, "frames": frames})
+    with open(os.path.join(out, "portraits.json"), "w", encoding="utf-8") as f:
+        json.dump(index, f, indent=1)
+    print("dato: %d frames from %d portraits -> %s" % (n, len(res), out))
+    return 0
+
+
+def cmd_tileset(args):
+    data = open(args.file, "rb").read()
+    res, _ = read_container(data)
+    pal = load_palette(args.gamedir)
+    out = args.out or os.path.join("build", "assets", "tilesets")
+    os.makedirs(out, exist_ok=True)
+    sets = terrains = 0
+    for i, (off, size) in enumerate(res):
+        body = data[off:off + size]
+        if i % 2 == 0:                             # tileset
+            if size < 6:
+                continue
+            tw, th, cnt = struct.unpack_from("<HHH", body, 0)
+            if not (0 < tw <= 64 and 0 < th <= 64 and 0 < cnt <= 8192):
+                continue
+            if 6 + 4 * cnt > size:
+                continue
+            toffs = [struct.unpack_from("<I", body, 6 + 4 * k)[0] for k in range(cnt)]
+            tiles, ok = [], True
+            for k in range(cnt):
+                s = toffs[k]
+                e = toffs[k + 1] if k + 1 < cnt else size
+                if s >= e or e > size:
+                    ok = False; break
+                try:
+                    px, used = decode_sprite24(body[s:e], tw, th)
+                except ValueError:
+                    ok = False; break
+                if used != e - s:
+                    ok = False; break
+                tiles.append(px)
+            if not ok:
+                print("skip FDSHAP[%d]: tile decode" % i)
+                continue
+            cols = 16
+            p = os.path.join(out, "FDSHAP_%03d.png" % i)
+            sw, sh = write_sheet(p, tiles, tw, th, cols, pal)
+            with open(os.path.join(out, "FDSHAP_%03d.json" % i), "w",
+                      encoding="utf-8") as f:
+                json.dump({"tile_w": tw, "tile_h": th, "count": cnt,
+                           "cols": cols, "sheet_w": sw, "sheet_h": sh}, f, indent=1)
+            sets += 1
+        else:                                      # terrain control table
+            cells = [list(body[4 * k:4 * k + 4]) for k in range(size // 4)]
+            with open(os.path.join(out, "FDSHAP_%03d_terrain.json" % i), "w",
+                      encoding="utf-8") as f:
+                json.dump(cells, f)
+            terrains += 1
+    print("tileset: %d tilesets, %d terrain tables -> %s" % (sets, terrains, out))
+    return 0
+
+
 def cmd_music(args):
     data = open(args.file, "rb").read()
     res, _ = read_container(data)
@@ -350,7 +521,7 @@ def cmd_all(args):
         _unpack_one(data, res, os.path.join(out, fn + ".d"), True)
         print("%s: %d resources unpacked" % (fn, len(res)))
         stem = os.path.splitext(fn)[0]
-        if stem in ("BG", "FDOTHER", "TITLE", "FDSHAP", "TAI"):
+        if stem in ("BG", "FDOTHER", "TITLE", "TAI"):
             for i, (off, size) in enumerate(res):
                 try:
                     w, h, px = decode_image(data[off:off + size])
@@ -370,6 +541,16 @@ def cmd_all(args):
                 os.makedirs(os.path.dirname(p), exist_ok=True)
                 with open(p, "wb") as f:
                     f.write(mid)
+        if stem == "DATO":
+            class _A: pass
+            a = _A(); a.file = path; a.gamedir = gamedir
+            a.out = os.path.join(out, "portraits")
+            cmd_dato(a)
+        if stem == "FDSHAP":
+            class _A2: pass
+            a2 = _A2(); a2.file = path; a2.gamedir = gamedir
+            a2.out = os.path.join(out, "tilesets")
+            cmd_tileset(a2)
     print("all: %d images exported -> %s" % (total_img, out))
     return 0
 
@@ -387,6 +568,10 @@ def main():
     p.set_defaults(fn=cmd_image)
     p = sub.add_parser("music");  p.add_argument("file"); p.add_argument("--out")
     p.set_defaults(fn=cmd_music)
+    p = sub.add_parser("dato");   p.add_argument("file"); p.add_argument("--out")
+    p.add_argument("--gamedir", default="E:\\FD2"); p.set_defaults(fn=cmd_dato)
+    p = sub.add_parser("tileset"); p.add_argument("file"); p.add_argument("--out")
+    p.add_argument("--gamedir", default="E:\\FD2"); p.set_defaults(fn=cmd_tileset)
     p = sub.add_parser("all");    p.add_argument("gamedir"); p.add_argument("--out")
     p.set_defaults(fn=cmd_all)
 
