@@ -863,8 +863,26 @@ int main(int argc, char **argv)
                 I32(0x53AB5) = recs[80 * want + 1];
                 recs[80 * want + 5] = 0;
             } else {
-                I32(0x53AB1) = 0x1234;
-                I32(0x53AB5) = 0x5678;
+                /* Cursor sits on no record.  The cell must still be a real
+                 * in-map cell: map_cell_info (0x12E38) has no bounds check,
+                 * so a sentinel like 0x1234/0x5678 makes the machine code
+                 * read cells[] ~2.8 MB past the table and fault intermittently
+                 * (0xC0000005).  The game never lets the cursor leave the map
+                 * -- pick a free cell inside the 32x32 view instead. */
+                int t, tries;
+                I32(0x53AB1) = (int32_t)(rnd() % 32);
+                I32(0x53AB5) = (int32_t)(rnd() % 32);
+                for (tries = 0; tries <= n; tries++) {
+                    for (t = 0; t < n
+                         && (recs[80 * t + 0] != (uint8_t)I32(0x53AB1)
+                             || recs[80 * t + 1] != (uint8_t)I32(0x53AB5)); t++)
+                        ;
+                    if (t == n) break;
+                    if (++I32(0x53AB1) >= 32) {
+                        I32(0x53AB1) = 0;
+                        I32(0x53AB5) = (I32(0x53AB5) + 1) % 32;
+                    }
+                }
             }
             PTR(0x53A45) = recs;
             memcpy(recA, recs, 80 * 16);

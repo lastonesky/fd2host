@@ -643,3 +643,15 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     `map_blit_tile` 调用点的参数序立刻变成 `(x, y, index)`（此前 Hex-Rays 把 `qword_53AB1`
     的 64 位算术排得乱七八糟、参数序号和调用序对不上）；`0x11EEE`/`0x24D22`/`0x1ACF3` 同理。
     这是转“回调密的渲染/业务函数”时的**第一步**，比逐条数 `push` 快且不易错。
+81. **对拍 harness 喂给全局量的值必须是游戏可能出现的值——哨兵坐标让机器码越界 2.8 MB，
+    间歇性 0xC0000005**（第 37 轮补）：
+    `mapcheck` 的 `map_draw_cursor` 段在"光标不落在任何记录上"分支喂了哨兵
+    `dword_53AB1/53AB5 = 0x1234/0x5678`。`map_cell_info`（`0x12E38`，C 版同）**没有边界检查**：
+    `cell = dword_53A51 + 4*(x + dword_53AC1*y)` = `cells + 4*(4660 + 32*22136)` ≈ `cells + 2.85 MB`，
+    而 `cells` 只有 16 KB ⇒ 越界读 ~2.8 MB。命中未映射页与否由 ASLR 决定 ⇒ **时崩时不崩**
+    （实测修前 1/6、验收侧 3/3 全崩），stdout 一条 FAIL 都没有，极易误判成 §48。
+    **定位手法**：`rnd()` 是定种子 LCG ⇒ 输入逐轮确定，崩点恒定在同一轮同一段；测试段之间插
+    `fprintf(stderr, "SEG%02d r=%d\n", …)`（stderr 无缓冲），崩一次看最后一条 marker 即可二分。
+    **修法**：同 `§8-71`——把哨兵换成游戏内真实值（32×32 视图内不与任何记录重合的格子）。
+    **判据**：marker `DC r=4 i=5 x=4660 y=22136` 且 `DC-ORIG-ok` 未打印 ⇒ 崩在原机器码侧、
+    C 侧无 bug；修后 `mapcheck` 16 连跑全 PASS `112000/0`（`docs/rounds/37-map-view-core.md` §67.7）。

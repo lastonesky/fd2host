@@ -207,3 +207,36 @@ if (rec != -1 && rec[7]!=121 && !(rec[31]==10 && rec[6]==1)) {
    `E:\FD2`，必须在参数里显式传 `--gamedir=<sandbox>`，否则跑的是真实目录（`PITFALLS` §8-73）。
    本轮用 `--gamedir=E:\FD2\port\build\sandbox` + 固定 autokey + `--shot-tick=500`，基线 0 px。
 6. Linux 侧沿用分级：纯游戏逻辑转译只做构建 + `letest`/`doscheck`（无平台/渲染/入口改动）。
+
+---
+
+## 67.7 补记：`mapcheck` 间歇性 0xC0000005（提交后发现，已修）
+
+**症状**：提交 `bb2a440` 后复跑 `./build/mapcheck.exe` 会 **exit 139 / 0xC0000005**，
+停在 `redirected 65 low-memory references` 之后、一条 FAIL 都没打印；实测约 1/6 概率
+（验收侧连续 3 次全崩）。不是 §48（已过 `reserve failed` 那一步）、不是旧二进制
+（从已提交源码重建同样崩）、`regress` 仍 8/8——**只有 `mapcheck` 崩**。
+
+**根因（harness 输入越界，§8-71 同类；机器码侧崩，C 侧无 bug）**：
+`map_draw_cursor` 段的"光标不落在任何记录上"分支（`want == n`）喂了哨兵坐标
+`dword_53AB1/53AB5 = 0x1234/0x5678`。`map_cell_info`（`0x12E38`，C 版同）**没有边界检查**：
+
+```c
+cell = dword_53A51 + 4 * (x + dword_53AC1 * y)   /* = cells + 4*(4660 + 32*22136) ≈ cells + 2.85 MB */
+```
+
+`cells` 只有 16 KB ⇒ 越界读 ~2.8 MB；该地址有没有映射取决于 ASLR ⇒ **间歇性**访问冲突。
+游戏里光标格永远在地图内，这个哨兵值游戏永远产生不出来。
+
+**定位手法（可复用）**：`rnd()` 是定种子 LCG（`0x5EED1234`）⇒ 每次运行输入逐轮完全相同，
+崩点永远在同一轮同一段；在各测试段之间插 `fprintf(stderr, "SEG%02d r=%d\n", …)`（stderr 无缓冲），
+崩一次看最后一条即可二分。最终 marker：`DC r=4 i=5 want=2 n=2 x=4660 y=22136 aac=1`
+→ 崩在 `ORIG_DCURSOR`（原机器码 0x1ACF3）内、`DC-ORIG-ok` 未打印；同坐标的 i=4 因
+`aac=0` 走 early return 没崩——这也解释了为什么时崩时不崩。
+
+**修法**：`src/mapcheck.c` else 分支改为在 32×32 视图里选一个不与任何记录重合的真实格子
+（确定性推进，≤ n+1 次必找到），机器码/C 两侧跑同一条"无记录"全路径。
+
+**修后判据**：`mapcheck` **16 连跑全 PASS `112000 cases, 0 failures`、exit 0**
+（修前 1/6 崩）；24 个 `*check` 全过；`regress.ps1` 8/8；`translation_map --check` 129 wired。
+排查期间的临时插桩已全部删除，提交只含真实修复。
