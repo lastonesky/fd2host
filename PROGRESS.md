@@ -17,11 +17,11 @@
 **同一份源码也能在 Linux 上跑**（`build/fd2host-linux32`，X11/XWayland + sokol GLCORE）：
 与 Windows 同 guest tick 抓帧**逐像素 0 差异**（`rounds/16-entry-layer.md` §46.10）。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 52 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 54 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。
 
 > ⚠ **进度必须看清**：全量函数表 `re/funcmap.csv` 有 **1359** 个函数，已源码化的只有
-> **52 个 ≈ 3.8%**；**其余 ~96% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
+> **54 个 ≈ 4.0%**；**其余 ~96% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
 > 直接执行**。这正是宿主必须是 **32 位进程**的原因（x86-64 长模式不能执行 32 位代码，
 > 只有 `-m32`/WOW64 这类 32 位进程才行）；**等全部函数源码化后，这个 32 位门槛才会消失**。
 
@@ -50,7 +50,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**52 / 1359 个函数接入（≈3.8%）**           ⏳ 其余 ~96% 仍是原始机器码在跑
+源码转译：**54 / 1359 个函数接入（≈4.0%）**           ⏳ 其余 ~96% 仍是原始机器码在跑
 Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 px** ✅（§46.10）
 ```
 
@@ -96,15 +96,17 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
 | §45 | 10-07 | **跨平台第 2 刀：`dos.c` 过河（故障分发 + 文件服务）** | 新增 `dos_fault.h` 契约：`dos_fault_core`（可移植，两平台同一套分支）+ `dos_fault_win.c`（VEH）/`dos_fault_posix.c`（sigaction+sigaltstack）；`dos.h` 去 `windows.h`、引入便携 `dos_ctx` 与自检入口 `dos_service`；platform.h 第 2 切片（文件/时间/线程/进程，`pread/pwrite` 调用方持位置）；**先测后写**：`faultprobe32`（freestanding -m32，不需要 multilib）实测 i386 compat 故障模型 = `SIGSEGV/SI_KERNEL` 三重身份且无 `si_addr`（`§8-61`）；新工具 **`doscheck`** 两平台**同套 49 条断言全过**；抓到并修掉 `MEM_RELEASE` 静默失败（`§8-62`）与 64 位上下文回写截断（`§8-63`）；回归 **8/8**、跨版本同 tick A/B **0 px** | `docs/rounds/15-dos-and-faults.md`、`docs/PITFALLS.md` §8-61..63 |
 | §46 | 10-07 | **跨平台第 3 刀（起头）：入口层 —— 便携键表 + X11/XWayland 判定** | 用户问“Wayland 支不支持”：pin 住的 sokol **只有 X11 后端**（`_SAPP_LINUX` 全文件 0 处 wayland），但 X11 客户端在 Wayland 桌面经 **XWayland** 照跑；本机 WSLg 探针实测 `XWAYLAND=yes` + GLX 1.4 + RGBA visual（`docs/BACKEND.md` §13.11）。且 sokol X11 后端已内含 `XLookupString`（`SAPP_EVENTTYPE_CHAR`）与布局无关键码（`SAPP_KEYCODE`）⇒ 原计划“自己写 XLookupString/keysym 表”**收敛**为“`SAPP_KEYCODE`→便携键 id→BIOS 扫描码 + CHAR→ascii”。第一切片：`src/keys.h`+`keys.c`（`FR_KEY_LIST` 单真源）+`keys_win32.c`（VK 桥）+`keyscheck`（**102 键对拍 `MapVirtualKeyA` PASS**、5 个共享 make code alias）；当场抓到两个真 bug（`§8-64`）。**第二切片（接线）**：`input_post_vk` → `input_post_key(fr_key)`，`host.c` 的 `vk_from_name` 删掉、`keylog.c` 名称/回放全部改成便携键（旧 `#<vk>` 仍可回放），**regress 8/8 + 录制↔回放同 tick 0 px**；注释里 `*/` 踩坑记 `§8-65`。**第三切片（平台层第 3 切片 + host.c/keylog.c 过河）**：`platform.h` 加 `plat_now_ms/plat_thread_stk/plat_set_cwd/plat_module_path/plat_path_size/plat_stricmp/plat_strdup/plat_stdio_pin`，`host.c`/`keylog.c` **零 `windows.h`**（BMP 头手写小端、`__cdecl` → `FD2_CDECL`）；Windows regress **8/8** + 回放 **0 px**，Linux `letest` 三哈希 exact match + `doscheck` **49/49**。**第四切片（Linux 宿主）**：`main_sokol.c` 分平台（POSIX 用 `SAPP_KEYCODE→fr_key` + `SAPP_EVENTTYPE_CHAR`），音频/AIL 栈过河（`plat_mutex/plat_atomic_*/plat_now_us`，去掉 `windows.h`），新增 `make -f Makefile.linux build/fd2host-linux`（64 位**链接证明**，0 warning）；**真能跑的 `host32`（-m32）被 i386 工具链阻塞（本机 sudo 要密码）**。顺带修 `game/svc.c` 的 `__cdecl`/`uintptr_t`。**重申：51/1359 ≈ 3.8% 已源码化，其余 ~96% 仍是机器码且 C 函数会回调其固定 32 位地址 ⇒ 必须 32 位**（新写的 `rounds/16` §46.8） | `docs/rounds/16-entry-layer.md`、`docs/BACKEND.md` §13.11、`docs/PITFALLS.md` §8-64/§8-65 |
 | §47 | 10-07 | **第 52 个转译函数：`res.c` 接入 + `guest_mem` 堆缝** | `res.c`（`0x111BA`）对拍 160 例早过，卡的是**跨 C/机器码边界的堆**：它 `free(old_buffer)`、返回的 `buf` 又被游戏释放。IDA+现有代码结论：游戏堆入口是 `0x3706E malloc`/`0x3776E free`，**不能只换 libc**（CRT 内部 stdio 也用自家堆）⇒ 抽**唯一堆缝** `src/game/guest_mem.h`（宿主=游戏堆，check=已重定向的宿主 libc，将来 64 位=宿主 malloc）＋`guest_store_u32` 写游戏全局；`res.c` 三处 `malloc/free` 改 `guest_malloc/free`、尺寸写 `0x53BFF`；`rescheck` 改快照 `GUEST_SIZE`；`repl` 新分组 `res`。判据：`rescheck` **160/0**、`regress` **8/8**、`repl: installed 52`、`none↔all` 同 tick **0 px**、Linux `host32` 同 tick **0 px** | `docs/rounds/17-res-and-guest-heap.md`、`docs/TRANSLATION.md` §4/§5、`docs/PITFALLS.md` §8-68 |
+| §48 | 10-07 | **快照对 `0x15E9E`/`0x15E71` 转译（第 53/54 个）** | 反汇编结论：`0x15E71` = `gfx_restore_rect(rec,surface,stride)+free(rec)`；`0x15E9E` = `malloc(w*h+8)` + `gfx_save_rect` + `gfx_blit_transparent`。新增 `dlg_snap_save/dlg_snap_restore`（走 §47 的 `guest_mem`），`dlg.c` 不再调 `ORIG_SNAP_*`；**patch `0x15E71` 安全**：未转译调用者的记录也来自同一 Watcom 堆。判据：`boxcheck` **240/0**、`dlgcheck/typecheck/keycheck` **800/1616/100 全 0**、`regress` **8/8**、`repl: installed 54`、`none↔all` 同 tick **0 px**、Linux `host32` 同 tick **0 px** | `docs/rounds/18-snapshot-pair.md`、`docs/TRANSLATION.md` §4/§5 |
 
 ## 4. 下一步计划（按优先级）
 
-1. **源码化继续**（工作重心）。~~`sub_15F84` 脚本 VM~~ **已完成（§39）**：`game/vm.c` +
-   `vmcheck` **5512 例全过**，接入分组 `vm`。~~`res.c` 接入~~ **已完成（§47）**：新增
-   **`src/game/guest_mem.h/.c`（唯一堆缝）**，接入分组 `res`（51→**52**）。
-   **下一个目标**（`docs/TRANSLATION.md` §5）：① `0x15E71`/`0x15E9E` 快照缓冲改走 `guest_mem`
-   后接入；② **主状态机** `0x25977`/`0x25EBB`/`0x117E7`/`0x22E5C`/`0x26152`（最大一块，
-   一条一条转 + `*check` 对拍）；记录维持：`repl.c` 加行 → `python tools/translation_map.py`。
+1. **源码化继续**（工作重心）。~~`sub_15F84` 脚本 VM~~ **已完成（§39）**；
+   ~~`res.c` 接入~~ **已完成（§47）**（`src/game/guest_mem.h/.c` 唯一堆缝）；
+   ~~`0x15E9E`/`0x15E71` 快照对~~ **已完成（§48）**（`dlg_snap_save/restore`，接入 **54**）。
+   **下一个目标**（`docs/TRANSLATION.md` §5）：**主状态机**
+   `0x25977`/`0x25EBB`/`0x117E7`/`0x22E5C`/`0x26152`（含 `funcs_25E23[]`/`funcs_25E3A[]`
+   函数指针表）——最大一块，一条一条转 + `*check` 对拍；
+   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 54/1359）。
 2. ~~**补 autokey 配方**~~ **已完成（§40，2026-10-06）**：标准配方 + `--shot-tick=326..334`
    即可落在“打字进行中”，抓到 3 张不同进度的逐字画面（框区差异 455→327→325→0），
    且 **15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽 ⇒ `vm_run`+`dlg_type_step`
@@ -146,7 +148,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    （GLCORE，7948 fixup、65 低内存引用、52 AIL 打桩），与 Windows 同 tick `--screenshot`
    **0 / 64000 px** 差异。
    **关于 32 位**：用户要求终局**不再用 32 位**（要能上 macOS，而 macOS 已无 32 位）。
-   现状 52/1359 ≈ 3.8% 已源码化、其余仍是机器码且 C 会回调其固定 32 位地址 ⇒ 过渡期必须 32 位；
+   现状 54/1359 ≈ 4.0% 已源码化、其余仍是机器码且 C 会回调其固定 32 位地址 ⇒ 过渡期必须 32 位；
    路线（A 转译 → B 转完 → **C 去 guest 化** → D 64 位/三平台）见 `docs/TRANSLATION.md` §6、
    `rounds/16-entry-layer.md` §46.11。**下一步（工作重心）：按 §5 继续源码化**（51 → 1359）。
    同轮补：**Linux 窗口 180° 倒置修好**（GLSL 多翻一次 v；`--screenshot` 看不到窗口翻转，

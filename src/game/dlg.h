@@ -55,6 +55,12 @@ void dlg_scroll_text(int box_pos);
  * dlg_close_box(stages, rows): frees the five snapshots through 0x15E71
  * (restore + free) in reverse order, then sweeps the portrait sprite back
  * out to its full size when rows != 0. */
+/* 0x15E9E / 0x15E71 - the portrait-sweep snapshot pair. The record lives on
+ * the game heap (src/game/guest_mem.h), and 0x15E71 is also called by
+ * not-yet-translated code, so both sides agree on the allocation. */
+void *dlg_snap_save(const void *block, void *surface, int stride, int x, int y);
+void  dlg_snap_restore(void *record, void *surface, int stride);
+
 void *dlg_open_box(int face_x, int face_y, int rows);
 void  dlg_close_box(void **stages, int rows);
 

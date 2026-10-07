@@ -132,6 +132,14 @@ static const struct repl_entry g_repl[] = {
     { 0x16559, "dlg_blit_dato",       (void *)rep_dlg_blit,         REPL_DLG },
     { 0x16E24, "dlg_scroll_text",     (void *)rep_dlg_scroll,       REPL_DLG },
 
+    /* --- portrait snapshot save/restore (src/game/dlg.c) ---------------
+     * 0x15E9E allocates its record with guest_malloc and 0x15E71 restores and
+     * guest_free()s it, so the records stay on the game heap and the many
+     * machine-code callers of 0x15E71 keep working (source translation is
+     * case-by-case; the heap is shared). */
+    { 0x15E9E, "dlg_snap_save",       (void *)dlg_snap_save,        REPL_DLG },
+    { 0x15E71, "dlg_snap_restore",    (void *)dlg_snap_restore,     REPL_DLG },
+
     /* --- box open/close animation (src/game/dlg.c) ---------------------
      * App-level routines: the C reads/writes the original globals itself,
      * so no wrapper is needed - the signature matches the machine code

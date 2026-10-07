@@ -46,6 +46,7 @@
 #include "gfx.h"
 #include "rle2.h"
 #include "svc.h"
+#include "guest_mem.h"
 #include <string.h>
 
 #define VGA_BASE 0x000A0000u
@@ -68,9 +69,6 @@
 #define word_53A8D  (*(uint16_t *)(uintptr_t)0x00053A8Du) /* INT 16h REGS.EAX */
 #define byte_53A8E  (*(uint8_t  *)(uintptr_t)0x00053A8Eu) /* .. AH (scan code) */
 
-typedef void *(*snap_save_fn)(const void *block, void *surface, int stride,
-                              int x, int y);
-typedef void  (*snap_restore_fn)(void *record, void *surface, int stride);
 typedef void  (*delay_fn)(unsigned ms);
 typedef void  (*flush_fn)(void);
 typedef void  (*glide_fn)(int face_x, int face_y);
@@ -81,8 +79,6 @@ typedef int     (*pending_fn)(void);        /* 0x10620: key waiting?       */
 typedef void    (*palette_fn)(void);        /* 0x4E31C: DAC animation      */
 typedef int     (*int386_fn)(int intno, const void *in, void *out);
 
-#define ORIG_SNAP_SAVE   ((snap_save_fn)  (uintptr_t)0x00015E9Eu)
-#define ORIG_SNAP_RESTORE ((snap_restore_fn)(uintptr_t)0x00015E71u)
 #define ORIG_DELAY       ((delay_fn)      (uintptr_t)0x0003790Au)
 #define ORIG_FLUSH       ((flush_fn)      (uintptr_t)0x0004E381u)
 #define ORIG_GLIDE       ((glide_fn)      (uintptr_t)0x00012CEAu)
@@ -105,6 +101,33 @@ static const uint8_t *dlg_face_block(const uint8_t *frame)
     return frame + *(const int16_t *)(frame + 6);
 }
 
+/* 0x15E9E - snapshot helper: copy a w*h rectangle of `surface` into a fresh
+ * record (8-byte gfx_save_rect header + pixels, on the *game* heap), then draw
+ * the sprite `block` transparently at (x,y). The portrait sweep calls this
+ * once per animation step (0x165AC/0x16B43 do). The returned record is handed
+ * to 0x15E71, which restores and frees it. */
+void *dlg_snap_save(const void *block, void *surface, int stride, int x, int y)
+{
+    int    w   = *(const int16_t *)block;
+    int    h   = *(const int16_t *)((const uint8_t *)block + 2);
+    int    off = y * stride + x;
+    void  *rec = guest_malloc((size_t)(w * h + 8));
+
+    gfx_save_rect(rec, w, h, surface, off, stride);
+    gfx_blit_transparent((uint8_t *)surface + off, block, stride);
+    return rec;
+}
+
+/* 0x15E71 - put the record back on the surface and free it. Called from
+ * inside 0x165AC/0x16B43 and from several not-yet-translated functions, so the
+ * record may have come from either the C helper above or the original 0x15E9E
+ * / 0x15F0E - both allocate on the game heap, so guest_free is right. */
+void dlg_snap_restore(void *record, void *surface, int stride)
+{
+    gfx_restore_rect(record, surface, stride);
+    guest_free(record);
+}
+
 /* 0x165AC */
 void *dlg_open_box(int face_x, int face_y, int rows)
 {
@@ -122,12 +145,12 @@ void *dlg_open_box(int face_x, int face_y, int rows)
             const uint8_t *face = dlg_face_block(dword_53A81);
 
             for (i = 0; i <= steps; i++) {
-                dword_53A18[0] = ORIG_SNAP_SAVE(face, VGA, 320,
-                                                vw - i * (vw - 5) / steps,
-                                                vh - i * (vh - rows) / steps);
+                dword_53A18[0] = dlg_snap_save(face, VGA, 320,
+                                               vw - i * (vw - 5) / steps,
+                                               vh - i * (vh - rows) / steps);
                 ORIG_DELAY(10);
                 ORIG_FLUSH();
-                ORIG_SNAP_RESTORE(dword_53A18[0], VGA, 320);
+                dlg_snap_restore(dword_53A18[0], VGA, 320);
             }
         }
     } else if (dword_53C67 == 0x728) {
@@ -157,10 +180,10 @@ void dlg_close_box(void **stages, int rows)
     int i;
 
     for (i = 4; i > 0; i--) {                 /* reverse of the open order */
-        ORIG_SNAP_RESTORE(stages[i], VGA, 320);
+        dlg_snap_restore(stages[i], VGA, 320);
         ORIG_DELAY(10);
     }
-    ORIG_SNAP_RESTORE(stages[0], VGA, 320);
+    dlg_snap_restore(stages[0], VGA, 320);
 
     if (rows != 0) {
         int vw    = 24 * dword_53AB9 + 4;
@@ -171,11 +194,11 @@ void dlg_close_box(void **stages, int rows)
             const uint8_t *face = dlg_face_block(dword_53A81);
 
             for (i = 0; i <= steps; i++) {
-                stages[0] = ORIG_SNAP_SAVE(face, VGA, 320,
-                                           5 - i * (5 - vw) / steps,
-                                           rows - i * (rows - vh) / steps);
+                stages[0] = dlg_snap_save(face, VGA, 320,
+                                          5 - i * (5 - vw) / steps,
+                                          rows - i * (rows - vh) / steps);
                 ORIG_DELAY(10);
-                ORIG_SNAP_RESTORE(stages[0], VGA, 320);
+                dlg_snap_restore(stages[0], VGA, 320);
             }
         }
     }
