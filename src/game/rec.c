@@ -61,3 +61,19 @@ int rec_find(int want)
 
     return -1;
 }
+
+/* 0x1F183 - "skip this record" predicate used by the cell-sprite refresh:
+ *   0 unless record[7] != 0x1C and (record[0x20] == 0x13 or record[0x1F] is
+ *   4 or 5). Field semantics are UNCONFIRMED; the machine code is the spec. */
+int rec_skip(int index)
+{
+    const uint8_t *p = (const uint8_t *)(uintptr_t)dword_53A45 + 80 * index;
+
+    if (p[7] == 0x1C)
+        return 0;
+    if (p[0x20] == 0x13)
+        return 1;
+    if (p[0x1F] == 4 || p[0x1F] == 5)
+        return 1;
+    return 0;
+}

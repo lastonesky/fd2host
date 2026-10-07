@@ -45,3 +45,6 @@ int rec_flag(int index);
 int rec_find(int want);
 
 #endif /* GAME_REC_H */
+
+/* 0x1F183 - 1 when the cell-sprite refresh must skip this record */
+int rec_skip(int index);

@@ -14,3 +14,7 @@ void map_blit_tile(int x, int y, int index);
 
 /* 0x12E38 - read one map cell (x,y) into 8 bytes: tile, flags, 4 table bytes */
 void map_cell_info(int x, int y, uint8_t *out);
+
+/* 0x12AC6 / 0x129EC - cell object sprites */
+void map_blit_cell_sprite(void *dst, int x, int y);
+void map_refresh_records(void);

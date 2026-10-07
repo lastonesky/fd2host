@@ -6,6 +6,8 @@ addr,c_name,source_file,group,check,cases,status,note
 0x11EB0,gfx_copy_rows,src/game/fade.c,gfx,leafcheck,72000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x126F7,map_blit_tile,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x1297D,anim_frame_step,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
+0x129EC,map_refresh_records,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
+0x12AC6,map_blit_cell_sprite,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x12C0D,dlg_portrait_find,src/game/fade.c,dlg,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x12C60,rec_find,src/game/rec.c,rec,reccheck,28739,wired (repl.c),character record table
 0x12D7B,dlg_portrait_glide,src/game/fade.c,dlg,leafcheck,72000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
@@ -27,6 +29,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x1875D,dlg_draw_number_pair,src/game/fade.c,dlg,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x187D6,dlg_draw_number,src/game/fade.c,dlg,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x1AEB1,dlg_draw_number_signed,src/game/fade.c,dlg,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
+0x1F183,rec_skip,src/game/fade.c,rec,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x1F525,pal_fade_in,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x1F882,pal_fade_out,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x22E5C,scene_card,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared

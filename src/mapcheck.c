@@ -53,6 +53,12 @@ typedef void (*sign_fn)(void *, int, int);
 #define ORIG_NUM     ((num_fn)  (uintptr_t)0x000187D6u)
 #define ORIG_NUMPAIR ((num_fn)  (uintptr_t)0x0001875Du)
 #define ORIG_NUMSIGN ((sign_fn) (uintptr_t)0x0001AEB1u)
+typedef int  (*skip_fn)(int);
+typedef void (*cellspr_fn)(void *, int, int);
+typedef void (*refresh_fn)(void);
+#define ORIG_SKIP    ((skip_fn)    (uintptr_t)0x0001F183u)
+#define ORIG_CELLSPR ((cellspr_fn) (uintptr_t)0x00012AC6u)
+#define ORIG_REFRESH ((refresh_fn) (uintptr_t)0x000129ECu)
 
 #define BITMAP_SZ (400 * 1024)
 #define TILE_W    24
@@ -147,6 +153,8 @@ int main(int argc, char **argv)
     uint8_t *cells = (uint8_t *)malloc(4 * 64 * 64);
     uint8_t *ctbl = (uint8_t *)malloc(4 * 1024);
     uint8_t *nres = (uint8_t *)malloc(32 * 1024);
+    uint8_t *sbank = (uint8_t *)malloc(0x0A + 4 * 2048 + 2048 * 600);
+    uint8_t *pbank = (uint8_t *)malloc(6 + 4 * 256 + 256 * 256);
 
     if (le_reserve_address_space() != 0) { printf("reserve failed\n"); return 2; }
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -158,7 +166,7 @@ int main(int argc, char **argv)
     printf("mapcheck: redirected %d low-memory references to 0x%X\n",
            patch_lowmem_refs(&le, MIRROR), MIRROR);
 
-    if (!bitmap || !tileset || !lmi || !dstA || !dstB || !recs || !cells || !ctbl || !nres)
+    if (!bitmap || !tileset || !lmi || !dstA || !dstB || !recs || !cells || !ctbl || !nres || !sbank || !pbank)
         return 2;
 
     /* ---- tileset layout: table at +6, 4 sub-images at +22 ---- */
@@ -204,6 +212,32 @@ int main(int argc, char **argv)
         }
     }
     PTR(0x53A81) = nres;
+
+    /* cell-sprite bank *(0x53A5D): offset table at +0x0A, 1024 24x24 streams */
+    {
+        uint32_t off = 0x0A + 4 * 2048;
+        int k;
+        for (k = 0; k < 2048; k++) {
+            *(uint32_t *)(sbank + 0x0A + 4 * k) = off;
+            off += (uint32_t)fill_tile_stream(sbank + off, (uint8_t)(k * 7 + 3));
+        }
+    }
+    /* palette bank *(0x53A6D): offset table at +6, 256 256-byte palettes */
+    {
+        uint32_t off = 6 + 4 * 256;
+        int k, j;
+        for (k = 0; k < 256; k++) {
+            *(uint32_t *)(pbank + 6 + 4 * k) = off;
+            for (j = 0; j < 256; j++) pbank[off + j] = (uint8_t)(k + j);
+            off += 256;
+        }
+    }
+    PTR(0x53A5D) = sbank;
+    PTR(0x53A6D) = pbank;
+    {
+        int j;
+        for (j = 0; j < 256; j++) B8(0x51A97 + j) = (uint8_t)rnd();
+    }
 
     PTR(0x53A49) = bitmap;
     PTR(0x53A4D) = tileset;
@@ -435,6 +469,76 @@ int main(int argc, char **argv)
                 snprintf(g_why, sizeof g_why, "value=%d", value);
                 fail("dlg_draw_number_signed"); break;
             }
+        }
+
+        /* ---- rec_skip (0x1F183) --------------------------------------- */
+        for (i = 0; i < 20 && !g_fail; i++) {
+            int n = 1 + (int)(rnd() % 8);
+            int idx = (int)(rnd() % n);
+            int k, a, b;
+
+            PTR(0x53A45) = recs;
+            I32(0x53BEB) = n;
+            for (k = 0; k < 80 * n; k++) recs[k] = (uint8_t)rnd();
+            recs[idx * 80 + 7]    = (rnd() & 1) ? 0x1C : (uint8_t)rnd();
+            recs[idx * 80 + 0x20] = (rnd() & 1) ? 0x13 : (uint8_t)rnd();
+            recs[idx * 80 + 0x1F] = (rnd() & 1) ? (uint8_t)(4 + (rnd() % 2))
+                                                : (uint8_t)rnd();
+            a = ORIG_SKIP(idx);
+            b = rec_skip(idx);
+            cases++;
+            if (a != b) {
+                snprintf(g_why, sizeof g_why, "idx=%d -> %d/%d", idx, a, b);
+                fail("rec_skip"); break;
+            }
+        }
+
+        /* ---- map_blit_cell_sprite (0x12AC6) / map_refresh_records (0x129EC) */
+        if (!g_fail) {
+            int w = 16 + (int)(rnd() % 16);
+            int k, x, y;
+
+            I32(0x53AA9) = 0; I32(0x53AAD) = 0;
+            I32(0x51A87) = 12; I32(0x51A8B) = 10;
+            I32(0x53AC1) = w;
+            PTR(0x53A51) = cells;
+            I32(0x53A69) = (int32_t)(uintptr_t)ctbl;
+            I32(0x53A40) = (int32_t)(rnd() % 4);
+            I32(0x53C1F) = (int32_t)(rnd() % 256);
+
+            for (k = 0; k < 4 * 64 * 64; k++) cells[k] = (uint8_t)rnd();
+            for (k = 0; k < 1024; k++) ctbl[4 * k] = (uint8_t)rnd();
+            {
+                int n = 1 + (int)(rnd() % 6);
+                I32(0x53BEB) = n;
+                for (k = 0; k < 80 * n; k++) recs[k] = (uint8_t)rnd();
+                for (k = 0; k < n; k++) {
+                    recs[k * 80 + 0] = (uint8_t)(rnd() % w);
+                    recs[k * 80 + 1] = (uint8_t)(rnd() % 20);
+                    recs[k * 80 + 3] = (uint8_t)(rnd() % 4);
+                    recs[k * 80 + 4] = (uint8_t)(rnd() & 1);
+                }
+            }
+            PTR(0x53A45) = recs;
+
+            memset(bitmap, 0x22, BITMAP_SZ);
+            ORIG_REFRESH();
+            memcpy(dstA, bitmap, BITMAP_SZ);
+            memset(bitmap, 0x22, BITMAP_SZ);
+            map_refresh_records();
+            cases++;
+            if (memcmp(dstA, bitmap, BITMAP_SZ) != 0)
+                fail("map_refresh_records");
+
+            x = (int)(rnd() % (w + 4)) - 2;
+            y = (int)(rnd() % 24) - 2;
+            memset(dstA, 0x33, BITMAP_SZ);
+            memset(dstB, 0x33, BITMAP_SZ);
+            ORIG_CELLSPR(dstA, x, y);
+            map_blit_cell_sprite(dstB, x, y);
+            cases++;
+            if (memcmp(dstA, dstB, BITMAP_SZ) != 0)
+                fail("map_blit_cell_sprite");
         }
 
         /* ---- tbl_off627D8 (0x4EB48) ----------------------------------- */
