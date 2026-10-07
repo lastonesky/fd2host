@@ -103,6 +103,9 @@ cmd //c E:\FD2\port\aux_build.bat typecheck
 cmd //c E:\FD2\port\aux_build.bat vmcheck
 cmd //c E:\FD2\port\aux_build.bat platprobe   # 平台自检（内存层）
 
+# 排期依据：按使用量（callers_game + data_xrefs）排未转译的函数（产物 re\func_ranking.csv）
+python tools\func_ranking.py --top 30
+
 # Linux 侧（WSL Debian）：加载器 + 平台自检 + DOS 层自检。跨平台判据 = 两边 `letest` 输出的
 # 三个对象 fnv1a 必须逐字相同（参考镜像 build/object*.bin 被 ignore，没有也能判）；
 # `doscheck-linux` 与 Windows `doscheck.exe` 同套 49 条断言（故障模型探针：build/faultprobe32，

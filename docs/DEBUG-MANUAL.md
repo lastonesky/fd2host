@@ -48,6 +48,7 @@
 | 查某条 fixup 记录 | `python tools/fixup_dump.py [FD2.EXE] [地址]`：按 `le.c` 的语法走 fixup 表，不带地址时列出**所有会被跳过的记录**（跨页/越界源，`rounds/14` §44.2） |
 | 跨平台（加载器）判据 | 同一份 `letest` 在两个平台跑：**三个对象的 `fnv1a` 必须逐字相同**（Windows `build.ps1 -Target letest` / Linux `make -f Makefile.linux`）；有参考镜像时再逐字节比，**只分两类已知差异**（页边界的跨页 fixup、页数之外的 BSS 尾），分类外差异 → `FAIL` + 退出码 1（`rounds/13-portability.md` §43.4） |
 | 平台层自检 | `platprobe`（Win：`-Target platprobe`；Linux：`make -f Makefile.linux` 后 `./build/platprobe-linux`）：预留对象窗 → 分块 commit → 逐段触碰 → 整窗，两平台都必须 exit 0 且 `prot=0x7` |
+| **排期/用量排序** | `python tools/func_ranking.py --top 30`：按 `callers_game + data_xrefs` 排出未接入的 hot 函数（产物 `re/func_ranking.csv`），作为“下一个转什么”的依据（`TRANSLATION.md` §7） |
 | **渲染定向自检（GL）** | `FD2_TESTPATTERN=1 FD2_GL_READBACK=100 ./build/fd2host-linux32 …`：静态图案下必须 `upright mismatches=0`——`--screenshot` 看不到窗口翻转（两路不同，`PITFALLS` §8-67） |
 | **转译记录/map** | `python tools/translation_map.py`（生成 `re/translation_map.csv`） / `--check`（与 `src/repl.c` 不一致就退出 1）。列：addr/C 名/文件/分组/对拍工具/用例数/状态 |
 | **DOS 层自检** | `doscheck`（Win：`build.ps1 -Target doscheck` 后 `build\doscheck.exe`；Linux：`./build/doscheck-linux`）：低内存镜像 + BIOS tick 线程 + 平台缝（含 `plat_release` 后必须不可读）+ INT 21h 文件服务 31 项 + **真 `int 0x21` 经 VEH/sigaction 分发**，两平台跑**同一套 49 条断言**，必须 **49/49 + exit 0**（`rounds/15-dos-and-faults.md`） |
