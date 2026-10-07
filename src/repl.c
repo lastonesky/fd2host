@@ -181,6 +181,9 @@ static const struct repl_entry g_repl[] = {
     { 0x1145A, "unit_recalc",        (void *)unit_recalc,          REPL_REC },
     { 0x11506, "unit_refresh_all",   (void *)unit_refresh_all,     REPL_REC },
     { 0x112A5, "unit_add",           (void *)unit_add,             REPL_REC },
+    /* The identity lookup shared by several record/workflow functions; it
+     * only reads the party table, so it belongs with its three siblings. */
+    { 0x33499, "unit_exists",        (void *)unit_exists,          REPL_REC },
 
     /* --- tick wait + PCM SFX playback (src/game/svc.c) -------------------
      * App-level too: the globals they need are the game's, and they talk to
@@ -222,15 +225,18 @@ static const struct repl_entry g_repl[] = {
      * addresses (bgm_play / svc_wait_ticks / res_load are already C here). */
     { 0x22E5C, "scene_card",         (void *)scene_card,          REPL_SCENE },
 
-    /* The five funcs_25E23[] main-state-machine transition handlers reached
+    /* The six funcs_25E23[] main-state-machine transition handlers reached
      * through `call funcs_25E23[dword_53C03]` in main (0x25BF4). Each is a
      * pure service sequence: vm_run + unit_refresh_all (+ unit_add) then
      * advance dword_53C03 - no VGA writes of its own, so the services are
-     * called through their original addresses for the same reason as above. */
+     * called through their original addresses for the same reason as above.
+     * 0x239BD first asks unit_exists(12) which of the two sub-streams to
+     * draw. */
     { 0x22EF6, "scene_state_00",     (void *)scene_state_00,      REPL_SCENE },
     { 0x231BC, "scene_state_03",     (void *)scene_state_03,      REPL_SCENE },
     { 0x23790, "scene_state_10",     (void *)scene_state_10,      REPL_SCENE },
     { 0x2389F, "scene_state_12",     (void *)scene_state_12,      REPL_SCENE },
+    { 0x239BD, "scene_state_14",     (void *)scene_state_14,      REPL_SCENE },
     { 0x23E39, "scene_state_18",     (void *)scene_state_18,      REPL_SCENE },
 
     /* --- palette fades (src/game/fade.c) --------------------------------

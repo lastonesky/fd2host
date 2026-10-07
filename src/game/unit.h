@@ -15,6 +15,8 @@
  *                             party record (identity byte +8), then recalc
  *   0x112A5  unit_add         build a new party record from the default and
  *                             growth tables and append it
+ *   0x33499  unit_exists      report whether a record with identity byte +8
+ *                             equal to id exists
  *
  * App-level: the C reads and writes the same data-segment globals the machine
  * code does, so src/repl.c hooks them with no glue.
@@ -34,5 +36,9 @@ void unit_refresh_all(void);
 /* 0x112A5 - append a freshly built record for `id`, returns unit_recalc's
  * value for the appended index. */
 int unit_add(int id);
+
+/* 0x33499 - 1 if any party record's identity byte (+8) equals `id`, else 0.
+ * Signed count, zero-extended byte compare (id is never truncated). */
+int unit_exists(int id);
 
 #endif /* GAME_UNIT_H */

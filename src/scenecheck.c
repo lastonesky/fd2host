@@ -3,8 +3,8 @@
  * Two families, one hook set:
  *
  *   0x22E5C scene_card      (round 50) - pure service sequence
- *   0x22EF6/0x231BC/0x23790/0x2389F/0x23E39 (round 60) - funcs_25E23[]
- *                          main-state-machine transition handlers
+ *   0x22EF6/0x231BC/0x23790/0x2389F/0x23E39/0x239BD (rounds 60/61)
+ *                          funcs_25E23[] main-state-machine transition handlers
  *
  * Every service the two families reach is hooked to a recording stub and the
  * original machine code and the C are compared call by call, argument by
@@ -20,6 +20,7 @@
  *   0x15F84  vm_run(stream, sub, addr, pitch, fg, shadow, bgfill, step, wait)
  *   0x11506  unit_refresh_all()
  *   0x112A5  unit_add(id)
+ *   0x33499  unit_exists(id)  (only 0x239BD reaches it)
  *
  * The scene_card case needs no data file (it takes no arguments): it is a
  * repeatability/sequencing check whose free event also proves the C frees
@@ -43,11 +44,11 @@ typedef void (*scene_fn)(void);
 
 enum {
     EV_BGM, EV_WAIT, EV_FADE_OUT, EV_FADE_IN, EV_RES, EV_BLIT, EV_FREE,
-    EV_VM, EV_UNIT_REFRESH, EV_UNIT_ADD, EV_N
+    EV_VM, EV_UNIT_REFRESH, EV_UNIT_ADD, EV_UNIT_EXISTS, EV_N
 };
 static const char *const evname[EV_N] = {
     "bgm", "wait", "fade_out", "fade_in", "res_load", "blit", "free",
-    "vm_run", "unit_refresh_all", "unit_add"
+    "vm_run", "unit_refresh_all", "unit_add", "unit_exists"
 };
 
 typedef struct { int id; int32_t v[9]; } event_t;
@@ -109,6 +110,16 @@ static int __cdecl stub_unit_add(int id)
 {
     rec(EV_UNIT_ADD, id, 0, 0, 0);
     return 0;
+}
+
+/* 0x239BD reads unit_exists' result. The stub returns the global g_exists so
+ * the harness can drive both branches; the original only uses al, the C takes
+ * the whole int and truncates - the wider grid below proves they agree. */
+static int32_t g_exists = 0;
+static int __cdecl stub_unit_exists(int id)
+{
+    rec(EV_UNIT_EXISTS, id, g_exists, 0, 0);
+    return g_exists;
 }
 
 static void install_hook(uint32_t addr, const void *dest)
@@ -201,13 +212,14 @@ static int run_pair(scene_fn orig, scene_fn c, uint32_t stream, int32_t init,
 }
 
 /* funcs_25E23[] handlers under test (table index in the name). */
-struct handler { const char *name; scene_fn orig; scene_fn c; };
+struct handler { const char *name; scene_fn orig; scene_fn c; int uses_exists; };
 static const struct handler g_handlers[] = {
-    { "0x22EF6[0]",  (scene_fn)(uintptr_t)0x00022EF6u, scene_state_00 },
-    { "0x231BC[3]",  (scene_fn)(uintptr_t)0x000231BCu, scene_state_03 },
-    { "0x23790[10]", (scene_fn)(uintptr_t)0x00023790u, scene_state_10 },
-    { "0x2389F[12]", (scene_fn)(uintptr_t)0x0002389Fu, scene_state_12 },
-    { "0x23E39[18]", (scene_fn)(uintptr_t)0x00023E39u, scene_state_18 },
+    { "0x22EF6[0]",  (scene_fn)(uintptr_t)0x00022EF6u, scene_state_00, 0 },
+    { "0x231BC[3]",  (scene_fn)(uintptr_t)0x000231BCu, scene_state_03, 0 },
+    { "0x23790[10]", (scene_fn)(uintptr_t)0x00023790u, scene_state_10, 0 },
+    { "0x2389F[12]", (scene_fn)(uintptr_t)0x0002389Fu, scene_state_12, 0 },
+    { "0x23E39[18]", (scene_fn)(uintptr_t)0x00023E39u, scene_state_18, 0 },
+    { "0x239BD[14]", (scene_fn)(uintptr_t)0x000239BDu, scene_state_14, 1 },
 };
 
 static const uint32_t g_streams[] = { 0u, 0x12345678u, 0xDEADBEEFu };
@@ -235,6 +247,7 @@ int main(int argc, char **argv)
     HOOK(0x15F84, stub_vm);
     HOOK(0x11506, stub_unit_refresh);
     HOOK(0x112A5, stub_unit_add);
+    HOOK(0x33499, stub_unit_exists);
 
     /* --- scene_card: repeatability / sequencing (round 50) -------------- */
     for (i = 0; i < 100 && !failures; i++) {
@@ -267,6 +280,7 @@ int main(int argc, char **argv)
             uint32_t stream = g_streams[rep % 3];
             int32_t  init   = g_inits[(rep / 3) % 5];
 
+            g_exists = h->uses_exists ? (rep & 1) : 0;
             cases++;
             if (run_pair(h->orig, h->c, stream, init, why, sizeof why)) {
                 printf("FAIL %s stream=%08X init=%08X: %s\n",
@@ -274,6 +288,34 @@ int main(int argc, char **argv)
                 failures++;
                 break;
             }
+        }
+    }
+
+    /* --- 0x239BD (funcs_25E23[14]) with the unit_exists *return value* driven
+     * over a wider range: the original only consumes al (`xor al,1; add
+     * al,0Ch`), the C takes the whole int and truncates to uint8_t. The two
+     * must agree for values whose low byte is 0/1 and for values above 255
+     * (6 values x 30 reps = 180). */
+    if (!failures) {
+        static const int32_t exists_vals[] = { 0, 1, 0x100, 0x101, 0xFF, -1 };
+        unsigned k;
+        int rep;
+        for (k = 0; k < sizeof exists_vals / sizeof exists_vals[0]; k++) {
+            for (rep = 0; rep < 30; rep++) {
+                uint32_t stream = g_streams[rep % 3];
+                int32_t  init   = g_inits[(rep / 3) % 5];
+
+                g_exists = exists_vals[k];
+                cases++;
+                if (run_pair((scene_fn)(uintptr_t)0x000239BDu, scene_state_14,
+                             stream, init, why, sizeof why)) {
+                    printf("FAIL 0x239BD[14] exists=%d stream=%08X init=%08X: %s\n",
+                           (int)exists_vals[k], stream, (uint32_t)init, why);
+                    failures++;
+                    break;
+                }
+            }
+            if (failures) break;
         }
     }
 

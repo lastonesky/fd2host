@@ -45,10 +45,12 @@ typedef int  (*vm_fn)(void *stream, int sub, int addr, int pitch,
                       int fg, int shadow, int bgfill, int line_step, int wait);
 typedef void (*unit_refresh_fn)(void);
 typedef int  (*unit_add_fn)(int id);
+typedef int  (*unit_exists_fn)(int id);
 
 #define VM_RUN       ((vm_fn)          (uintptr_t)0x00015F84u)
 #define UNIT_REFRESH ((unit_refresh_fn)(uintptr_t)0x00011506u)
 #define UNIT_ADD     ((unit_add_fn)    (uintptr_t)0x000112A5u)
+#define UNIT_EXISTS  ((unit_exists_fn) (uintptr_t)0x00033499u)
 
 /* Game globals (obj1 data segment) used by the handlers:
  *   dword_53A79  the current VM stream pointer (vm_run's first argument)
@@ -88,10 +90,11 @@ void scene_card(void)
  * `push 28h; call 0x3702F` prologue is the Watcom stack probe (_chkstk), not
  * an argument - the same artifact as in vm.c/unit.c (rounds/08 §37.3).
  *
- * All five draw the same 0xA0000 VGA cell with the same 9 vm_run arguments
+ * All six draw the same 0xA0000 VGA cell with the same 9 vm_run arguments
  * (pitch 320, fg 205, shadow 76, fill 74, line step 19, wait 1); only the
- * sub-stream differs. dword_53C03 is the observable side effect: 0x22EF6
- * *assigns* 1, the other four increment it. The originals share tail code
+ * sub-stream differs (the one exception, 0x239BD, computes its sub-stream from
+ * unit_exists). dword_53C03 is the observable side effect: 0x22EF6
+ * *assigns* 1, the other five increment it. The originals share tail code
  * (0x23790/0x2389F/0x23E39 all tail-jump to 0x231F2); the C spells the
  * behaviour out per handler instead of reproducing the jump layout. */
 
@@ -140,6 +143,24 @@ void scene_state_12(void)
     vm9();
     UNIT_REFRESH();
     UNIT_ADD(3);
+    dword_53C03++;
+}
+
+/* 0x239BD - funcs_25E23[14]: draw sub-stream 12 when a party record for
+ * identity 12 already exists, else 13, refresh, join unit 15, advance.
+ * The sub-stream is the low byte of `(unit_exists(12) ^ 1) + 12`; the original
+ * only uses al (`xor al,1; add al,0Ch; movzx eax,al`), so the C truncates with
+ * a uint8_t cast - which keeps the two equal for any return value, not just
+ * 0/1. The tail (unit_add; inc dword_53C03) is shared with 0x23790 in the
+ * machine code; the C writes the behaviour out directly (rounds/30). */
+void scene_state_14(void)
+{
+    int exists = UNIT_EXISTS(12);
+    int sub    = (int)(uint8_t)((exists ^ 1) + 12);
+
+    VM_RUN((void *)(uintptr_t)dword_53A79, sub, 0xA0000, 320, 205, 76, 74, 19, 1);
+    UNIT_REFRESH();
+    UNIT_ADD(15);
     dword_53C03++;
 }
 

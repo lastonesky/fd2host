@@ -3,8 +3,8 @@
  * Runs the original machine code (0x34894 rec_flag, 0x12C60 rec_find,
  * 0x1B722 rec_field_byte, 0x344F2 rec_status_set, 0x1BB8C rec_slot_claim,
  * 0x1B8E7 rec_slot_remove, 0x1145A unit_recalc, 0x11506 unit_refresh_all,
- * 0x112A5 unit_add) and the C translation (src/game/rec.c, src/game/unit.c)
- * on the same
+ * 0x112A5 unit_add, 0x33499 unit_exists) and the C translation
+ * (src/game/rec.c, src/game/unit.c) on the same
  * tables and compares the return value plus every byte both sides touch.
  *
  * The two tables are synthetic buffers, but the globals are the real game
@@ -58,10 +58,12 @@ typedef void *(__cdecl *remove_fn)(int, int);
 typedef int  (__cdecl *recalc_fn)(int);
 typedef void (__cdecl *refresh_fn)(void);
 typedef int  (__cdecl *add_fn)(int);
+typedef int  (__cdecl *exists_fn)(int);
 
 #define ORIG_RECALC  ((recalc_fn)(uintptr_t)0x1145A)
 #define ORIG_REFRESH ((refresh_fn)(uintptr_t)0x11506)
 #define ORIG_ADD     ((add_fn)(uintptr_t)0x112A5)
+#define ORIG_EXISTS  ((exists_fn)(uintptr_t)0x33499)
 
 #define G53A45 (*(uint32_t *)(uintptr_t)0x00053A45u)
 #define G53BEB (*(int32_t *)(uintptr_t)0x00053BEBu)
@@ -610,6 +612,108 @@ static void test_add_edges(void)
     }
 }
 
+/* ---- identity lookup (0x33499) --------------------------------------- */
+
+/* Read-only scan: both sides run on identical party copies and the whole
+ * buffer is compared, so a stray write would show up. */
+static void run_exists(unsigned id, int n2, int want)
+{
+    int r1, r2;
+
+    memcpy(obuf, inbuf, sizeof inbuf);
+    G53BF7 = (uint32_t)(uintptr_t)obuf;
+    G53BFB = n2;
+    r1 = ORIG_EXISTS(want);
+
+    memcpy(cbuf, inbuf, sizeof inbuf);
+    G53BF7 = (uint32_t)(uintptr_t)cbuf;
+    G53BFB = n2;
+    r2 = unit_exists(want);
+
+    cmp_mem("unit_exists", id, r1, r2);
+}
+
+static void test_exists(unsigned ncases)
+{
+    unsigned c;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        int n2 = (int)(rnd() % (MAXREC + 1));
+        int want = (int)(rnd() & 0xFF);
+        int i;
+
+        fill_all();
+        for (i = 0; i < n2; i++)
+            inbuf[(size_t)i * REC_STRIDE + 8] = (uint8_t)(rnd() % 8);
+        if (n2 && (rnd() & 1)) {
+            /* force a hit, sometimes a second one - the first must win */
+            int hit = (int)(rnd() % n2);
+            inbuf[(size_t)hit * REC_STRIDE + 8] = (uint8_t)want;
+            if ((rnd() & 1) && n2 > 1) {
+                int k = (int)(rnd() % n2);
+                if (k != hit)
+                    inbuf[(size_t)k * REC_STRIDE + 8] = (uint8_t)want;
+            }
+        }
+        run_exists(6000 + c, n2, want);
+    }
+
+    /* constructed: empty/single/multi tables, first/middle/last hit,
+     * every identity equal, and want 0/255 against identities 0/9 */
+    {
+        static const struct { int n2, want, set_idx, byte8; } cs[] = {
+            { 0,   5,  -1, 0 },   /* empty table                  */
+            { 1,   7,   0, 7 },   /* single record, hit           */
+            { 1,   7,   0, 6 },   /* single record, miss          */
+            { 4,   3,   0, 3 },   /* first of four                */
+            { 4,   3,   2, 3 },   /* middle                       */
+            { 4,   3,   3, 3 },   /* last                         */
+            { 8,   9,  -1, 9 },   /* every identity 9 (all hit)   */
+            { 5,   0,  -1, 0 },   /* all identities 0, want 0     */
+            { 5, 255,  -1, 0 },   /* all identities 0, want 255   */
+        };
+        unsigned k;
+
+        for (k = 0; k < sizeof cs / sizeof cs[0] && !failures; k++) {
+            int i;
+            memset(inbuf, 0, sizeof inbuf);
+            for (i = 0; i < 8; i++)
+                inbuf[(size_t)i * REC_STRIDE + 8] = (uint8_t)cs[k].byte8;
+            if (cs[k].set_idx >= 0)
+                inbuf[(size_t)cs[k].set_idx * REC_STRIDE + 8] =
+                    (uint8_t)cs[k].want;
+            run_exists(6500 + k, cs[k].n2, cs[k].want);
+        }
+    }
+
+    /* constructed: the movzx byte compare never matches an id above 255 and
+     * an id is never truncated to a byte (256 must not match identity 0) */
+    {
+        static const int wide[] = { 256, 257, 300, 0x7FFFFFFF, -1, -256 };
+        unsigned k;
+
+        for (k = 0; k < sizeof wide / sizeof wide[0] && !failures; k++) {
+            memset(inbuf, 0, sizeof inbuf);
+            inbuf[8] = 0;                       /* identity 0 */
+            inbuf[REC_STRIDE + 8] = 255;
+            run_exists(6700 + k, 2, wide[k]);
+        }
+    }
+
+    /* constructed: a negative count returns 0 (signed loop bound) */
+    {
+        static const int negs[] = { -1, -5, (int)0x80000000u };
+        unsigned k;
+
+        for (k = 0; k < sizeof negs / sizeof negs[0] && !failures; k++) {
+            memset(inbuf, 0, sizeof inbuf);
+            inbuf[8] = 0;
+            run_exists(6800 + k, negs[k], 0);
+            run_exists(6850 + k, negs[k], 1);
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     le_image le;
@@ -701,6 +805,9 @@ int main(int argc, char **argv)
     if (!failures) test_refresh(1500);
     if (!failures) test_add(800);
     if (!failures) test_add_edges();
+
+    /* ---- identity lookup (0x33499) ----------------------------------- */
+    if (!failures) test_exists(1050);
 
     printf("paths: random=%u none=%u table2=%u flag0=%u flag1_only=%u want>255=%u empty=%u\n",
            path_count[P_RANDOM], path_count[P_NONE], path_count[P_TABLE2], path_count[P_FLAG0],

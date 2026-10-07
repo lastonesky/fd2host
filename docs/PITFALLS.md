@@ -555,3 +555,14 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
       **硬编码 `E:\FD2`**（`src/host.c`），脚本删的 `build\sandbox\FD2.TMP` 并非游戏
       实际读写的那个；A/B 两侧状态相同所以判据不受影响，`E:\FD2\FD2.SAV` 的 mtime 实测未变
       （continue 路径只读存档）。
+
+74. **从 Git Bash 给 `pwsh -File ... -Bmp` 传 Windows 路径，反斜杠会被 bash 吃掉**（第 61 轮）：
+    在 bash 里跑 `pwsh -NoProfile -File build/ab_run.ps1 -Rep none -Bmp E:\FD2\port\build\ab_n1.bmp`，
+    bash 把未加引号的 `\F`、`\p`… 当转义吃掉，PowerShell 实际收到
+    `E:FD2portbuildab_n1.bmp`；宿主把图“成功”“写出”到这个畸形路径（`host.log` 行
+    `host: frame N dumped to E:FD2portbuildab_n1.bmp`），**BMP 不在预期位置**，
+    `framediff.ps1` 报 `not found`，看起来像 `--screenshot`/`--exit-when-file` 失效 ——
+    其实整轮游戏白跑了。
+    **做法**：从 bash 调 PowerShell 脚本传参时**给含反斜杠的值加单引号**
+    （`-Bmp 'E:\FD2\port\build\ab_n1.bmp'`），或用正斜杠。
+    **判据**：`host.log` 的 dumped 行路径与 `-Bmp` 完全一致、`framediff` 找得到两张图。

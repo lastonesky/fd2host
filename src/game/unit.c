@@ -3,6 +3,7 @@
  *   0x1145A  unit_recalc      - sum the eight item slots' bonuses into +48..+4E
  *   0x11506  unit_refresh_all - copy matching character records over the party
  *   0x112A5  unit_add         - build a record from the default/growth tables
+ *   0x33499  unit_exists      - is there a party record with identity byte == id
  *
  * App-level: the C reads and writes the same data-segment globals the machine
  * code does (unit.h), so src/repl.c uses these functions directly.
@@ -14,9 +15,10 @@
  * own (tbl_602AD item bonuses, tbl_61DA1 character defaults, tbl_620A1 growth
  * curves), read through game/tables.c - the same memory the machine code reads.
  *
- * ABI note: all three have a Watcom stack probe (`push N; call 0x3702F`) that
+ * ABI note: all four have a Watcom stack probe (`push N; call 0x3702F`) that
  * makes Hex-Rays report __fastcall/register parameters. The real ABI is plain
- * cdecl: unit_recalc/unit_add take one stack argument, unit_refresh_all none.
+ * cdecl: unit_recalc/unit_add/unit_exists take one stack argument,
+ * unit_refresh_all none.
  *
  * Verified against the machine code by src/reccheck.c.
  */
@@ -169,4 +171,24 @@ int unit_add(int id)
         dword_53BFB = idx + 1;
         return result;
     }
+}
+
+/* 0x33499 - scan the party table for a record whose identity byte (+8)
+ * matches `id`; return 1 on the first match, else 0. The table is only read.
+ *
+ * The loop bound is a signed compare (`cmp edx,dword_53BFB; jge`), so a
+ * negative count returns 0. The identity byte is zero-extended
+ * (`movzx eax,byte`) and compared against the full 32-bit id, so an id above
+ * 255 never matches and an id is never truncated to a byte (256 must not
+ * match identity 0). */
+int unit_exists(int id)
+{
+    int i;
+
+    for (i = 0; i < dword_53BFB; i++) {
+        uint8_t *rec = party_rec(i);
+        if ((uint32_t)rec[8] == (uint32_t)id)
+            return 1;
+    }
+    return 0;
 }

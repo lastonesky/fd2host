@@ -71,10 +71,12 @@ flags 粗筛：`gfx_A0000`（字节含 `00 00 0A 00`）172 个 —— **含误�
    `dword_53BF7`（持久队伍表，`dword_53BFB` 条 = 下一个 append 索引）。队伍表的唯一写入者
    是 `0x1145A`（按 8 个物品格重算 +48..+4E 衍生值）、`0x11506`（按 +8 身份把角色记录整笔
    抄回队伍记录）、`0x112A5`（JOIN：按 `tbl_61DA1` 默认 + `tbl_620A1` 成长构造并 append）。
-   转译接入后 `funcs_25E23`（`0x51DE9`）状态分派表的 5 个表项（`0x22EF6`/`0x231BC`/
-   `0x23790`/`0x2389F`/`0x23E39`）已经**源码化接入**（`game/scene.c` 的
-   `scene_state_00/03/10/12/18`，`scenecheck`，见 `docs/rounds/30-scene-states.md`）；
-   表内其余 20 项及其依赖尚未转译（`docs/rounds/29-unit-roster.md` §59.5）。
+   转译接入后 `funcs_25E23`（`0x51DE9`）状态分派表的 6 个表项（`0x22EF6`/`0x231BC`/
+   `0x23790`/`0x2389F`/`0x239BD`/`0x23E39`）已经**源码化接入**（`game/scene.c` 的
+   `scene_state_00/03/10/12/18/14`，`scenecheck`，见 `docs/rounds/30-scene-states.md`、
+   `docs/rounds/31-scene-state-14.md`）；其中 `0x239BD` 先问 `0x33499 unit_exists`
+   （扫队伍表身份字节 +8）选 sub=12/13。表内其余 19 项及其依赖尚未转译
+   （`docs/rounds/29-unit-roster.md` §59.5、`rounds/31` §61.5）。
 
 ---
 
