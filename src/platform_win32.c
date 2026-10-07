@@ -368,6 +368,11 @@ static DWORD WINAPI plat_thread_thunk(LPVOID p)
 
 int plat_thread(void (*fn)(void *), void *arg)
 {
+    return plat_thread_stk(fn, arg, 0);
+}
+
+int plat_thread_stk(void (*fn)(void *), void *arg, size_t stack)
+{
     struct plat_thread_req *r = malloc(sizeof *r);
     HANDLE h;
 
@@ -375,7 +380,7 @@ int plat_thread(void (*fn)(void *), void *arg)
         return -1;
     r->fn = fn;
     r->arg = arg;
-    h = CreateThread(NULL, 0, plat_thread_thunk, r, 0, NULL);
+    h = CreateThread(NULL, (SIZE_T)stack, plat_thread_thunk, r, 0, NULL);
     if (!h) {
         free(r);
         return -1;
@@ -387,6 +392,54 @@ int plat_thread(void (*fn)(void *), void *arg)
 void plat_sleep_ms(unsigned ms)
 {
     Sleep(ms);
+}
+
+uint64_t plat_now_ms(void)
+{
+    return (uint64_t)GetTickCount64();
+}
+
+int plat_set_cwd(const char *dir)
+{
+    return SetCurrentDirectoryA(dir) ? 0 : -1;
+}
+
+int plat_module_path(char *buf, size_t n)
+{
+    DWORD d = GetModuleFileNameA(NULL, buf, (DWORD)n);
+
+    if (d == 0 || d >= (DWORD)n)
+        return -1;                    /* truncated or failed */
+    return 0;
+}
+
+int plat_path_size(const char *path, uint64_t *size)
+{
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(path, &fd);
+
+    if (h == INVALID_HANDLE_VALUE)
+        return -1;
+    FindClose(h);                     /* metadata: fine while it is open for
+                                       * writing (that is the point) */
+    *size = ((uint64_t)fd.nFileSizeHigh << 32) | (uint64_t)fd.nFileSizeLow;
+    return 0;
+}
+
+int plat_stricmp(const char *a, const char *b)
+{
+    return _stricmp(a, b);
+}
+
+char *plat_strdup(const char *s)
+{
+    return _strdup(s);
+}
+
+void plat_stdio_pin(void)
+{
+    _dup2(_fileno(stdout), 1);
+    _dup2(_fileno(stderr), 2);
 }
 
 uint64_t plat_thread_id(void)

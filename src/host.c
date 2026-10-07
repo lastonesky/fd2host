@@ -24,11 +24,10 @@
  *                              so overruns off the VGA window do not fault
  */
 
-#include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <io.h>        /* _dup2/_fileno: pin fd 1/2 onto the log */
+#include "platform.h"
 #include "le.h"
 #include "dos.h"
 #include "ail.h"
@@ -82,7 +81,7 @@ static int          g_screenshot_frame = 300;
 static int          g_shot_time_ms;      /* 0 = unused, frame trigger wins  */
 static int          g_shot_tick;         /* 0 = unused; beats both above    */
 static int          g_screenshot_done;
-static DWORD        g_shot_at_ms;        /* age of the captured frame       */
+static uint64_t     g_shot_at_ms;        /* age of the captured frame       */
 static uint32_t     g_shot_at_tick;      /* guest tick of the captured frame*/
 static const char  *g_wshot_path;      /* --wshot=<bmp>: window capture */
 
@@ -117,10 +116,10 @@ static const char  *g_keylog_path;      /* --keylog=<path>                 */
 static const char  *g_keyplay;          /* --keyplay=<path> (src/keylog.c)  */
 static const char  *g_cmdtail;          /* --cmdtail=<tail> -> PSP:0x80    */
 static int          g_exit_after_secs;  /* --exit-after, for spawned children */
-static char         g_exit_when_path[MAX_PATH]; /* --exit-when-file=path:minbytes */
+static char         g_exit_when_path[PLAT_MAX_PATH]; /* --exit-when-file=path:minbytes */
 static uint32_t     g_exit_when_size;   /* required size of that file      */
 static volatile int g_autokey_done = 1; /* 0 while a --autokey schedule runs */
-static DWORD        g_start_tick;       /* when host_init began             */
+static uint64_t     g_start_tick;       /* when host_init began             */
 
 /* 1 when the real keyboard must be ignored (see the flag above). The entry
  * layers ask this on every key event; --autokey never does - its keystrokes
@@ -136,12 +135,12 @@ int host_no_user_input(void)
  * orphaned game running. */
 int host_exit_after_remaining(void)
 {
-    DWORD elapsed;
+    uint64_t elapsed;
 
     if (g_exit_after_secs <= 0)
         return 0;
-    elapsed = (GetTickCount() - g_start_tick) / 1000;
-    if ((DWORD)g_exit_after_secs <= elapsed)
+    elapsed = (plat_now_ms() - g_start_tick) / 1000;
+    if ((uint64_t)g_exit_after_secs <= elapsed)
         return 0;
     return g_exit_after_secs - (int)elapsed;
 }
@@ -163,9 +162,9 @@ int host_exit_after_remaining(void)
 /* post_key() moved to the entry layer as input_post_key(): it owns the window
  * and the platform key translation (see src/host.h). */
 
-static DWORD WINAPI autokey_thread(LPVOID param)
+static void autokey_thread(void *param)
 {
-    char *spec = _strdup((const char *)param);
+    char *spec = plat_strdup((const char *)param);
     char *step = spec, *next;
 
     (void)param;
@@ -175,7 +174,7 @@ static DWORD WINAPI autokey_thread(LPVOID param)
         if (!colon) break;
         *colon = 0;
         delay = atoi(step);
-        if (delay > 0) Sleep((DWORD)delay);
+        if (delay > 0) plat_sleep_ms((unsigned)delay);
         next = strchr(colon + 1, ';');
         if (next) *next++ = 0;
         {
@@ -195,10 +194,21 @@ static DWORD WINAPI autokey_thread(LPVOID param)
     printf("host: autokey schedule finished\n");
     g_autokey_done = 1;
     free(spec);
-    return 0;
 }
 
 /* ------------------------------------------------------------------ utils */
+
+/* Last path separator, either style: the host log is written next to the
+ * executable and the separator differs per platform ('\\' vs '/'). */
+static const char *path_last_sep(const char *p)
+{
+    const char *fwd = strrchr(p, '/');
+    const char *bck = strrchr(p, '\\');
+
+    if (!fwd) return bck;
+    if (!bck) return fwd;
+    return (fwd > bck) ? fwd : bck;
+}
 
 /* --------------------------------------------------------------- shutdown
  *
@@ -222,32 +232,27 @@ static DWORD WINAPI autokey_thread(LPVOID param)
 
 static int exit_file_ok(void)
 {
-    WIN32_FIND_DATAA fd;
-    HANDLE h;
     uint64_t size;
 
     if (!g_exit_when_path[0])
         return 0;                       /* no file condition: never "ready" */
-    /* FindFirstFile reads directory metadata: it never fails with a sharing
+    /* plat_path_size uses directory metadata: it never fails with a sharing
      * violation while the game still has the file open for writing. */
-    h = FindFirstFileA(g_exit_when_path, &fd);
-    if (h == INVALID_HANDLE_VALUE)
+    if (plat_path_size(g_exit_when_path, &size) != 0)
         return 0;                       /* not created yet */
-    FindClose(h);
-    size = ((uint64_t)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
     return size >= (uint64_t)g_exit_when_size;
 }
 
-static DWORD WINAPI watchdog(LPVOID param)
+static void watchdog(void *param)
 {
-    DWORD settle_at = 0;
+    uint64_t settle_at = 0;
 
     (void)param;
     for (;;) {
-        DWORD elapsed = GetTickCount() - g_start_tick;
+        uint64_t elapsed = plat_now_ms() - g_start_tick;
 
         if (g_exit_after_secs > 0 &&
-            elapsed >= (DWORD)g_exit_after_secs * 1000) {
+            elapsed >= (uint64_t)g_exit_after_secs * 1000) {
             printf("host: watchdog fired after %d s (%d frames drawn)"
                    " - %.1f fps\n",
                    g_exit_after_secs, g_frames,
@@ -256,18 +261,18 @@ static DWORD WINAPI watchdog(LPVOID param)
         }
         if (g_autokey_done && !keylog_replaying() && exit_file_ok()) {
             if (!settle_at) {
-                settle_at = GetTickCount();
+                settle_at = plat_now_ms();
                 printf("host: exit condition reached (file >= %u bytes, "
                        "autokey done) - settling %u ms\n",
                        g_exit_when_size, (unsigned)EXIT_SETTLE_MS);
-            } else if (GetTickCount() - settle_at >= EXIT_SETTLE_MS) {
+            } else if (plat_now_ms() - settle_at >= EXIT_SETTLE_MS) {
                 if (g_screenshot_path && !g_screenshot_done) {
                     /* last frame = evidence: drop whichever trigger has not
                      * fired yet and take the very next frame */
                     g_shot_time_ms = 0;
                     g_shot_tick = 0;
                     g_screenshot_frame = g_frames + 1;
-                    Sleep(250);                        /* let it be drawn */
+                    plat_sleep_ms(250);                /* let it be drawn */
                 }
                 printf("host: exit condition met after %u s (%d frames drawn)\n",
                        (unsigned)(elapsed / 1000), g_frames);
@@ -276,7 +281,7 @@ static DWORD WINAPI watchdog(LPVOID param)
         } else {
             settle_at = 0;              /* condition lost: restart the settle */
         }
-        Sleep(200);
+        plat_sleep_ms(200);
     }
     dos_terminate_child();        /* a P_WAIT child must not outlive us */
     keylog_finish();              /* both shutdown paths record the keys  */
@@ -284,8 +289,7 @@ static DWORD WINAPI watchdog(LPVOID param)
                                    * without this the --audio-dump header
                                    * would never get its final sizes */
     dos_dump_stats();
-    ExitProcess(0);
-    return 0;
+    plat_exit(0);
 }
 
 static uint8_t *lowmem(void) { return (uint8_t *)(uintptr_t)DOS_LOWMEM_BASE; }
@@ -307,33 +311,46 @@ static void palette_default(void)
 }
 
 /* Write the current 32bpp frame as a BMP. BI_RGB 32bpp is BGRA in memory,
- * which is exactly how g_rgb is packed, so the file can be written verbatim. */
+ * which is exactly how g_rgb is packed, so the pixels can be written verbatim.
+ * The 54-byte header is emitted field by field (little-endian) so this file
+ * needs no Win32 BITMAPFILEHEADER/BITMAPINFOHEADER types. */
+static void put_le16(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)v;
+    p[1] = (uint8_t)(v >> 8);
+}
+
+static void put_le32(uint8_t *p, uint32_t v)
+{
+    p[0] = (uint8_t)v;
+    p[1] = (uint8_t)(v >> 8);
+    p[2] = (uint8_t)(v >> 16);
+    p[3] = (uint8_t)(v >> 24);
+}
+
 static void dump_frame_bmp(const char *path)
 {
-    BITMAPFILEHEADER fh;
-    BITMAPINFOHEADER ih;
-    DWORD pix = (DWORD)(320 * 200 * 4);
+    uint8_t  hdr[54];
+    uint32_t pix = 320u * 200u * 4u;
     FILE *f = fopen(path, "wb");
 
     if (!f) {
         printf("host: cannot write frame dump %s\n", path);
         return;
     }
-    memset(&fh, 0, sizeof fh);
-    memset(&ih, 0, sizeof ih);
-    fh.bfType = 0x4D42;                 /* 'BM'                          */
-    fh.bfOffBits = sizeof fh + sizeof ih;
-    fh.bfSize = fh.bfOffBits + pix;
-    ih.biSize = sizeof ih;
-    ih.biWidth = 320;
-    ih.biHeight = -200;                 /* top-down: same order as g_rgb */
-    ih.biPlanes = 1;
-    ih.biBitCount = 32;
-    ih.biCompression = BI_RGB;
-    ih.biSizeImage = pix;
-    fwrite(&fh, sizeof fh, 1, f);
-    fwrite(&ih, sizeof ih, 1, f);
-    fwrite(g_rgb, pix, 1, f);
+    memset(hdr, 0, sizeof hdr);
+    hdr[0] = 'B';
+    hdr[1] = 'M';
+    put_le32(hdr + 2, 54u + pix);       /* bfSize      */
+    put_le32(hdr + 10, 54u);            /* bfOffBits   */
+    put_le32(hdr + 14, 40u);            /* biSize      */
+    put_le32(hdr + 18, 320u);
+    put_le32(hdr + 22, (uint32_t)-200); /* top-down: same order as g_rgb */
+    put_le16(hdr + 26, 1u);             /* biPlanes    */
+    put_le16(hdr + 28, 32u);            /* biBitCount  */
+    put_le32(hdr + 34, pix);            /* biSizeImage */
+    fwrite(hdr, 1, sizeof hdr, f);
+    fwrite(g_rgb, 1, pix, f);
     fclose(f);
     printf("host: frame %d dumped to %s (age %lu ms, guest tick %lu)\n",
            g_frames, path, (unsigned long)g_shot_at_ms,
@@ -344,7 +361,7 @@ static void dump_frame_bmp(const char *path)
  * watchdog and --autokey alike. */
 unsigned long host_age_ms(void)
 {
-    return (unsigned long)(GetTickCount() - g_start_tick);
+    return (unsigned long)(plat_now_ms() - g_start_tick);
 }
 
 /* The guest's own clock: the BIOS tick counter at 0x40:0x6C that the game
@@ -398,7 +415,7 @@ int host_frame(void)
 
     if (!g_screenshot_done && host_shot_due()) {
         g_screenshot_done = 1;
-        g_shot_at_ms = GetTickCount() - g_start_tick;
+        g_shot_at_ms = plat_now_ms() - g_start_tick;
         g_shot_at_tick = host_guest_tick();
         shot = 1;
         if (g_screenshot_path)
@@ -457,17 +474,25 @@ void host_key(uint8_t scan, uint8_t ascii)
 
 /* ------------------------------------------------------------- game thread */
 
-typedef void (__cdecl *game_entry_fn)(void);
+/* The guest entry is a plain cdecl function; on x86-64 there is no cdecl
+ * keyword (and no caller-cleanup difference), so only MSVC/x86 names it. */
+#if defined(_MSC_VER)
+#define FD2_CDECL __cdecl
+#else
+#define FD2_CDECL
+#endif
 
-static DWORD WINAPI game_thread(LPVOID param)
+typedef void (FD2_CDECL *game_entry_fn)(void);
+
+static void game_thread(void *param)
 {
     game_entry_fn fn = (game_entry_fn)(uintptr_t)g_le.entry_linear;
+    (void)param;
     printf("host: entering game code at 0x%X\n", g_le.entry_linear);
     fflush(stdout);
     fn();
     printf("host: game entry returned\n");
     g_running = 0;
-    return 0;
 }
 
 /* window creation, window procedure and the message pump live in
@@ -509,16 +534,17 @@ int host_init(int argc, char **argv)
     int fixups = 0, i, ac = 0;
     const char *exe = "E:\\FD2\\FD2.EXE";
     const char *gamedir = "E:\\FD2";
-    char logpath[MAX_PATH];
+    char logpath[PLAT_MAX_PATH];
 
-    g_start_tick = GetTickCount();
+    g_start_tick = plat_now_ms();
 
     /* Diagnostics first: this dumps everything to a file, never to a console
      * window. On failure the process exits silently so the user is not left
      * with a stray window. */
-    GetModuleFileNameA(NULL, logpath, MAX_PATH);
+    if (plat_module_path(logpath, sizeof logpath) != 0)
+        logpath[0] = 0;
     {
-        char *slash = strrchr(logpath, '\\');
+        char *slash = (char *)path_last_sep(logpath);
         if (slash) *(slash + 1) = 0; else logpath[0] = 0;
         strcat(logpath, "host.log");
     }
@@ -538,7 +564,7 @@ int host_init(int argc, char **argv)
     }
     freopen(logpath, "w", stdout);
     {
-        char errpath[MAX_PATH];
+        char errpath[PLAT_MAX_PATH];
         strcpy(errpath, logpath);
         { char *dot = strrchr(errpath, '.'); if (dot) strcpy(dot, ".err"); }
         freopen(errpath, "w", stderr);
@@ -549,11 +575,11 @@ int host_init(int argc, char **argv)
      * and freopen() may land on any free fd. The guest writes its own printf()
      * through DOS handle 1, which the host derives from fd 1
      * (_get_osfhandle(1) in files_init) - without this remap every game
-     * message went to an invalid handle (WriteFile error 6, 0 bytes written). */
-    _dup2(_fileno(stdout), 1);
-    _dup2(_fileno(stderr), 2);
+     * message went to an invalid handle (WriteFile error 6, 0 bytes written).
+     * plat_stdio_pin() is a no-op on POSIX. */
+    plat_stdio_pin();
     printf("FD2 native host - POC\n");
-    printf("image base 0x%p\n", (void *)GetModuleHandleA(NULL));
+    printf("image base 0x%p\n", plat_image_base());
 
     /* rewrite `--opt value` into `--opt=value` (see opt_wants_value above).
      * av[0] must stay the program name: the parser below starts at i = 1, so
@@ -713,7 +739,7 @@ int host_init(int argc, char **argv)
         printf("host: fixed address space unavailable - the object window "
                "0x10000..0x70000 is already taken (this image is at 0x%p). "
                "Retry; if it persists, rebuild with /BASE:0x60000000.",
-               (void *)GetModuleHandleA(NULL));
+               (void *)plat_image_base());
         printf("\n");
         return 9;
     }
@@ -723,12 +749,12 @@ int host_init(int argc, char **argv)
      * and/or completion trigger). Started after the reservation so the
      * low-window reservation still wins the race. */
     if (g_exit_after_secs > 0 || g_exit_when_path[0])
-        CreateThread(NULL, 0, watchdog, NULL, 0, NULL);
+        plat_thread(watchdog, NULL);
 
     /* The game opens its data files by bare name (DIG.INI, FDOTHER.DAT, ...),
      * so the working directory has to be the game directory. */
-    if (!SetCurrentDirectoryA(gamedir))
-        printf("host: warning: cannot chdir to %s (%lu)\n", gamedir, GetLastError());
+    if (plat_set_cwd(gamedir) != 0)
+        printf("host: warning: cannot chdir to %s (%u)\n", gamedir, plat_error());
     else
         printf("host: working directory = %s\n", gamedir);
 
@@ -786,11 +812,11 @@ int host_init(int argc, char **argv)
     if (g_ail_mode == 2) {
         printf("ail: patching disabled (--ail=none)\n");
     } else {
-        const char *bn = strrchr(exe, '\\');
+        const char *bn = path_last_sep(exe);
         bn = bn ? bn + 1 : exe;
-        if (g_ail_mode == 1 || _stricmp(bn, "FD2.EXE") == 0)
+        if (g_ail_mode == 1 || plat_stricmp(bn, "FD2.EXE") == 0)
             ail_install((uint8_t *)(uintptr_t)g_le.objects[0].base, g_ail_dump_dir);
-        else if (_stricmp(bn, "FDPS.EXE") == 0)
+        else if (plat_stricmp(bn, "FDPS.EXE") == 0)
             ail_install_fdps((uint8_t *)(uintptr_t)g_le.objects[0].base,
                              g_ail_dump_dir);
         else {
@@ -804,9 +830,9 @@ int host_init(int argc, char **argv)
      * code (src/repl.c). The addresses are FD2-specific, so this is gated
      * to the FD2 build; --replace=none keeps the original code for A/B. */
     {
-        const char *bn = strrchr(exe, '\\');
+        const char *bn = path_last_sep(exe);
         bn = bn ? bn + 1 : exe;
-        if (_stricmp(bn, "FD2.EXE") != 0)
+        if (plat_stricmp(bn, "FD2.EXE") != 0)
             printf("repl: '%s' is not FD2 - source translations skipped\n", bn);
         else if (g_replace_mask == 0)
             printf("repl: disabled (--replace=none) - original code runs\n");
@@ -844,8 +870,10 @@ render_desc host_render_desc(void)
 
 int host_start(void)
 {
-    HANDLE th = CreateThread(NULL, 4 * 1024 * 1024, game_thread, NULL, 0, NULL);
-    if (!th) { fprintf(stderr, "host: cannot start game thread\n"); return -1; }
+    if (plat_thread_stk(game_thread, NULL, 4u * 1024u * 1024u) != 0) {
+        fprintf(stderr, "host: cannot start game thread\n");
+        return -1;
+    }
     printf("host: game thread started\n");
 
     if (keylog_start()) {               /* --keyplay wins over --autokey    */
@@ -853,7 +881,7 @@ int host_start(void)
             printf("host: --keyplay given, ignoring --autokey\n");
     } else if (g_autokey && g_autokey[0]) {
         printf("host: autokey schedule: %s\n", g_autokey);
-        CreateThread(NULL, 0, autokey_thread, (LPVOID)g_autokey, 0, NULL);
+        plat_thread(autokey_thread, (void *)g_autokey);
     }
     return 0;
 }

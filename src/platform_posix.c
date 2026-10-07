@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>    /* strcasecmp (plat_stricmp) */
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -440,17 +441,31 @@ static void *plat_thread_thunk(void *p)
 
 int plat_thread(void (*fn)(void *), void *arg)
 {
+    return plat_thread_stk(fn, arg, 0);
+}
+
+int plat_thread_stk(void (*fn)(void *), void *arg, size_t stack)
+{
     struct plat_thread_req *r = malloc(sizeof *r);
+    pthread_attr_t at;
     pthread_t th;
 
     if (!r)
         return -1;
     r->fn = fn;
     r->arg = arg;
-    if (pthread_create(&th, NULL, plat_thread_thunk, r) != 0) {
+    pthread_attr_init(&at);
+    if (stack) {
+        if (stack < (size_t)PTHREAD_STACK_MIN)
+            stack = (size_t)PTHREAD_STACK_MIN;
+        pthread_attr_setstacksize(&at, stack);
+    }
+    if (pthread_create(&th, &at, plat_thread_thunk, r) != 0) {
+        pthread_attr_destroy(&at);
         free(r);
         return -1;
     }
+    pthread_attr_destroy(&at);
     pthread_detach(th);               /* detached: nobody joins it */
     return 0;
 }
@@ -468,6 +483,54 @@ void plat_sleep_ms(unsigned ms)
 uint64_t plat_thread_id(void)
 {
     return (uint64_t)syscall(SYS_gettid);
+}
+
+uint64_t plat_now_ms(void)
+{
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
+}
+
+int plat_set_cwd(const char *dir)
+{
+    return chdir(dir) == 0 ? 0 : -1;
+}
+
+int plat_module_path(char *buf, size_t n)
+{
+    ssize_t got = readlink("/proc/self/exe", buf, n - 1);
+
+    if (got < 0 || (size_t)got >= n - 1)
+        return -1;
+    buf[got] = 0;
+    return 0;
+}
+
+int plat_path_size(const char *path, uint64_t *size)
+{
+    struct stat st;
+
+    if (stat(path, &st) != 0)
+        return -1;
+    *size = (uint64_t)st.st_size;
+    return 0;
+}
+
+int plat_stricmp(const char *a, const char *b)
+{
+    return strcasecmp(a, b);
+}
+
+char *plat_strdup(const char *s)
+{
+    return strdup(s);
+}
+
+void plat_stdio_pin(void)
+{
+    /* POSIX processes always have fds 0/1/2 open */
 }
 
 void plat_exit(int code)

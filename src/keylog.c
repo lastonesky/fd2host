@@ -24,25 +24,24 @@
  * name is written as #s<scan>; the legacy Windows "#<decimal vk>" form is
  * still accepted on Win32.
  */
-#include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "platform.h"
 #include "keylog.h"
 #include "host.h"                      /* input_post_key()                 */
 #include "keys.h"                      /* portable key vocabulary          */
 
 #define KEYLOG_MAX 4096
 
-static struct { DWORD ms; fr_key key; } g_ev[KEYLOG_MAX];
+static struct { uint64_t ms; fr_key key; } g_ev[KEYLOG_MAX];
 static int       g_n;
-static DWORD     g_base;               /* host start stamp                 */
+static uint64_t  g_base;               /* host start stamp                 */
 static FILE     *g_fp;                 /* --keylog file, or NULL           */
-static char      g_exe_dir[MAX_PATH];  /* where host.log lives             */
 
-static struct { DWORD ms; fr_key key; } g_play[KEYLOG_MAX];
+static struct { uint64_t ms; fr_key key; } g_play[KEYLOG_MAX];
 static int       g_play_n;
-static HANDLE    g_thread;
+static volatile int g_playing;          /* replay thread still running      */
 
 /* ------------------------------------------------------------- naming ----
  * One vocabulary for --autokey and --keylog: the portable names in keys.h.
@@ -87,13 +86,13 @@ static fr_key key_from_text(const char *s)
  * ring, so the scan code can be resolved back to the right key (KP8 vs UP). */
 void keylog_note(uint8_t scan, uint8_t ascii)
 {
-    DWORD  ms;
+    uint64_t ms;
     char   name[16];
     fr_key key = fr_key_from_scan((uint8_t)(scan & 0x7F), ascii == 0xE0);
 
     if (scan & 0x80)                   /* break codes: a replay posts them  */
         return;
-    ms = GetTickCount() - g_base;
+    ms = plat_now_ms() - g_base;
     key_name(key, (uint8_t)(scan & 0x7F), ascii == 0xE0, name, sizeof name);
     printf("host: key @%lu ms %s\n", (unsigned long)ms, name);
 
@@ -190,7 +189,7 @@ static void keyplay_load(const char *path)
             printf("host: keyplay: unknown key '%s'\n", colon + 1);
             continue;
         }
-        g_play[g_play_n].ms = (DWORD)(ms < 0 ? 0 : ms);
+        g_play[g_play_n].ms = (uint64_t)(ms < 0 ? 0 : ms);
         g_play[g_play_n].key = key;
         g_play_n++;
     }
@@ -201,42 +200,45 @@ static void keyplay_load(const char *path)
            g_play_n ? (unsigned long)g_play[g_play_n - 1].ms : 0);
 }
 
-static DWORD WINAPI keyplay_thread(LPVOID param)
+static void keyplay_thread(void *param)
 {
     int i;
 
     (void)param;
     for (i = 0; i < g_play_n; i++) {
-        LONG target = (LONG)(g_base + g_play[i].ms);
-        while ((LONG)(GetTickCount() - target) < 0)
-            Sleep(1);
+        uint64_t target = g_base + g_play[i].ms;
+        while (plat_now_ms() < target)
+            plat_sleep_ms(1);
         input_post_key(g_play[i].key);
     }
     printf("host: keyplay finished (%d keys)\n", g_play_n);
-    return 0;
+    g_playing = 0;
 }
 
 /* ---------------------------------------------------------------- api ---- */
-int keylog_init(const char *log_path, const char *play_path, uint32_t base)
+int keylog_init(const char *log_path, const char *play_path, uint64_t base)
 {
-    g_base = (DWORD)base;
-    g_exe_dir[0] = 0;
+    g_base = base;
 
     if (log_path && log_path[0]) {
-        char full[MAX_PATH];
-        char mod[MAX_PATH];
+        char full[PLAT_MAX_PATH];
+        char mod[PLAT_MAX_PATH];
 
         /* The host chdirs to the game directory, so a bare name would land
          * in the wrong place (the same trap as --screenshot): a relative path
          * is resolved next to host.log, an absolute one is used as given. */
-        if (log_path[0] == '\\' || strchr(log_path, ':') != NULL) {
+        if (log_path[0] == '/' || log_path[0] == '\\' ||
+            strchr(log_path, ':') != NULL) {
             strncpy(full, log_path, sizeof full - 1);
             full[sizeof full - 1] = 0;
-        } else if (GetModuleFileNameA(NULL, mod, MAX_PATH)) {
-            char *slash = strrchr(mod, '\\');
+        } else if (plat_module_path(mod, sizeof mod) == 0) {
+            char *slash = strrchr(mod, '/');
+            char *bck = strrchr(mod, '\\');
+            char sep = '/';
+            if (!slash || (bck && bck > slash)) { slash = bck; sep = '\\'; }
             if (slash)
                 *slash = 0;
-            _snprintf(full, sizeof full, "%s\\%s", mod, log_path);
+            snprintf(full, sizeof full, "%s%c%s", mod, sep, log_path);
             full[sizeof full - 1] = 0;
         } else {
             strncpy(full, log_path, sizeof full - 1);
@@ -259,20 +261,17 @@ int keylog_start(void)
 {
     if (g_play_n <= 0)
         return 0;
-    g_thread = CreateThread(NULL, 0, keyplay_thread, NULL, 0, NULL);
+    g_playing = 1;
+    if (plat_thread(keyplay_thread, NULL) != 0) {
+        g_playing = 0;
+        return 0;
+    }
     printf("host: keyplay: replaying %d keys on their recorded times\n",
            g_play_n);
-    return g_thread != NULL;
+    return 1;
 }
 
 int keylog_replaying(void)
 {
-    if (!g_thread)
-        return 0;
-    if (WaitForSingleObject(g_thread, 0) == WAIT_OBJECT_0) {
-        CloseHandle(g_thread);
-        g_thread = NULL;
-        return 0;
-    }
-    return 1;
+    return g_playing;
 }

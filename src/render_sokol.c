@@ -212,7 +212,7 @@ int render_init(const render_desc *desc)
     g_pipe = sg_make_pipeline(&pd);
 
     g_ok = 1;
-    printf("sokol: backend=%s image=%dx%d view=%d sampler=%d vbuf=%d shader=%d pip=%d\n",
+    printf("sokol: backend=%s image=%dx%d img=%d view=%d sampler=%d vbuf=%d shader=%d pip=%d\n",
            backend_name(sg_query_backend()), g_w, g_h,
            g_img.id, g_view.id, g_smp.id, g_vbuf.id, g_shd.id, g_pipe.id);
     return 0;

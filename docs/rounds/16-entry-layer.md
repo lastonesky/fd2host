@@ -113,3 +113,46 @@ Linux 侧两者都没有。而 `--autokey` 用**文本**点名按键、`--keylog
 
 **顺带踩坑**：`keys_win32.c` 的块注释里写了 `VK_L*/VK_R*`，`*/` 提前结束注释导致编译失败
 （`PITFALLS` §8-65）。
+
+## 46.6 第三切片：`platform.h` 第 3 切片 + `host.c`/`keylog.c` 过河（已落）
+
+**目标**：把 `host.c`/`keylog.c` 里最后的 Win32 直连换成 platform.h 缝，让"宿主内核"两边同源。
+
+**新增缝**（`platform.h` slice 3；Win32/POSIX 各一份实现）：
+
+| 函数 | Win32 | POSIX |
+|---|---|---|
+| `plat_now_ms()` | `GetTickCount64` | `CLOCK_MONOTONIC` |
+| `plat_thread_stk(fn,arg,stack)` | `CreateThread(NULL, stack, ...)` | `pthread_attr_setstacksize` |
+| `plat_set_cwd` | `SetCurrentDirectoryA` | `chdir` |
+| `plat_module_path` | `GetModuleFileNameA` | `readlink("/proc/self/exe")` |
+| `plat_path_size` | `FindFirstFileA`（目录元数据，游戏还开着也能读） | `stat` |
+| `plat_stricmp` / `plat_strdup` | `_stricmp` / `_strdup` | `strcasecmp` / `strdup` |
+| `plat_stdio_pin` | `_dup2(_fileno(stdout),1/2)` | 空操作 |
+
+**host.c 的改动**：删 `#include <windows.h>`/`<io.h>`；`DWORD/HANDLE/WIN32_FIND_DATAA`→
+`uint64_t`/`plat_*`；`DWORD WINAPI xxx(LPVOID)` → `void xxx(void*)` + `plat_thread*`；
+`__cdecl` → `FD2_CDECL` 宏（x86-64 无此关键字）；`MAX_PATH` → `PLAT_MAX_PATH`；
+路径分隔符两种都认（`path_last_sep()`）；**BMP 头改为手写 54 字节小端**（不再依赖
+`BITMAPFILEHEADER/BITMAPINFOHEADER`）；`GetModuleHandleA(NULL)` → `plat_image_base()`。
+
+**keylog.c 的改动**：删 `windows.h`；`DWORD`→`uint64_t`；`CreateThread/WaitForSingleObject`
+→ `plat_thread` + `volatile int g_playing`（线程结束时清零，`keylog_replaying()` 读它）；
+`GetTickCount`→`plat_now_ms`；`GetModuleFileNameA`→`plat_module_path`。
+
+**判据（本轮实测）**：
+
+| 判据 | 结果 |
+|---|---|
+| Windows：GDI 与 sokol 两个入口层 | 均编译通过（0 error） |
+| `regress.ps1` | **8/8 PASS**，`FD2.TMP = 207360` |
+| 录制↔回放同 tick | **0 / 64000 px** |
+| Linux：`make -f Makefile.linux` + `letest-linux` | 编译通过，`reference check OK, exact match`（三对象） |
+| Linux：`doscheck-linux` / `platprobe-linux` | **49/49 PASS** / exit 0 |
+
+**顺带修**：`render_sokol.c` 的 `sokol: backend=...` 日志少一个 `%d`（MSVC C4474），补上
+`img=%d`。
+
+**此时两边的分工**：`host.c`/`keylog.c`/`dos.c`/`le.c`/`keys.c` 已零 `windows.h`
+（`keys_win32.c` 是唯一带 VK 的文件，只给 Windows 入口层用）；还剩 **入口层**
+（`main_sokol.c` 去 Win32、`winshot.c`）、**AIL 栈**与 **`-m32`**。

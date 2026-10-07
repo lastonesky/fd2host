@@ -27,7 +27,7 @@
  * `play_path` may be NULL (nothing to write / nothing to replay), `base` is
  * the timestamp recorded times are counted from. Returns the number of keys
  * loaded for replay. */
-int  keylog_init(const char *log_path, const char *play_path, uint32_t base);
+int  keylog_init(const char *log_path, const char *play_path, uint64_t base);
 
 /* host_key() reports one make code here (break codes are ignored: a replay
  * posts the break after each key just like a real press). `ascii` is the

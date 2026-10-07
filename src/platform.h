@@ -151,6 +151,37 @@ int  plat_exec_child(const plat_exec_req *r, int *exit_code);
 int  plat_child_present(void);   /* 1 = a spawned child is currently waited on */
 void plat_child_kill(void);
 
+/* ---------------------------------------------------------------- slice 3 -
+ * clock / threads with a stack size / process context / path lookup (host.c).
+ *
+ * host.c used to call the Win32 primitives directly; these are the pieces a
+ * POSIX entry layer needs too. `plat_now_ms` is *monotonic* (GetTickCount64 /
+ * CLOCK_MONOTONIC), so it is safe for --shot-time, --autokey, --keyplay and
+ * the watchdog - unlike plat_local_time(), which jumps with the wall clock.
+ */
+uint64_t plat_now_ms(void);
+
+/* Detached thread with an explicit stack size (the game thread asks for
+ * 4 MiB; the guest uses a lot of stack). stack == 0 -> platform default. */
+int plat_thread_stk(void (*fn)(void *), void *arg, size_t stack);
+
+int  plat_set_cwd(const char *dir);        /* 0 = ok (SetCurrentDirectory)  */
+int  plat_module_path(char *buf, size_t n);/* path of this executable, 0=ok */
+
+/* Size of a path without opening it (--exit-when-file watches a file the guest
+ * still holds open, so directory metadata is the right source). -1 = missing. */
+int  plat_path_size(const char *path, uint64_t *size);
+
+/* Portable speling helpers (_stricmp/_strdup). */
+int   plat_stricmp(const char *a, const char *b);
+char *plat_strdup(const char *s);
+
+/* Windows GUI-subsystem processes start with fds 0/1/2 closed, so freopen()
+ * may land anywhere and the guest's DOS handle 1 derives from a dead fd
+ * (PITFALLS S8-35). Re-point fd 1/2 at the (already redirected) stdio
+ * streams. No-op on POSIX. */
+void plat_stdio_pin(void);
+
 /* Base address of this executable (GetModuleHandleA(NULL) / the PIE base). */
 void *plat_image_base(void);
 
