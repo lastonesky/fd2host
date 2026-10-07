@@ -13,4 +13,14 @@
  * story is UNCONFIRMED (the name is descriptive, not proven). */
 void scene_card(void);
 
+/* The five funcs_25E23[] main-state-machine transition handlers this module
+ * translates (table index in the name; the role of each state is UNCONFIRMED).
+ * Each draws a vm_run() cell and ends by advancing the state index
+ * dword_53C03 - 0x22EF6 *assigns* 1, the other four increment it. */
+void scene_state_00(void);  /* 0x22EF6 - funcs_25E23[0]  */
+void scene_state_03(void);  /* 0x231BC - funcs_25E23[3]  */
+void scene_state_10(void);  /* 0x23790 - funcs_25E23[10] */
+void scene_state_12(void);  /* 0x2389F - funcs_25E23[12] */
+void scene_state_18(void);  /* 0x23E39 - funcs_25E23[18] */
+
 #endif /* GAME_SCENE_H */

@@ -222,6 +222,17 @@ static const struct repl_entry g_repl[] = {
      * addresses (bgm_play / svc_wait_ticks / res_load are already C here). */
     { 0x22E5C, "scene_card",         (void *)scene_card,          REPL_SCENE },
 
+    /* The five funcs_25E23[] main-state-machine transition handlers reached
+     * through `call funcs_25E23[dword_53C03]` in main (0x25BF4). Each is a
+     * pure service sequence: vm_run + unit_refresh_all (+ unit_add) then
+     * advance dword_53C03 - no VGA writes of its own, so the services are
+     * called through their original addresses for the same reason as above. */
+    { 0x22EF6, "scene_state_00",     (void *)scene_state_00,      REPL_SCENE },
+    { 0x231BC, "scene_state_03",     (void *)scene_state_03,      REPL_SCENE },
+    { 0x23790, "scene_state_10",     (void *)scene_state_10,      REPL_SCENE },
+    { 0x2389F, "scene_state_12",     (void *)scene_state_12,      REPL_SCENE },
+    { 0x23E39, "scene_state_18",     (void *)scene_state_18,      REPL_SCENE },
+
     /* --- palette fades (src/game/fade.c) --------------------------------
      * Used by scene_card and a long list of state handlers; `outp`/`delay`
      * are still called by original address (dos.c owns the DAC/tick). */

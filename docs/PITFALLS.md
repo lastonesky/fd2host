@@ -541,3 +541,17 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     杀一个还会在 tasklist 里看到另一个）。
     **做法**：`taskkill /IM fd2host.exe /F` 后再重建；也可先
     `tasklist /FI "IMAGENAME eq fd2host.exe"` 确认。**判据**：重建不再 LNK1104。
+
+73. **`--shot-tick=500` 的墙钟时间 ≈ 31 s，`--exit-after` 必须给够**（第 60 轮，A/B 抓图）：
+    BIOS tick 由 `dos.c bios_tick_thread` 以 18.2 Hz 递增，`--shot-tick=<n>` 的墙钟时刻
+    ≈ `启动耗时 + n/18.2 s`。实测 `--shot-tick=500` 在**进程启动后 31187 ms** 才到
+    （日志 `host: frame N dumped … (age 31187 ms, guest tick 500)`）。
+    - **症状**：手搭命令写 `--exit-after=30`，watchdog 在 tick 500 前 ~1 s 先触发，
+      于是**永远抓不到图**、`--exit-when-file=<bmp>:256054`（等 BMP 写出）也不触发，
+      看起来像 `--screenshot` 参数没被识别。
+    - **做法**：用既有 **`build/ab_run.ps1`**（`--exit-after=60`）；自己写至少给 40 s。
+      `--shot-tick` 只钉住 guest 的 18.2 Hz 时钟，快照点仍是 §8-55 的静止窗配方问题。
+    - 另记：`ab_run.ps1` 的 `-WorkingDirectory` 是摆设 —— 宿主的 `--gamedir` 默认
+      **硬编码 `E:\FD2`**（`src/host.c`），脚本删的 `build\sandbox\FD2.TMP` 并非游戏
+      实际读写的那个；A/B 两侧状态相同所以判据不受影响，`E:\FD2\FD2.SAV` 的 mtime 实测未变
+      （continue 路径只读存档）。

@@ -41,6 +41,11 @@ addr,c_name,source_file,group,check,cases,status,note
 0x1F525,pal_fade_in,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x1F882,pal_fade_out,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x22E5C,scene_card,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
+0x22EF6,scene_state_00,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
+0x231BC,scene_state_03,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
+0x23790,scene_state_10,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
+0x2389F,scene_state_12,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
+0x23E39,scene_state_18,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
 0x25977,bgm_play,src/game/bgm.c,bgm,bgmcheck,6000,wired (repl.c),"play_bgm 0x25977; services hooked, event log compared"
 0x25A96,svc_play_sfx,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
 0x25B45,svc_play_sfx2,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)

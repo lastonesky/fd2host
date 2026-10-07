@@ -38,6 +38,25 @@ typedef int   (*rle_blit_fn)(void *buf, int index, void *dst, int pitch,
 #define RES_LOAD   ((res_load_fn) (uintptr_t)0x000111BAu)
 #define RLE_BLIT   ((rle_blit_fn) (uintptr_t)0x0002EB9Fu)
 
+/* The three services the funcs_25E23[] state handlers use, called through
+ * their original addresses for the same reason as above (host: patched to C;
+ * scenecheck: hooked to recording stubs). */
+typedef int  (*vm_fn)(void *stream, int sub, int addr, int pitch,
+                      int fg, int shadow, int bgfill, int line_step, int wait);
+typedef void (*unit_refresh_fn)(void);
+typedef int  (*unit_add_fn)(int id);
+
+#define VM_RUN       ((vm_fn)          (uintptr_t)0x00015F84u)
+#define UNIT_REFRESH ((unit_refresh_fn)(uintptr_t)0x00011506u)
+#define UNIT_ADD     ((unit_add_fn)    (uintptr_t)0x000112A5u)
+
+/* Game globals (obj1 data segment) used by the handlers:
+ *   dword_53A79  the current VM stream pointer (vm_run's first argument)
+ *   dword_53C03  the main-loop state index that selects from funcs_25E23[]
+ *                / funcs_25E3A[]; each handler ends by advancing it. */
+#define dword_53A79 (*(uint32_t *)(uintptr_t)0x00053A79u)
+#define dword_53C03 (*(int32_t  *)(uintptr_t)0x00053C03u)
+
 void scene_card(void)
 {
     void *buf;
@@ -53,4 +72,81 @@ void scene_card(void)
     RLE_BLIT(buf, 1, (void *)(uintptr_t)VGA_BASE, 320, -1);
     WAIT_TICKS(36);
     guest_free(buf);
+}
+
+/* --- funcs_25E23[] state handlers -------------------------------------
+ *
+ * `main` (0x25BF4) steps the story through one state index:
+ *
+ *     mov  eax, dword_53C03
+ *     call funcs_25E23[eax*4]   ; transition handler (this cluster)
+ *     call sub_26152
+ *     mov  eax, dword_53C03
+ *     call funcs_25E3A[eax*4]   ; renderer for the new state
+ *
+ * Each handler below is one table entry. They are plain `void fn(void)`: the
+ * `push 28h; call 0x3702F` prologue is the Watcom stack probe (_chkstk), not
+ * an argument - the same artifact as in vm.c/unit.c (rounds/08 §37.3).
+ *
+ * All five draw the same 0xA0000 VGA cell with the same 9 vm_run arguments
+ * (pitch 320, fg 205, shadow 76, fill 74, line step 19, wait 1); only the
+ * sub-stream differs. dword_53C03 is the observable side effect: 0x22EF6
+ * *assigns* 1, the other four increment it. The originals share tail code
+ * (0x23790/0x2389F/0x23E39 all tail-jump to 0x231F2); the C spells the
+ * behaviour out per handler instead of reproducing the jump layout. */
+
+/* The shared vm_run(stream=dword_53A79, sub, ...) with the fixed 8 tail args. */
+static int vm9(void)
+{
+    return VM_RUN((void *)(uintptr_t)dword_53A79, 9, 0xA0000, 320, 205, 76, 74, 19, 1);
+}
+static int vm4(void)
+{
+    return VM_RUN((void *)(uintptr_t)dword_53A79, 4, 0xA0000, 320, 205, 76, 74, 19, 1);
+}
+static int vm3(void)
+{
+    return VM_RUN((void *)(uintptr_t)dword_53A79, 3, 0xA0000, 320, 205, 76, 74, 19, 1);
+}
+
+/* 0x22EF6 - funcs_25E23[0]: vm_run(...,9,...), refresh, then *set* state 1. */
+void scene_state_00(void)
+{
+    vm9();
+    UNIT_REFRESH();
+    dword_53C03 = 1;
+}
+
+/* 0x231BC - funcs_25E23[3]: vm_run(...,4,...), refresh, advance state. */
+void scene_state_03(void)
+{
+    vm4();
+    UNIT_REFRESH();
+    dword_53C03++;
+}
+
+/* 0x23790 - funcs_25E23[10]: vm_run(...,3,...), refresh, join unit 14. */
+void scene_state_10(void)
+{
+    vm3();
+    UNIT_REFRESH();
+    UNIT_ADD(14);
+    dword_53C03++;
+}
+
+/* 0x2389F - funcs_25E23[12]: vm_run(...,9,...), refresh, join unit 3. */
+void scene_state_12(void)
+{
+    vm9();
+    UNIT_REFRESH();
+    UNIT_ADD(3);
+    dword_53C03++;
+}
+
+/* 0x23E39 - funcs_25E23[18]: refresh *before* vm_run(...,3,...), advance. */
+void scene_state_18(void)
+{
+    UNIT_REFRESH();
+    vm3();
+    dword_53C03++;
 }

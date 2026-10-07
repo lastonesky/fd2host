@@ -17,11 +17,11 @@
 **同一份源码也能在 Linux 上跑**（`build/fd2host-linux32`，X11/XWayland + sokol GLCORE）：
 与 Windows 同 guest tick 抓帧**逐像素 0 差异**（`rounds/16-entry-layer.md` §46.10）。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 88 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 93 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。
 
 > ⚠ **进度必须看清**：全量函数表 `re/funcmap.csv` 有 **1359** 个函数，已源码化的只有
-> **88 个 ≈ 6.5%**；**其余 ~93% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
+> **93 个 ≈ 6.8%**；**其余 ~93% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
 > 直接执行**。这正是宿主必须是 **32 位进程**的原因（x86-64 长模式不能执行 32 位代码，
 > 只有 `-m32`/WOW64 这类 32 位进程才行）；**等全部函数源码化后，这个 32 位门槛才会消失**。
 
@@ -50,7 +50,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**88 / 1359 个函数接入（≈6.5%）**           ⏳ 其余 ~93% 仍是原始机器码在跑
+源码转译：**93 / 1359 个函数接入（≈6.8%）**           ⏳ 其余 ~93% 仍是原始机器码在跑
 Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 px** ✅（§46.10）
 ```
 
@@ -108,6 +108,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
 | §57 | 10-07 | **头像精灵链（第 80–81 个）** | `0x127E0` 画单条记录的 24×24 头像/图标（`*(0x53A61)` 32 位偏移表，索引 `mode+12*p[2]+3*p[3]`；每 BIOS tick 翻 `dword_53A04`；`p[5]` bit7 走 `sprite24_ramp24` 否则 `sprite24_plain`）+ `0x127A9` 扫全部未标记记录后 `map_refresh_records`；`mapcheck` 合成 48 帧头像库后 **97000/0**。踩坑：harness 给 `dword_53A04` 随机 int32 把原机器码写出位图 → 段错误（§8-71）。`regress 8/8`、`repl: installed 81`、静态帧 `--shot-tick=500` A/B **0/64000 px**、Linux 自检全过 | `docs/rounds/27-portrait-draw.md`、`docs/PITFALLS.md` §8-71 |
 | §58 | 10-07 | **角色记录 8 槽字段访问器簇（第 82–85 个）** | `rec.c` 加 4 个纯数据叶子：`rec_field_byte`(0x1B722，槽值字节 +11+2·slot)、`rec_status_set`(0x344F2，闭区间 +52 低半字节 OR，`value` 高半字节**不截断**、`jle` 有符号)、`rec_slot_claim`(0x1BB8C，占首空槽 bit7→01)、`rec_slot_remove`(0x1B8E7，memmove 左移删除 + 末槽 0x80)；`reccheck` 写函数用双副本逐字节比对，**28739→32010/0**；`mapcheck`/`utilcheck` 仍 97000/2200。踩坑：残留 `fd2host.exe` 锁住构建产物（§8-72）。`regress 8/8`、`repl: installed 85`、静态帧 A/B **0/64000 px**、Linux 自检全过 | `docs/rounds/28-rec-slots.md`、`docs/PITFALLS.md` §8-72 |
 | §59 | 10-07 | **持久队伍记录表三件套（第 86–88 个）** | 新建 `game/unit.c`：`unit_recalc`(0x1145A，8 槽物品加成累加到 +48..+4E，32 位累加/16 位写回、返回未截断 +4E)、`unit_refresh_all`(0x11506，外角色×内队伍 `+8` 身份匹配后整笔抄回 + 清 transient + `+5&=1` + 同步 + recalc)、`unit_add`(0x112A5，`tbl_61DA1` 默认 + `tbl_620A1` 成长构造记录 append，`(L-1)` 32 位成长、`+17/+19` 保留残值)；`reccheck` 双副本逐字节 **32010→36327/0**，`mapcheck`/`utilcheck` 97000/2200。转完闭合 `funcs_25E23` 分派表 5 个表项的依赖闭包。`regress 8/8`、`repl: installed 88`、静态帧 A/B **0/64000 px**、Linux 自检全过 | `docs/rounds/29-unit-roster.md`、`re/RE_MAP.md` |
+| §60 | 10-07 | **主状态机转移 handler 五件套（第 89–93 个）** | 扩 `game/scene.c`：`funcs_25E23`(`0x51DE9`) 转移表 5 个表项 `0x22EF6`[0]（`vm_run(…,9,…)`+refresh 后 `dword_53C03=1`、**赋值非自增**）/`0x231BC`[3]（sub=4）/`0x23790`[10]（sub=3 + `unit_add(14)`）/`0x2389F`[12]（sub=9 + `unit_add(3)`）/`0x23E39`[18]（**refresh 在前**、sub=3），每个 59–69 B、纯服务序列（零 VGA/堆/IO，依赖 3 个已接入服务 + CRT 栈探针）；`scenecheck` 新增 vm/unit 三桩 + 1 KiB 全局快照，**100→1100/0**。踩坑：手搓 `--exit-after=30` 抓不到 `--shot-tick=500`（18.2 Hz ⇒ 需 ~31 s，§8-73）。`regress 8/8`、`repl: installed 93`、静态帧 A/B **0/64000 px**、Linux 自检全过 | `docs/rounds/30-scene-states.md`、`docs/PITFALLS.md` §8-73、`re/RE_MAP.md` |
 
 ## 4. 下一步计划（按优先级）
 
@@ -122,12 +123,14 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    **已完成（§58，接入 85）**；
    ~~持久队伍记录表三件套 `0x1145A`/`0x11506`/`0x112A5`~~
    **已完成（§59，接入 88）**——转完 `funcs_25E23` 分派表 5 个表项的依赖闭包已闭合；
-   **下一个目标**：按 `funcs_25E23`（`0x51DE9`）表项顺序做状态 handler 族
-   （`0x22EF6`/`0x231BC`/`0x23790`/`0x2389F`/`0x23E39`，只差 `vm_run` 与 `unit_*`）。
-   顺路按 `re/func_ranking.csv` 的用量/依赖拓扑收叶子（§51–§59）。
+   ~~按 `funcs_25E23`（`0x51DE9`）表项顺序做状态 handler 族~~
+   **已完成（§60，接入 93）**——`0x22EF6`/`0x231BC`/`0x23790`/`0x2389F`/`0x23E39` 五个表项
+   （`scene_state_00/03/10/12/18`）进 `game/scene.c`，`scenecheck` 1100/0；
+   其余 20 个表项依赖尚未转译，需先闭各自闭包。
+   顺路按 `re/func_ranking.csv` 的用量/依赖拓扑收叶子（§51–§60）。
    下一批同族候选：`0x1B8A6`/`0x1B83D`/`0x1CA89` 及记录单字节置位叶子
    `0x13512`/`0x32975`/`0x34D64`/`0x35009`（`rounds/28` §58.5）。
-   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 88/1359）。
+   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 93/1359）。
 2. ~~**补 autokey 配方**~~ **已完成（§40，2026-10-06）**：标准配方 + `--shot-tick=326..334`
    即可落在“打字进行中”，抓到 3 张不同进度的逐字画面（框区差异 455→327→325→0），
    且 **15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽 ⇒ `vm_run`+`dlg_type_step`
