@@ -469,3 +469,9 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
       `MapVirtualKeyA(VK_PAUSE, VK_TO_VSC)` 返回 **0**（本机参考机），都不是 BIOS make code；
       而 guest 收不到这两个键 ⇒ 表里不放（放进去只会让对拍失败或给 guest 喂垃圾扫描码）。
     **判据**：`build\keyscheck.exe` → `102 keys pinned … PASS`；`--dump` 是 Linux 侧的唯一参考表。
+65. **块注释里写通配符 `*/` 会提前结束注释**（第 46 轮，一分钟自伤）：
+    `keys_win32.c` 的说明注释里写了 ``VK_L*/VK_R*`` —— 其中的 `*/` 直接把 `/* ... */` 关掉，
+    后面几行变成代码，报 `error C2065: 未声明的标识符 "VK_R"`、`语法错误 ")"`。
+    改法：注释里别写 `*/`（写成 "left/right VKs"）。
+    **判据**：`aux_build.bat fd2host` 返回 0；被 `tail` 吃掉的错误行要用
+    `grep -i error` 才看得见（这次差点当成"编译成功"）。

@@ -82,3 +82,34 @@ Linux 侧两者都没有。而 `--autokey` 用**文本**点名按键、`--keylog
    用 `Makefile.linux` 编 64 位宿主（此时还跑不了 guest，只能说"能编"）。
 4. `-m32`：装 `gcc-multilib` + 32 位 X11/ALSA，跑真游戏；用 `faultprobe32` 复核
    §45.2 的故障表在"游戏真跑"现场仍成立。
+
+## 46.5 第二切片：把便携键表接进宿主（已落）
+
+**改动**（行为应逐位不变，判据见下）：
+
+| 位置 | 改前 | 改后 |
+|---|---|---|
+| `host.h` | `input_post_vk(int vk)` | `input_post_key(fr_key)`（`host.h` 现在 include `keys.h`） |
+| `host.c` | 自带 `vk_from_name()` 表 + autokey 发 VK | 删表，autokey 用 `fr_key_by_name()` + `input_post_key()` |
+| `keylog.c` | `MapVirtualKeyA(scan,VSC_TO_VK)` → 自带 VK 名表；回放 `input_post_vk` | 记录走 `fr_key_from_scan(scan, ascii==0xE0)`；回放 `fr_key_by_name`/`input_post_key`；`keylog_note(scan, ascii)` |
+| `main_win32.c` / `main_sokol.c` | `input_post_vk(vk)` | `input_post_key(fr_key)` → `fr_key_vk()` → 原 `MapVirtualKeyA`/`ToAscii` 路径（一字未动） |
+| `keys_win32.c` | — | 追加 3 个 legacy alias（`VK_SHIFT/VK_CONTROL/VK_MENU`），使旧录制里的 `#16/#17/#18` 仍可回放 |
+| `build.ps1` | — | `fd2host` 加 `keys.c` / `keys_win32.c` |
+
+**为什么用 `ascii` 反推扩展键**：`keylog` 只存扫描码，而 KP7/HOME、KP8/UP 等共享 make code。
+旧实现靠 `MapVirtualKeyA(scan,VSC_TO_VK)` 猜（`keyscheck --vsc` 实测它在导航簇里**偏向扩展解释**，
+所以旧录制里箭头就是 `UP/DOWN/HOME`）；新实现直接用入口层放进 BDA 的那个 `0xE0` 标志，
+更准且**跨平台**（Linux 没有 VSC_TO_VK）。
+
+**判据（本轮实测）**：
+
+| 判据 | 命令 | 结果 |
+|---|---|---|
+| 键表对拍 | `build\keyscheck.exe` | `102 keys … 5 allowed aliases … PASS`（退出码 0） |
+| 两入口层都能编 | `aux_build.bat fd2host` / `fd2host -Render gdi` | 均 `-> build\fd2host.exe` |
+| 回归 | `regress.ps1` | **8/8 PASS**，`FD2.TMP = 207360` |
+| 录制↔回放 | 沙箱 `--autokey … --keylog=keys_ref.txt --shot-tick=600` → `--keyplay=keys_ref.txt` 同 tick | **0 / 64000 px**；录制名 `SPACE/RETURN/DOWN` 与改前格式一致 |
+| 旧格式兼容 | `printf '3000:#16\n4000:SPACE\n' > legacy.txt` 后 `--keyplay` | `#16` 解析为 `LSHIFT`（不再是 `unknown key`），回放 2/2 |
+
+**顺带踩坑**：`keys_win32.c` 的块注释里写了 `VK_L*/VK_R*`，`*/` 提前结束注释导致编译失败
+（`PITFALLS` §8-65）。

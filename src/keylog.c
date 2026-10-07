@@ -10,126 +10,96 @@
  *   replay   keyplay_load() parses the file at startup (a broken recording
  *            fails before the game starts, not half-way in), and a thread
  *            waits for each event's *absolute* time before posting it
- *            through input_post_vk() - absolute waits, so the delays of an
+ *            through input_post_key() - absolute waits, so the delays of an
  *            early key cannot shift the ones after it.
  *
  *   summary  keylog_finish() prints the whole schedule as one replayable
  *            line, so a recording survives even without --keylog (it is in
  *            host.log). Called from both shutdown paths.
  *
- * Key names round-trip: the recording uses exactly the names vk_from_name()
- * understands (host.c), and anything else is written as #<decimal vk>, which
- * vk_from_name also reads - so a key the table has no name for is still
- * replayable.
+ * Key names round-trip through src/keys.h: the recording uses the portable
+ * key vocabulary (RETURN/SPACE/UP/... plus single letters and digits), which
+ * is exactly what fr_key_by_name() understands, and is shared with --autokey -
+ * so a recording is replayable on any platform. A scan code with no portable
+ * name is written as #s<scan>; the legacy Windows "#<decimal vk>" form is
+ * still accepted on Win32.
  */
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "keylog.h"
-#include "host.h"                      /* input_post_vk()                  */
+#include "host.h"                      /* input_post_key()                 */
+#include "keys.h"                      /* portable key vocabulary          */
 
 #define KEYLOG_MAX 4096
 
-static struct { DWORD ms; int vk; } g_ev[KEYLOG_MAX];
+static struct { DWORD ms; fr_key key; } g_ev[KEYLOG_MAX];
 static int       g_n;
 static DWORD     g_base;               /* host start stamp                 */
 static FILE     *g_fp;                 /* --keylog file, or NULL           */
 static char      g_exe_dir[MAX_PATH];  /* where host.log lives             */
 
-static struct { DWORD ms; int vk; } g_play[KEYLOG_MAX];
+static struct { DWORD ms; fr_key key; } g_play[KEYLOG_MAX];
 static int       g_play_n;
 static HANDLE    g_thread;
 
-/* ------------------------------------------------------------- naming ---- */
-/* The *same* names host.c's vk_from_name() accepts, so record -> replay
- * round-trips. Anything else becomes #<decimal vk>, which vk_from_name
- * reads back - a recording is therefore never silently unreplayable. */
-static void vk_name(int vk, char *buf, size_t n)
+/* ------------------------------------------------------------- naming ----
+ * One vocabulary for --autokey and --keylog: the portable names in keys.h.
+ * A recording written today replays on any platform; the legacy "#<decimal
+ * vk>" form (what the pre-keys-table recorder wrote for keys its own name
+ * table lacked) is still accepted on Windows, where it was produced. */
+static void key_name(fr_key key, uint8_t scan, int extended, char *buf, size_t n)
 {
-    static const struct { const char *n; int vk; } tab[] = {
-        { "RETURN", VK_RETURN }, { "ESC", VK_ESCAPE }, { "SPACE", VK_SPACE },
-        { "TAB", VK_TAB }, { "UP", VK_UP }, { "DOWN", VK_DOWN },
-        { "LEFT", VK_LEFT }, { "RIGHT", VK_RIGHT }, { "HOME", VK_HOME },
-        { "END", VK_END }, { "PGUP", VK_PRIOR }, { "PGDN", VK_NEXT },
-        { "INS", VK_INSERT }, { "DEL", VK_DELETE },
-        { "F1", VK_F1 },   { "F2", VK_F2 },   { "F3", VK_F3 },
-        { "F4", VK_F4 },   { "F5", VK_F5 },   { "F6", VK_F6 },
-        { "F7", VK_F7 },   { "F8", VK_F8 },   { "F9", VK_F9 },
-        { "F10", VK_F10 }, { "F11", VK_F11 }, { "F12", VK_F12 },
-    };
-    size_t i;
+    const char *name = fr_key_name(key);
 
-    for (i = 0; i < sizeof tab / sizeof tab[0]; i++)
-        if (tab[i].vk == vk) {
-            strncpy(buf, tab[i].n, n - 1);
-            buf[n - 1] = 0;
-            return;
-        }
-    if ((vk >= '0' && vk <= '9') || (vk >= 'A' && vk <= 'Z')) {
-        buf[0] = (char)vk;
-        buf[1] = 0;
+    if (name) {
+        strncpy(buf, name, n - 1);
+        buf[n - 1] = 0;
         return;
     }
-    snprintf(buf, n, "#%d", vk);
+    (void)extended;
+    /* A scan code with no portable name (vendor keys, etc.). Record the
+     * make code so the entry still round-trips on the same platform. */
+    snprintf(buf, n, "#s%u", (unsigned)scan);
 }
 
-/* The name lookup for the replay side mirrors vk_from_name() in host.c
- * (kept here so this module does not have to reach into host.c's statics).
- * Only names the recording side can emit are accepted. */
-static int vk_from_text(const char *s)
+static fr_key key_from_text(const char *s)
 {
-    static const struct { const char *n; int vk; } tab[] = {
-        { "RETURN", VK_RETURN }, { "ENTER", VK_RETURN }, { "ESC", VK_ESCAPE },
-        { "SPACE", VK_SPACE },   { "TAB", VK_TAB },     { "UP", VK_UP },
-        { "DOWN", VK_DOWN },     { "LEFT", VK_LEFT },   { "RIGHT", VK_RIGHT },
-        { "HOME", VK_HOME },     { "END", VK_END },     { "PGUP", VK_PRIOR },
-        { "PGDN", VK_NEXT },     { "INS", VK_INSERT },  { "DEL", VK_DELETE },
-        { "F1", VK_F1 },   { "F2", VK_F2 },   { "F3", VK_F3 },
-        { "F4", VK_F4 },   { "F5", VK_F5 },   { "F6", VK_F6 },
-        { "F7", VK_F7 },   { "F8", VK_F8 },   { "F9", VK_F9 },
-        { "F10", VK_F10 }, { "F11", VK_F11 }, { "F12", VK_F12 },
-    };
-    size_t i, n = strlen(s);
+    fr_key key = fr_key_by_name(s, strlen(s));
 
-    for (i = 0; i < sizeof tab / sizeof tab[0]; i++)
-        if (strlen(tab[i].n) == n && !_strnicmp(tab[i].n, s, n))
-            return tab[i].vk;
-    if (n == 1) {
-        if (s[0] >= '0' && s[0] <= '9') return s[0];
-        if (s[0] >= 'a' && s[0] <= 'z') return s[0] - 'a' + 'A';
-        if (s[0] >= 'A' && s[0] <= 'Z') return s[0];
+    if (key)
+        return key;
+    if (s[0] == '#' && s[1] == 's')
+        return fr_key_from_scan((uint8_t)atoi(s + 2), 1);
+#if defined(_WIN32)
+    if (s[0] == '#') {
+        int vk = atoi(s + 1);
+        if (vk > 0 && vk < 256)
+            return fr_key_from_vk(vk);
     }
-    if (n > 1 && s[0] == '#') {
-        int v = atoi(s + 1);
-        if (v > 0 && v < 256)
-            return v;
-    }
-    return 0;
+#endif
+    return FRK_NONE;
 }
 
 /* ------------------------------------------------------------- record ---- */
-void keylog_note(uint8_t scan)
+/* `ascii` carries the extended flag (0xE0) the entry layer put in the BDA
+ * ring, so the scan code can be resolved back to the right key (KP8 vs UP). */
+void keylog_note(uint8_t scan, uint8_t ascii)
 {
-    DWORD ms;
-    char  name[16];
-    int   vk;
+    DWORD  ms;
+    char   name[16];
+    fr_key key = fr_key_from_scan((uint8_t)(scan & 0x7F), ascii == 0xE0);
 
     if (scan & 0x80)                   /* break codes: a replay posts them  */
         return;
-    vk = (int)MapVirtualKeyA((UINT)scan, MAPVK_VSC_TO_VK);
-    if (!vk) {
-        printf("host: keylog: scan 0x%02X has no VK - not recorded\n",
-               (unsigned)scan);
-        return;
-    }
     ms = GetTickCount() - g_base;
-    vk_name(vk, name, sizeof name);
+    key_name(key, (uint8_t)(scan & 0x7F), ascii == 0xE0, name, sizeof name);
     printf("host: key @%lu ms %s\n", (unsigned long)ms, name);
 
     if (g_n < KEYLOG_MAX) {
         g_ev[g_n].ms = ms;
-        g_ev[g_n].vk = vk;
+        g_ev[g_n].key = key;
         g_n++;
     }
     if (g_fp) {
@@ -149,7 +119,7 @@ void keylog_finish(void)
                "with --keyplay): ", g_n);
         for (i = 0; i < shown; i++) {
             char name[16];
-            vk_name(g_ev[i].vk, name, sizeof name);
+            key_name(g_ev[i].key, 0, 0, name, sizeof name);
             printf("%lu:%s%s", (unsigned long)g_ev[i].ms, name,
                    (i + 1 < g_n) ? ";" : "");
         }
@@ -199,7 +169,8 @@ static void keyplay_load(const char *path)
         char *tok = p;
         char *end = strpbrk(p, ";\r\n");
         char *colon;
-        int   ms, vk;
+        int   ms;
+        fr_key key;
 
         if (end) { *end = 0; p = end + 1; }
         else     p = tok + strlen(tok);
@@ -214,13 +185,13 @@ static void keyplay_load(const char *path)
         }
         *colon = 0;
         ms = atoi(tok);
-        vk = vk_from_text(colon + 1);
-        if (!vk) {
+        key = key_from_text(colon + 1);
+        if (!key) {
             printf("host: keyplay: unknown key '%s'\n", colon + 1);
             continue;
         }
         g_play[g_play_n].ms = (DWORD)(ms < 0 ? 0 : ms);
-        g_play[g_play_n].vk = vk;
+        g_play[g_play_n].key = key;
         g_play_n++;
     }
     free(buf);
@@ -239,7 +210,7 @@ static DWORD WINAPI keyplay_thread(LPVOID param)
         LONG target = (LONG)(g_base + g_play[i].ms);
         while ((LONG)(GetTickCount() - target) < 0)
             Sleep(1);
-        input_post_vk(g_play[i].vk);
+        input_post_key(g_play[i].key);
     }
     printf("host: keyplay finished (%d keys)\n", g_play_n);
     return 0;

@@ -66,14 +66,23 @@ static uint8_t kbd_ascii_for(WPARAM w, LPARAM l)
     return 0;
 }
 
-/* --autokey: inject a keystroke by posting it to our own window. Only the
- * entry layer can do that because only it owns the window. */
-void input_post_vk(int vk)
+/* --autokey/--keyplay: inject a keystroke by posting it to our own window.
+ * Only the entry layer can do that because only it owns the window.
+ * fr_key -> VK here (src/keys_win32.c), then the same MapVirtualKeyA/ToAscii
+ * path the real keyboard uses. */
+void input_post_key(fr_key key)
 {
-    UINT sc = MapVirtualKeyA((UINT)vk, MAPVK_VK_TO_VSC);
-    LPARAM lp = (LPARAM)((sc << 16) | 1);
+    int vk = fr_key_vk(key);
+    UINT sc;
+    LPARAM lp;
 
-    printf("host: autokey vk=%02X (scan %02X)\n", vk, (unsigned)sc);
+    if (!vk)
+        return;
+    sc = MapVirtualKeyA((UINT)vk, MAPVK_VK_TO_VSC);
+    lp = (LPARAM)((sc << 16) | 1);
+
+    printf("host: autokey %s (vk=%02X scan %02X)\n",
+           fr_key_name(key), vk, (unsigned)sc);
     if (host_no_user_input()) {
         /* The window path below is muted (PROGRESS.md §31.5), so deliver
          * exactly what it would have: the make code, then the break code
@@ -116,7 +125,7 @@ static LRESULT CALLBACK wndproc(HWND h, UINT m, WPARAM w, LPARAM l)
         }
         /* --no-user-input: somebody is using this machine; the focused game
          * window must not swallow their keystrokes (autokey delivers its own
-         * directly in input_post_vk). */
+         * directly in input_post_key). */
         if (!host_no_user_input())
             host_key(scan, kbd_ascii_for(w, l));
         return 0;

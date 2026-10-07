@@ -332,3 +332,8 @@ XWayland 而不是真 Xorg）；`SOKOL_GLCORE` 要的 GLX 1.4 + RGBA 双缓冲 v
 
 **依赖**：X11 侧编译/链接已具备（`libx11-dev libxcursor-dev libxi-dev libgl1-mesa-dev`，
 `-std=gnu11 -DSOKOL_GLCORE`，见 §13.6 第 4 步 / `rounds/13` §43.6）。
+
+**决定（2026-10-07，用户拍板）**：**采用方案 1 —— 保持 X11/XWayland**，不引 GLFW/SDL3/Vulkan，
+不做 Wayland 原生。理由：本项目只要一个 textured quad，sokol 的 X11 后端已经能编能跑
+（§13.10 验收过）；自写 Wayland+swapchain 要重做 `sokol_app` 的 ~3000 行且多出 SPIR-V 工具链，
+违背"最简/最小/最稳"。候选序（真要原生 Wayland 时）：GLFW(GL) → SDL3，见上一轮评估。

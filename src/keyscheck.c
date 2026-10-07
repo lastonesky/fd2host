@@ -123,6 +123,27 @@ int main(int argc, char **argv)
             fail("extended", k, "ext flag != is_extended_vk()", 0, 0);
     }
 
+    /* How does the *old* keylog naming see each scan code? It used
+     * MapVirtualKeyA(scan, MAPVK_VSC_TO_VK) + its own VK name table; the new
+     * keylog uses fr_key_from_scan(scan, ascii==0xE0) intentionally, so this
+     * prints where the two disagree (extended keys: VSC_TO_VK has no E0 bit
+     * to go by, so it cannot tell KP8 from UP). */
+    {
+        int diff = 0, i2;
+        for (i2 = 0; i2 < n; i2++) {
+            uint8_t scan = fr_key_table[i2].scan;
+            int vsc_vk = (int)MapVirtualKeyA((UINT)scan, MAPVK_VSC_TO_VK);
+            int our_vk = fr_key_vk(fr_key_table[i2].key);
+            if (vsc_vk != our_vk) {
+                diff++;
+                printf("      VSC_TO_VK: scan 0x%02X%s -> VK 0x%02X, portable key says VK 0x%02X (%s)\n",
+                       scan, fr_key_table[i2].ext ? "+E0" : "", vsc_vk, our_vk,
+                       fr_key_table[i2].name);
+            }
+        }
+        printf("keyscheck: %d scan codes where MapVirtualKeyA(VSC_TO_VK) disagrees with the portable key\n", diff);
+    }
+
     /* A few names --autokey/--keylog already shipped must keep working. */
     {
         static const struct { const char *n; fr_key k; } must[] = {

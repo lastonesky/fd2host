@@ -147,10 +147,16 @@ static void push_vk(int vk, int down)
     host_key((uint8_t)(down ? sc : (sc | 0x80)), ascii_for_vk(vk));
 }
 
-/* --autokey runs on its own thread and injects by virtual key. */
-void input_post_vk(int vk)
+/* --autokey/--keyplay runs on its own thread and injects by portable key.
+ * fr_key -> VK (src/keys_win32.c) -> push_vk(), i.e. exactly the path a real
+ * keystroke takes, so a replayed key and a pressed key are the same event. */
+void input_post_key(fr_key key)
 {
-    printf("host: autokey vk=%02X (scan %02X)\n", vk,
+    int vk = fr_key_vk(key);
+
+    if (!vk)
+        return;
+    printf("host: autokey %s (vk=%02X scan %02X)\n", fr_key_name(key), vk,
            (unsigned)MapVirtualKeyA((UINT)vk, MAPVK_VK_TO_VSC));
     push_vk(vk, 1);
     push_vk(vk, 0);
@@ -212,7 +218,7 @@ static void event_cb(const sapp_event *e)
             break;
         }
         if (host_no_user_input())
-            break;                 /* autokey injects via input_post_vk */
+            break;                 /* autokey injects via input_post_key */
         push_vk(vk, 1);
         break;
 

@@ -79,6 +79,15 @@ static const struct { fr_key key; int vk; } g_vk[] = {
     { FRK_F7,             VK_F7 },  { FRK_F8,  VK_F8 },
     { FRK_F9,             VK_F9 },  { FRK_F10, VK_F10 },
     { FRK_F11,            VK_F11 }, { FRK_F12, VK_F12 },
+
+    /* Legacy aliases: the generic modifier VKs. The pre-keys-table keylog
+     * recorded a shift as "#16" (MapVirtualKeyA(scan, VSC_TO_VK) returns
+     * VK_SHIFT, not VK_LSHIFT), so keep those spellings resolvable - a
+     * recording made before the portable table must still replay. They sit
+     * last so fr_key_vk() (which uses the specific left/right VKs) is unaffected. */
+    { FRK_LEFT_SHIFT,     VK_SHIFT },
+    { FRK_LEFT_CONTROL,   VK_CONTROL },
+    { FRK_LEFT_ALT,       VK_MENU },
 };
 
 int fr_key_vk(fr_key k)

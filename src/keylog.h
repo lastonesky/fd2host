@@ -5,7 +5,8 @@
  * process start". --keylog=<path> writes every keystroke the game sees as
  * `<ms since base>:<key>`, one per line, flushed immediately so a crash keeps
  * the record; --keyplay=<path> feeds that file back through the entry layer's
- * input_post_vk() on the same absolute timeline.
+ * input_post_key() on the same absolute timeline. The key names are the
+ * portable ones from src/keys.h, shared with --autokey.
  *
  * host.c owns nothing here beyond parsing the two options and calling the
  * four entry points below. The recording happens in host_key(), which is the
@@ -29,8 +30,10 @@
 int  keylog_init(const char *log_path, const char *play_path, uint32_t base);
 
 /* host_key() reports one make code here (break codes are ignored: a replay
- * posts the break after each key just like a real press). */
-void keylog_note(uint8_t scan);
+ * posts the break after each key just like a real press). `ascii` is the
+ * byte that went into the BDA ring: 0xE0 means "extended", which is how a
+ * scan code shared by two keys (KP8 / UP) is resolved. */
+void keylog_note(uint8_t scan, uint8_t ascii);
 
 /* Start the replay thread if a schedule was loaded; returns 1 when a replay
  * is running, so the caller can skip --autokey. */

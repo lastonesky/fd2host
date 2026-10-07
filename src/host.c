@@ -155,43 +155,13 @@ int host_exit_after_remaining(void)
  *
  *     --autokey="1500:SPACE;1000:RETURN;800:DOWN,RETURN"
  *
- * fields are separated by ';': <delay in ms before this step>:<vk,vk,...>.
- * VK names: RETURN ESC SPACE TAB UP DOWN LEFT RIGHT and any letter/digit. */
-static int vk_from_name(const char *s, size_t n)
-{
-    static const struct { const char *n; int vk; } tab[] = {
-        { "RETURN", VK_RETURN }, { "ENTER", VK_RETURN }, { "ESC", VK_ESCAPE },
-        { "SPACE", VK_SPACE },   { "TAB", VK_TAB },     { "UP", VK_UP },
-        { "DOWN", VK_DOWN },     { "LEFT", VK_LEFT },   { "RIGHT", VK_RIGHT },
-        { "HOME", VK_HOME },     { "END", VK_END },     { "PGUP", VK_PRIOR },
-        { "PGDN", VK_NEXT },     { "INS", VK_INSERT },  { "DEL", VK_DELETE },
-        { "F1", VK_F1 },   { "F2", VK_F2 },   { "F3", VK_F3 },
-        { "F4", VK_F4 },   { "F5", VK_F5 },   { "F6", VK_F6 },
-        { "F7", VK_F7 },   { "F8", VK_F8 },   { "F9", VK_F9 },
-        { "F10", VK_F10 }, { "F11", VK_F11 }, { "F12", VK_F12 },
-    };
-    size_t i;
-    if (!n) return 0;
-    for (i = 0; i < sizeof tab / sizeof tab[0]; i++)
-        if (strlen(tab[i].n) == n && !_strnicmp(tab[i].n, s, n))
-            return tab[i].vk;
-    if (n == 1) {
-        if (s[0] >= '0' && s[0] <= '9') return s[0];
-        if (s[0] >= 'a' && s[0] <= 'z') return s[0] - 'a' + 'A';
-        if (s[0] >= 'A' && s[0] <= 'Z') return s[0];
-    }
-    /* #<decimal vk> is what src/keylog.c writes for keys the table has no
-     * name for, so a recording (or a hand-edited --autokey) still replays. */
-    if (n > 1 && s[0] == '#') {
-        int v = atoi(s + 1);
-        if (v > 0 && v < 256)
-            return v;
-    }
-    return 0;
-}
+ * fields are separated by ';': <delay in ms before this step>:<key,key,...>.
+ * Key names are the portable ones in src/keys.h (RETURN ESC SPACE TAB UP DOWN
+ * LEFT RIGHT PGUP PGDN INS DEL F1..F12, letters/digits, KP0..KP9, ...), looked
+ * up by fr_key_by_name() so --autokey and --keylog share one vocabulary. */
 
-/* post_vk() moved to main_win32.c as input_post_vk(): only the entry layer
- * owns the window, so keystroke injection belongs there. */
+/* post_key() moved to the entry layer as input_post_key(): it owns the window
+ * and the platform key translation (see src/host.h). */
 
 static DWORD WINAPI autokey_thread(LPVOID param)
 {
@@ -212,10 +182,10 @@ static DWORD WINAPI autokey_thread(LPVOID param)
             char *k = colon + 1;
             while (k && *k) {
                 char *comma = strchr(k, ',');
-                int vk;
+                fr_key key;
                 if (comma) *comma = 0;
-                vk = vk_from_name(k, strlen(k));
-                if (vk) input_post_vk(vk);
+                key = fr_key_by_name(k, strlen(k));
+                if (key) input_post_key(key);
                 else    printf("host: autokey: unknown key '%s'\n", k);
                 k = comma ? comma + 1 : NULL;
             }
@@ -462,7 +432,7 @@ void host_key(uint8_t scan, uint8_t ascii)
 
     /* Record every make code before anything else: this is the one funnel
      * both backends and both the real keyboard and --autokey go through. */
-    keylog_note(scan);
+    keylog_note(scan, ascii);
 
     /* A game that replaced INT 9 owns the key queue: in the original the
      * BIOS handler that fills the ring at 0x41E is *not* chained to, so

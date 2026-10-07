@@ -15,13 +15,14 @@
  *   4. pump frames            - call host_frame() on every tick/paint
  *   5. feed input             - host_key(scan, ascii) for each keystroke
  *   6. host_shutdown()        - statistics
- * and it must provide input_post_vk() so --autokey can inject keys.
+ * and it must provide input_post_key() so --autokey can inject keys.
  */
 #ifndef FD2_HOST_H
 #define FD2_HOST_H
 
 #include <stdint.h>
 #include "render.h"
+#include "keys.h"
 
 /* ---- kernel (host.c) ---- */
 
@@ -82,8 +83,11 @@ uint32_t host_guest_tick(void);
 
 /* ---- entry/input layer (main_win32.c) ---- */
 
-/* Injects a virtual-key keystroke into the window (used by --autokey).
- * Implemented by the entry layer because only it owns the window. */
-void input_post_vk(int vk);
+/* Injects one keystroke (used by --autokey and --keyplay).  The key is a
+ * portable fr_key, not a Windows VK: the entry layer owns the window, so it
+ * is also the only one that can translate and deliver it (Win32 via
+ * fr_key_vk() + MapVirtualKeyA/ToAscii; POSIX via the scan table in keys.c).
+ * See src/keys.h and docs/rounds/16-entry-layer.md. */
+void input_post_key(fr_key key);
 
 #endif /* FD2_HOST_H */
