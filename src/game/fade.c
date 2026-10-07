@@ -67,3 +67,21 @@ void pal_fade_in(void)
         DELAY(2);
     }
 }
+
+/* 0x11DF2 - the sister of pal_fade_range: ADD `add` to each channel and clamp
+ * at 0x3F (the DAC's 6-bit maximum). Used to brighten/fade in. */
+void pal_fade_add(int start, int end, int add)
+{
+    while (start <= end) {
+        int k;
+
+        OUTP(0x3C8, start);
+        for (k = 0; k < 3; k++) {
+            int v = dword_53A65[start * 3 + k] + add;
+            if (v > 63)
+                v = 63;
+            OUTP(0x3C9, v);
+        }
+        start++;
+    }
+}

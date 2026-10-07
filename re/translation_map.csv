@@ -2,9 +2,12 @@ addr,c_name,source_file,group,check,cases,status,note
 0x10620,kbd_pending,src/game/fade.c,svc,leafcheck,72000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x111BA,res_load,src/game/res.c,res,rescheck,160,wired (repl.c),LMI resource loader; heap via guest_mem
 0x11D40,pal_fade_range,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
+0x11DF2,pal_fade_add,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x11EB0,gfx_copy_rows,src/game/fade.c,gfx,leafcheck,72000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
+0x126F7,map_blit_tile,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x12C60,rec_find,src/game/rec.c,rec,reccheck,28739,wired (repl.c),character record table
 0x12D7B,dlg_portrait_glide,src/game/fade.c,dlg,leafcheck,72000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
+0x134E4,dlg_portrait_clear,src/game/fade.c,dlg,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x15E71,dlg_snap_restore,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x15E9E,dlg_snap_save,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x15F84,vm_run,src/game/vm.c,vm,vmcheck,5512,wired (repl.c),script/text VM 0x15F84
@@ -12,6 +15,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x16559,dlg_blit_dato,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x165AC,dlg_open_box,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x1685C,dlg_frame_tile,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x16886,res_blit6,src/game/fade.c,res,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x168B6,dlg_box_stage,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x16B43,dlg_close_box,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x16C57,dlg_wait_key,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"

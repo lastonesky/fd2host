@@ -18,3 +18,6 @@ void pal_fade_out(void);   /* progressively darken to black */
 void pal_fade_in(void);    /* restore from black            */
 
 #endif /* GAME_FADE_H */
+
+/* 0x11DF2 - add `add` to each channel of DAC entries [start..end], clamp 0x3F */
+void pal_fade_add(int start, int end, int add);

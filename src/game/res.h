@@ -42,3 +42,7 @@ void *res_load(const char *filename, void *old_buffer, int index);
 void res_blit(void *buf, int index, void *dst, int pitch, int mode);
 
 #endif /* GAME_RES_H */
+
+/* 0x16886 - like res_blit but the offset table starts at +6 and the sub-image
+ * is always decoded at (0,0) with mode -1. */
+void res_blit6(void *dst, int pitch, void *buf, int index);

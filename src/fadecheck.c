@@ -26,6 +26,7 @@ typedef void (*fade_fn)(void);
 #define ORIG_RANGE ((range_fn)(uintptr_t)0x00011D40u)
 #define ORIG_OUT   ((fade_fn) (uintptr_t)0x0001F882u)
 #define ORIG_IN    ((fade_fn) (uintptr_t)0x0001F525u)
+#define ORIG_ADD   ((range_fn)(uintptr_t)0x00011DF2u)
 
 #define PAL_PTR (*(uint8_t **)(uintptr_t)0x00053A65u)
 
@@ -126,7 +127,7 @@ int main(int argc, char **argv)
                 g_pal[k] = (uint8_t)rnd();
 
             {
-                int mode = (int)(rnd() % 3);
+                int mode = (int)(rnd() % 4);
                 if (mode == 0) {
                     int start = (int)(rnd() % 256);
                     int end   = start + (int)(rnd() % (256 - start));
@@ -145,11 +146,21 @@ int main(int argc, char **argv)
                     if (cmp_log(why, sizeof why)) {
                         printf("FAIL fade_out: %s\n", why); failures++;
                     }
-                } else {
+                } else if (mode == 2) {
                     reset_log(); ORIG_IN(); save_expected();
                     reset_log(); pal_fade_in();
                     if (cmp_log(why, sizeof why)) {
                         printf("FAIL fade_in: %s\n", why); failures++;
+                    }
+                } else {
+                    int start = (int)(rnd() % 256);
+                    int end   = start + (int)(rnd() % (256 - start));
+                    int add   = (int)(rnd() % 100);
+                    reset_log(); ORIG_ADD(start, end, add); save_expected();
+                    reset_log(); pal_fade_add(start, end, add);
+                    if (cmp_log(why, sizeof why)) {
+                        printf("FAIL fade_add(%d,%d,%d): %s\n", start, end, add, why);
+                        failures++;
                     }
                 }
                 cases++;

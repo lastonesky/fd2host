@@ -70,3 +70,16 @@ void res_blit(void *buf, int index, void *dst, int pitch, int mode)
 
     rle_decode(hdr + 9, w, h, dst, pitch, mode);
 }
+
+/* 0x16886 - blit sub-image `index` of an LMI buffer whose offset table starts
+ * at +6, always at (0,0):
+ *
+ *     rle_decode(buf + *(u32 *)(buf + 4*index + 6), 0, 0, dst, pitch, -1);
+ *
+ * (0x2EB9F/res_blit is the +8 variant that also takes x/y.) */
+void res_blit6(void *dst, int pitch, void *buf, int index)
+{
+    uint8_t *src = (uint8_t *)buf + *(uint32_t *)((uint8_t *)buf + 4 * index + 6);
+
+    rle_decode(src, 0, 0, dst, pitch, -1);
+}

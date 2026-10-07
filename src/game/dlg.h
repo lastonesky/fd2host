@@ -93,3 +93,6 @@ void dlg_wait_key(int speaker);
 /* 0x12D7B - glide the portrait to the position in record `idx`
  * (dword_53A45 + 80*idx, first two bytes = x, y). */
 void dlg_portrait_glide(int idx);
+
+/* 0x134E4 - clear the "mouth open" byte of every portrait record + 20 ms */
+void dlg_portrait_clear(void);

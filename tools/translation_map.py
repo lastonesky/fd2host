@@ -55,6 +55,10 @@ ENTRY = re.compile(
     r'\{\s*(0x[0-9A-Fa-f]+),\s*"([^"]+)",\s*\(void\s*\*\)\s*([A-Za-z0-9_]+),\s*(REPL_[A-Z0-9_]+)\s*\}')
 FILE_HINT = re.compile(r'\(src/game/([A-Za-z0-9_]+\.c)\)')
 CASE_OVERRIDE = {            # addr -> (check, cases) when a module needs a one-off
+    0x11DF2: ("fadecheck", "4000"),
+    0x126F7: ("mapcheck", "3000"),
+    0x16886: ("mapcheck", "3000"),
+    0x134E4: ("mapcheck", "3000"),
     0x4E381: ("leafcheck", "72000"),
     0x10620: ("leafcheck", "72000"),
     0x4EBE3: ("leafcheck", "72000"),

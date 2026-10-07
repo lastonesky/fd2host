@@ -61,6 +61,7 @@
 #define dword_53A81 (*(void **)(uintptr_t)0x00053A81u)   /* box frame resource */
 #define dword_53A85 (*(void **)(uintptr_t)0x00053A85u)   /* DATO sub-images    */
 #define dword_53A45 (*(void **)(uintptr_t)0x00053A45u)   /* portrait records   */
+#define dword_53BEB (*(int32_t *)(uintptr_t)0x00053BEBu)  /* portrait count     */
 #define dword_53EEC (*(void **)(uintptr_t)0x00053EECu)   /* SFX bank resource  */
 #define dword_53A10 (*(int32_t *)(uintptr_t)0x00053A10u) /* mouth phase 0..3   */
 #define dword_53A14 (*(int32_t *)(uintptr_t)0x00053A14u) /* chars since blit   */
@@ -387,4 +388,18 @@ void dlg_portrait_glide(int idx)
     const uint8_t *e = (const uint8_t *)(uintptr_t)dword_53A45 + 80 * idx;
 
     ORIG_GLIDE(e[0], e[1]);
+}
+
+/* 0x134E4 - clear the "mouth open" flag (byte +3) of every portrait record
+ * (stride 80, count dword_53BEB), then a 20 ms settle. */
+void dlg_portrait_clear(void)
+{
+    uint8_t *p = (uint8_t *)(uintptr_t)dword_53A45;
+    int      i;
+
+    for (i = 0; i < dword_53BEB; i++) {
+        p[3] = 0;
+        p += 80;
+    }
+    ORIG_DELAY(20);
 }

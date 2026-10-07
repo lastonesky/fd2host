@@ -2,14 +2,14 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x3702f,16,sub_3702F,lib_nosym,538,538,0,0,0,-
 0x15f84,1380,sub_15F84,game,296,296,0,0,0,Y
 0x111ba,235,sub_111BA,game,132,132,0,0,0,Y
-0x11eb0,62,sub_11EB0,game,115,115,0,0,0,-
+0x11eb0,62,sub_11EB0,game,115,115,0,0,0,Y
 0x25a96,175,sub_25A96,game,111,111,0,0,0,Y
 0x1366a,818,sub_1366A,game,110,110,0,0,0,-
 0x135dd,141,sub_135DD,game,98,98,0,0,0,-
 0x17aa9,68,sub_17AA9,game,96,96,0,0,0,Y
 0x11cac,148,sub_11CAC,game,84,84,0,0,0,-
-0x2eb9f,66,sub_2EB9F,game,82,82,0,0,0,-
-0x4e381,15,sub_4E381,lib_nosym,64,64,0,0,0,-
+0x2eb9f,66,sub_2EB9F,game,82,82,0,0,0,Y
+0x4e381,15,sub_4E381,lib_nosym,64,64,0,0,0,Y
 0x16559,83,sub_16559,game,63,63,0,0,0,Y
 0x10b4e,258,sub_10B4E,game,58,58,0,0,0,-
 0x1956b,352,sub_1956B,game,52,52,0,0,0,-
@@ -17,7 +17,7 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x1685c,42,sub_1685C,game,45,45,0,0,0,Y
 0x26996,119,sub_26996,game,42,42,0,0,0,-
 0x187d6,186,sub_187D6,game,41,41,0,0,0,-
-0x4ebe3,28,sub_4EBE3,lib_nosym,40,40,0,0,0,-
+0x4ebe3,28,sub_4EBE3,lib_nosym,40,40,0,0,0,Y
 0x1f882,18,sub_1F882,game,39,39,0,0,0,Y
 0x4e98d,443,sub_4E98D,lib_nosym,39,39,0,0,0,Y
 0x16c57,461,sub_16C57,game,39,39,0,0,0,Y
@@ -27,7 +27,7 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x4df4c,56,sub_4DF4C,lib_nosym,32,32,0,0,0,Y
 0x25977,287,sub_25977,game,32,32,0,0,0,Y
 0x11d40,178,sub_11D40,game,29,29,0,0,0,Y
-0x12d7b,49,sub_12D7B,game,28,28,0,0,0,-
+0x12d7b,49,sub_12D7B,game,28,28,0,0,0,Y
 0x205da,163,sub_205DA,game,28,28,0,0,0,-
 0x112a5,437,sub_112A5,game,28,28,0,0,0,-
 0x11eee,885,sub_11EEE,game,27,27,0,0,0,-
@@ -41,7 +41,7 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x1b722,46,sub_1B722,game,20,20,0,0,0,-
 0x127a9,55,sub_127A9,game,20,20,0,0,0,-
 0x344f2,63,sub_344F2,game,20,20,0,0,0,-
-0x10620,50,sub_10620,game,17,17,0,0,0,-
+0x10620,50,sub_10620,game,17,17,0,0,0,Y
 0x1f183,73,sub_1F183,game,17,17,0,0,0,-
 0x197e5,366,sub_197E5,game,17,17,0,0,0,-
 0x373ca,466,sub_373CA,lib_nosym,17,17,0,0,0,-

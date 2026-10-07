@@ -40,6 +40,7 @@
 #include "game/scene.h"
 #include "game/fade.h"
 #include "game/kbd.h"
+#include "game/map.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -219,6 +220,10 @@ static const struct repl_entry g_repl[] = {
     { 0x11EB0, "gfx_copy_rows",      (void *)gfx_copy_rows,       REPL_GFX },
     { 0x2EB9F, "res_blit",           (void *)res_blit,            REPL_RES },
     { 0x12D7B, "dlg_portrait_glide", (void *)dlg_portrait_glide,  REPL_DLG },
+    { 0x134E4, "dlg_portrait_clear", (void *)dlg_portrait_clear,  REPL_DLG },
+    { 0x11DF2, "pal_fade_add",       (void *)pal_fade_add,        REPL_FADE },
+    { 0x16886, "res_blit6",          (void *)res_blit6,           REPL_RES },
+    { 0x126F7, "map_blit_tile",      (void *)map_blit_tile,       REPL_MAP },
 };
 
 unsigned repl_parse(const char *spec)
