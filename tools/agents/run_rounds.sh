@@ -7,6 +7,13 @@
 # Usage:  bash tools/agents/run_rounds.sh [rounds]
 # Env:    PI_BIN, MODEL_PLANNER, MODEL_EXECUTOR, PI_EXTRA
 #
+# Model/thinking policy (2026-10-08, operator): mimo-v2.6-flash, thinking never
+# above medium. `deepseek/*` was too expensive. Override per run without editing
+# this file, e.g.:
+#   MODEL_EXECUTOR=xiaomi-token-plan-cn/mimo-v2.6-flash:low bash tools/agents/run_rounds.sh 1
+# Level is the `:suffix` on the model id (off/minimal/low/medium/high/xhigh/max);
+# it is NOT a separate `thinking` field - that one is watchdog-only.
+#
 # The loop refuses to start (or continue) while the worktree is dirty, so it can
 # never interleave with a human/agent edit. It stops on the first failure.
 set -u
@@ -15,8 +22,8 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 PI_BIN="${PI_BIN:-/c/Users/Ted/AppData/Local/hermes/node/pi}"
-MODEL_PLANNER="${MODEL_PLANNER:-deepseek/deepseek-flash:low}"
-MODEL_EXECUTOR="${MODEL_EXECUTOR:-deepseek/deepseek-flash:high}"
+MODEL_PLANNER="${MODEL_PLANNER:-xiaomi-token-plan-cn/mimo-v2.6-flash:low}"
+MODEL_EXECUTOR="${MODEL_EXECUTOR:-xiaomi-token-plan-cn/mimo-v2.6-flash:medium}"
 PI_EXTRA="${PI_EXTRA:-}"
 ROUNDS="${1:-8}"
 LOGDIR="$ROOT/build/agents"
