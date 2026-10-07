@@ -223,8 +223,8 @@ static void ail_timer_thread(void *arg)
                 batch[j].cb(batch[j].user);
                 n = plat_atomic_inc(&g_timer_fires);
                 if (n <= 3 || (n % 100) == 0)
-                    printf("ail: timer fire #%ld at +%lu ms (cb=%p)\n",
-                           (long)n, plat_now_ms() - g_timer_t0,
+                    printf("ail: timer fire #%ld at +%llu ms (cb=%p)\n",
+                           (long)n, (unsigned long long)(plat_now_ms() - g_timer_t0),
                            (void *)batch[j].cb);
             }
             if (!g_timer_fired_logged) {

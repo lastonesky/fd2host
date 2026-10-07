@@ -100,40 +100,40 @@ static int uc_err(ucontext_t *uc)
 
 #elif defined(__i386__)
 
-/* glibc's i386 mcontext_t *is* the kernel's sigcontext (offsets verified by
- * faultprobe32: eip at ucontext+76, eflags at +84, ds at +32, err at +72). */
+/* glibc's i386 mcontext_t is a gregset_t (offsets verified by faultprobe32:
+ * eip at ucontext+76, eflags at +84, ds at +32, err at +72). */
 static void ctx_from_uc(dos_ctx *c, ucontext_t *uc)
 {
-    c->Eax    = (uint32_t)uc->uc_mcontext.eax;
-    c->Ebx    = (uint32_t)uc->uc_mcontext.ebx;
-    c->Ecx    = (uint32_t)uc->uc_mcontext.ecx;
-    c->Edx    = (uint32_t)uc->uc_mcontext.edx;
-    c->Esi    = (uint32_t)uc->uc_mcontext.esi;
-    c->Edi    = (uint32_t)uc->uc_mcontext.edi;
-    c->Ebp    = (uint32_t)uc->uc_mcontext.ebp;
-    c->Esp    = (uint32_t)uc->uc_mcontext.esp;
-    c->Eip    = (uint32_t)uc->uc_mcontext.eip;
-    c->EFlags = (uint32_t)uc->uc_mcontext.eflags;
-    c->SegCs  = (uint16_t)uc->uc_mcontext.cs;
-    c->SegDs  = (uint16_t)uc->uc_mcontext.ds;
-    c->SegEs  = (uint16_t)uc->uc_mcontext.es;
-    c->SegFs  = (uint16_t)uc->uc_mcontext.fs;
-    c->SegGs  = (uint16_t)uc->uc_mcontext.gs;
-    c->SegSs  = (uint16_t)uc->uc_mcontext.ss;
+    c->Eax    = (uint32_t)uc->uc_mcontext.gregs[REG_EAX];
+    c->Ebx    = (uint32_t)uc->uc_mcontext.gregs[REG_EBX];
+    c->Ecx    = (uint32_t)uc->uc_mcontext.gregs[REG_ECX];
+    c->Edx    = (uint32_t)uc->uc_mcontext.gregs[REG_EDX];
+    c->Esi    = (uint32_t)uc->uc_mcontext.gregs[REG_ESI];
+    c->Edi    = (uint32_t)uc->uc_mcontext.gregs[REG_EDI];
+    c->Ebp    = (uint32_t)uc->uc_mcontext.gregs[REG_EBP];
+    c->Esp    = (uint32_t)uc->uc_mcontext.gregs[REG_ESP];
+    c->Eip    = (uint32_t)uc->uc_mcontext.gregs[REG_EIP];
+    c->EFlags = (uint32_t)uc->uc_mcontext.gregs[REG_EFL];
+    c->SegCs  = (uint16_t)uc->uc_mcontext.gregs[REG_CS];
+    c->SegDs  = (uint16_t)uc->uc_mcontext.gregs[REG_DS];
+    c->SegEs  = (uint16_t)uc->uc_mcontext.gregs[REG_ES];
+    c->SegFs  = (uint16_t)uc->uc_mcontext.gregs[REG_FS];
+    c->SegGs  = (uint16_t)uc->uc_mcontext.gregs[REG_GS];
+    c->SegSs  = (uint16_t)uc->uc_mcontext.gregs[REG_SS];
 }
 
 static void ctx_to_uc(const dos_ctx *c, ucontext_t *uc)
 {
-    uc->uc_mcontext.eax    = c->Eax;
-    uc->uc_mcontext.ebx    = c->Ebx;
-    uc->uc_mcontext.ecx    = c->Ecx;
-    uc->uc_mcontext.edx    = c->Edx;
-    uc->uc_mcontext.esi    = c->Esi;
-    uc->uc_mcontext.edi    = c->Edi;
-    uc->uc_mcontext.ebp    = c->Ebp;
-    uc->uc_mcontext.esp    = c->Esp;
-    uc->uc_mcontext.eip    = c->Eip;
-    uc->uc_mcontext.eflags = c->EFlags;
+    uc->uc_mcontext.gregs[REG_EAX]    = (greg_t)c->Eax;
+    uc->uc_mcontext.gregs[REG_EBX]    = (greg_t)c->Ebx;
+    uc->uc_mcontext.gregs[REG_ECX]    = (greg_t)c->Ecx;
+    uc->uc_mcontext.gregs[REG_EDX]    = (greg_t)c->Edx;
+    uc->uc_mcontext.gregs[REG_ESI]    = (greg_t)c->Esi;
+    uc->uc_mcontext.gregs[REG_EDI]    = (greg_t)c->Edi;
+    uc->uc_mcontext.gregs[REG_EBP]    = (greg_t)c->Ebp;
+    uc->uc_mcontext.gregs[REG_ESP]    = (greg_t)c->Esp;
+    uc->uc_mcontext.gregs[REG_EIP]    = (greg_t)c->Eip;
+    uc->uc_mcontext.gregs[REG_EFL]    = (greg_t)c->EFlags;
     /* Segment registers are not written back: in this host the guest runs
      * flat (ds/es/ss stay at the kernel's 0x2B, probe32-verified) and the
      * core's segment-load rule patches the instruction's *operand*, not the
@@ -142,7 +142,7 @@ static void ctx_to_uc(const dos_ctx *c, ucontext_t *uc)
 
 static int uc_err(ucontext_t *uc)
 {
-    return (int)uc->uc_mcontext.err;
+    return (int)uc->uc_mcontext.gregs[REG_ERR];
 }
 
 #else

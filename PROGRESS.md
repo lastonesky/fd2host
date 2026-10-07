@@ -14,6 +14,9 @@
 资源、**持续渲染开场动画**、**有声音**（音效 waveOut + XMIDI 自带合成器），并能用 `--autokey`
 自动走完"片头 → 标题菜单 → continue → 剧情画面"。
 
+**同一份源码也能在 Linux 上跑**（`build/fd2host-linux32`，X11/XWayland + sokol GLCORE）：
+与 Windows 同 guest tick 抓帧**逐像素 0 差异**（`rounds/16-entry-layer.md` §46.10）。
+
 **当前重心是路线 C 的主体：逐步源码化。** 已把 51 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。
 
@@ -48,6 +51,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
 源码转译：**51 / 1359 个函数接入（≈3.8%）**           ⏳ 其余 ~96% 仍是原始机器码在跑
+Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 px** ✅（§46.10）
 ```
 
 ## 3. 轮次时间线
@@ -136,11 +140,13 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
    `SAPP_EVENTTYPE_CHAR`，`host_key_set_last_ascii` 回填 ascii）；音频/AIL 栈过河
    （`plat_mutex`/`plat_atomic_*`/`plat_now_us`，`audio_sokol/ail/synth/xmidi/dls/repl` 零 `windows.h`）；
    `Makefile.linux` 新增 `build/fd2host-linux`（64 位**链接通过**）与 `host32`（-m32，真能跑）。
-   **唯一阻塞**：本机 WSL 普通用户、`sudo` 要密码，装不了 `gcc-multilib` + i386 的
-   X11/GL/ALSA ⇒ `host32` 待用户执行（命令见 `rounds/16-entry-layer.md` §46.7）。
-   **为什么仍要 32 位**：51/1359 已源码化，其余 ~96% 仍是机器码，**且已转译的 C 函数会回调
-   机器码的固定 32 位地址**（`game/svc.c` 的 `ORIG_*`）⇒ 宿主必须 32 位；全部源码化后才消失（§46.8）。
-   下一步：等 32 位环境就位后跑真游戏 + `faultprobe32` 复核故障表；**工作重心转回源码化**（§46.9）。
+   **已跑通（§46.10）**：用户装好 i386 工具链后 `host32` 在 **WSLg/XWayland** 上跑真游戏
+   （GLCORE，7948 fixup、65 低内存引用、52 AIL 打桩），与 Windows 同 tick `--screenshot`
+   **0 / 64000 px** 差异。
+   **关于 32 位**：用户要求终局**不再用 32 位**（要能上 macOS，而 macOS 已无 32 位）。
+   现状 51/1359 ≈ 3.8% 已源码化、其余仍是机器码且 C 会回调其固定 32 位地址 ⇒ 过渡期必须 32 位；
+   路线（A 转译 → B 转完 → **C 去 guest 化** → D 64 位/三平台）见 `docs/TRANSLATION.md` §6、
+   `rounds/16-entry-layer.md` §46.11。**下一步（工作重心）：按 §5 继续源码化**（51 → 1359）。
 8. ~~FDPS（炎龙外传）~~ **已冻结**（2026-10-05 用户决定）：成果与卡点存档在 `docs/FDPS-ARCHIVE.md`，
    宿主的通用能力（`--exe`、FDPS AIL 表、定时器线程、INT9 注入）留在代码里不再主动维护。
 

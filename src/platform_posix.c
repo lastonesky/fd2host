@@ -193,13 +193,14 @@ void plat_error_text(unsigned e, char *buf, size_t n)
 unsigned plat_data_selector(void)
 {
 #if defined(__x86_64__) || defined(__i386__)
-    unsigned long long v = 0;
+    unsigned v = 0;
 
     /* What DS actually holds here, truncated to a selector: in long mode the
      * kernel may well leave it 0 (segment bases are ignored anyway), which is
      * NOT the 0x2B the Win32 build writes - so a 0x02 fixup (FDPS has exactly
      * one, FD2 has none) would relocate differently per OS. Unverified until
-     * FDPS is run on Linux; see docs/rounds/13-portability.md. */
+     * FDPS is run on Linux; see docs/rounds/13-portability.md.
+     * `unsigned` on purpose: an "=a" constraint is 32-bit (mov %ds, %eax). */
     __asm__ __volatile__("mov %%ds, %0" : "=a"(v));
     return (unsigned)(v & 0xFFFFu);
 #else

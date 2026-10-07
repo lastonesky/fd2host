@@ -1,18 +1,32 @@
-# Makefile.linux - POSIX build of the portable parts of the host.
+# Makefile.linux - POSIX build of the host.
 #
-#   make -f Makefile.linux        -> build/letest-linux, platprobe-linux,
-#                                    doscheck-linux, faultprobe32/64
-#   make -f Makefile.linux run    -> ... and run letest against the game
+#   make -f Makefile.linux        -> all of the below except host32
+#   make -f Makefile.linux run    -> build letest-linux and run it on the game
+#   make -f Makefile.linux host32 -> build/fd2host-linux32, the runnable host
+#
+# Targets:
+#   letest-linux, platprobe-linux, doscheck-linux, faultprobe32/64
+#     the cross-platform self checks (same assertions as the Windows tools)
+#   fd2host-linux
+#     64-bit link proof: every POSIX host file compiles and links. It cannot
+#     run the game (the guest is 32-bit x86); use host32 for that.
+#   host32 (fd2host-linux32)
+#     the real host, -m32. Needs gcc-multilib + libc6-dev-i386 + the i386
+#     X11/GL/ALSA dev packages. Verified on WSLg/XWayland: same-tick frame
+#     diff against the Windows sokol/D3D11 build is 0 pixels
+#     (docs/rounds/16-entry-layer.md §46.10).
 #
 # Same usage as the Windows letest.exe:
 #   build/letest-linux <FD2.EXE> <reference-image-dir>
 #
-# Covered so far (docs/rounds/15-dos-and-faults.md):
-#   le.c            loader - byte-identical hashes vs Windows (§43)
-#   dos.c           INT 21h/31h/10h/16h services + fault core; the platform
-#                   fault entry is dos_fault_posix.c (sigaction, §45)
-#   platform_posix.c  the OS seam
-# Still Windows-only: host.c and the entry layers (next slice).
+# Covered (docs/rounds/13-portability.md, 15-dos-and-faults.md,
+# 16-entry-layer.md):
+#   le.c / dos.c / platform_posix.c   loader, DOS services, OS seam
+#   host.c / keylog.c / keys.c        the host kernel + key vocabulary
+#   main_sokol.c / render_sokol.c     entry layer + GLCORE backend
+#   the AIL/audio stack               ail/xmidi/synth/dls/audio_sokol
+# The render backend is GL (SOKOL_GLCORE); windowing is sokol_app's X11
+# backend, which runs on a Wayland desktop through XWayland (§13.11).
 #
 # Flags:
 #   -std=gnu11      plain -c11 hides POSIX.1-2008 declarations the seam needs
@@ -90,7 +104,7 @@ $(OUT)/fd2host-linux: $(HOST_SRCS) $(SRC)/host.h $(SRC)/le.h $(SRC)/dos.h $(SRC)
 #   sudo apt-get install gcc-multilib libc6-dev-i386 \
 #     libx11-dev:i386 libxi-dev:i386 libxcursor-dev:i386 \
 #     libgl1-mesa-dev:i386 libasound2-dev:i386
-# (docs/rounds/16-entry-layer.md §46.7 records that this is the only blocker.)
+# (Verified working 2026-10-07; keep the package list for fresh machines.)
 host32: $(HOST_SRCS) $(SRC)/host.h $(SRC)/le.h $(SRC)/dos.h $(SRC)/platform.h $(SRC)/keys.h
 	@mkdir -p $(OUT)
 	$(CC) $(HOST_CFLAGS) -m32 -o $(OUT)/fd2host-linux32 $(HOST_SRCS) $(HOST_LIBS)

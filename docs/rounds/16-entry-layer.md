@@ -230,3 +230,48 @@ Linux 侧已到"只差 32 位环境"：
 2. 跑通后重跑 `faultprobe32`，复核 `rounds/15` §45.2 的故障表在**游戏真跑**的现场仍成立。
 3. **工作重心转回源码化**（用户决定）：按 `docs/TRANSLATION.md` §5 继续把 1359 个函数里的机器码
    换成 C（当前 51）。Linux 那两刀不再往前推（Wayland 原生明确不做）。
+
+## 46.10 Linux 32 位宿主真跑：与 Windows 同 tick **0 像素**差异（2026-10-07）
+
+用户装好 i386 工具链后，`make -f Makefile.linux host32` 通过（修掉 `dos_fault_posix.c` 的
+i386 `mcontext_t` 与 `plat_data_selector` 的 asm 约束，见 `PITFALLS` §8-66），
+`build/fd2host-linux32` 在 **WSLg 的 XWayland** 上跑起了真游戏：
+
+```
+host: address space reserved
+le: fixups applied=7948, out-of-page sources=11, ... bad records=0
+dos: redirected 65 low-memory references
+ail: patched 52 AIL entry points (FD2 layout) ...
+audio: saudio_setup(22050 Hz) failed - no sound this run   (WSLg 无 ALSA 设备，宿主继续)
+sokol: backend=GLCORE image=320x200 ...
+host: entering game code at 0x3CCB4
+dos: INT10 set video mode 0x13
+host: watchdog fired after 8 s (12225 frames drawn) - 1526.6 fps
+```
+
+**判据（跨平台端到端）**：同一 `--gamedir=build/sandbox` + 标准 autokey + `--shot-tick=600`：
+
+| 运行 | 结果 |
+|---|---|
+| Linux `fd2host-linux32`（GLCORE/XWayland） | `frame 53046 … guest tick 600` → `build/lx.bmp` |
+| Windows `fd2host.exe`（sokol/D3D11） | `frame 5924 … guest tick 600` → `build/win.bmp` |
+| `framediff.ps1 win.bmp lx.bmp` | **0 / 64000 px（0.0000%），max channel delta 0** |
+
+⇒ 从 DOS/4GW 机器码到 Linux 屏幕这条链（LE 加载 → fixup → VEH/sigaction 故障分发 → INT 10h/21h/31h
+→ 调色板 → GLCORE 呈现）在 Linux 上**与 Windows 逐像素一致**。`--screenshot` 与后端无关，
+所以这就是可用的跨平台画面判据。
+
+## 46.11 32 位只是"对照载具"：通往 64 位 / macOS 的纯 C 路线
+
+用户明确了终局要求：**全部逆向成 C 后不要再用 32 位**（32 位会被淘汰，macOS 从 Catalina 起
+已彻底不支持 32 位）。这与项目目标一致，路线如下（也写进 `docs/TRANSLATION.md` §6）：
+
+| 阶段 | 内容 | 32 位？ |
+|---|---|---|
+| A（现在） | 32 位宿主 + 原机器码；转译出的 C 经 `repl.c` 接入，用**原机器码**做逐字节对拍 | **必须 32 位**（x86-64 长模式不能执行 32 位代码，C 还要回调机器码的固定地址） |
+| B | 把 1359 个函数**全部**转译完（现 51），机器码不再被执行 | 仍需 32 位做对拍 |
+| C | **去 guest 化**：把 C 里的绝对地址/`uintptr_t` guest 指针/`ORIG_*` 回调改成真正的结构体与指针；删掉 LE 加载器、DOS 服务层、AIL 替换层，改成一个普通引擎层 | 这时才**不需要** 32 位 |
+| D | 64 位跨平台构建：Windows D3D11 / Linux GL / **macOS Metal（需补 MSL shader，或用 sokol-shdc）**；音频走 sokol_audio 的 WASAPI/ALSA/CoreAudio | 64 位原生产物 |
+
+**过渡期怎么少欠账**：新转译的模块尽量"少硬编码 guest 绝对地址"——需要读的全局集中到
+少数访问器（`tables.c` 已经这么做了），这样阶段 C 的改动量可控。

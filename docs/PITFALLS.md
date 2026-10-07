@@ -475,3 +475,15 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     改法：注释里别写 `*/`（写成 "left/right VKs"）。
     **判据**：`aux_build.bat fd2host` 返回 0；被 `tail` 吃掉的错误行要用
     `grep -i error` 才看得见（这次差点当成"编译成功"）。
+66. **glibc 的 i386 `mcontext_t` 不是内核 `sigcontext`；`faultprobe32`（freestanding）测的偏移会误导**
+    （第 46 轮）：`dos_fault_posix.c` 的 `__i386__` 分支照 `src/faultprobe32.c`（裸 `int 0x80` +
+    自写 sigaction，直接看内核 ucontext）写成 `uc->uc_mcontext.eax/ebx/.../eip`，**x86-64 分支是对的**
+    （长模式 glibc 用 `gregs[REG_*]`），但 i386 在 glibc 下同样只有
+    `gregs[REG_EAX/REG_EIP/REG_EFL/REG_ESP(REG_UESP)/REG_CS/REG_DS/REG_ES/REG_FS/REG_GS/REG_SS/REG_ERR]`
+    （`/usr/include/sys/ucontext.h` 的 i386 分支），**没有 `eax` 这种成员** ⇒ `make host32` 报
+    "`mcontext_t` has no member named `eax`"。
+    修法：i386 也走 `gregs[REG_*]`；`uc_err()` 用 `gregs[REG_ERR]`。
+    **教训**：freestanding 探针验证的是**内核 ABI**，libc 结构体要用 `grep /usr/include/sys/ucontext.h`
+    复核后再写代码；`faultprobe64` 那种 glibc 探针只覆盖 x86-64。
+    同类：`plat_data_selector()` 的内联汇编 `"=a"` 约束必须是 32 位 `unsigned`（64 位 `unsigned long long`
+    在 `-m32` 下报 "inconsistent operand constraints in an asm"）。

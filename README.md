@@ -90,8 +90,12 @@ pwsh -File E:\FD2\port\regress.ps1
    §11.6~§11.9 的音量语义（含 `--volume`、3 ms 斜坡、`ms` 渐变、起播闸门）逐位不变。
    新增 **`--audio-dump=<wav>`** 把“混音器交给设备的样本”录下来，音频判据从此可测量
    （逐秒 RMS、分声道峰值、`--volume` 10→100 实测 10.3×）。见 `docs/AUDIO.md` §11.10。
-4. 稳定性长跑 / 首次存档路径实测（只在沙箱）；跨平台走"单代码库 + 后端选择"，不用 git 分支
-   —— `audio.h` 已是纯接口，sokol_audio 在 Linux 是 ALSA ✓。
+4. 稳定性长跑 / 首次存档路径实测（只在沙箱）；~~跨平台走"单代码库 + 后端选择"，不用 git 分支~~
+   **Linux 已跑通**（`make -f Makefile.linux host32` → `build/fd2host-linux32`，WSLg/XWayland
+   + sokol GLCORE，与 Windows 同 tick 抓帧 **0 px**）：`audio.h` 是纯接口（Linux 走 ALSA，
+   WSLg 无声时宿主继续）—— 见 `docs/rounds/16-entry-layer.md` §46.10。
+   终局要求：**全部源码化后不再用 32 位**（要能上 macOS，而 macOS 已无 32 位）——
+   四阶段路线见 `docs/TRANSLATION.md` §6。
 
 ## 文档地图（`docs/`）
 
