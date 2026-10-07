@@ -152,6 +152,7 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | `0x111BA` | 资源加载器（**已转译** `src/game/res.c`，对拍 160 例） | cdecl 3 参 `res_load(filename, oldbuf, index)`；LMI 容器 `+6` 起 count+1 个 u32 偏移；写 `dword_53BFF`；132 调用点 | ★★★ |
 | `0x15F84` | 脚本 VM（PROGRESS 中 `FUN_00015f84`）—— **已转译 `src/game/vm.c`（§39，`vmcheck` 5512 例）** | 1380 字节，**9 个 cdecl 栈参数**（不是 `__usercall` 14 寄存器参数：入口 `push <帧大小>; call 0x3702F` 是 Watcom 栈探针 `_chkstk`，IDA 把它的原型当成了函数的 ABI），局部状态机 | ★★★ |
 | `0x25EBB` `0x117E7` `0x22E5C` `0x26152` | 主状态机 | main 循环核心；含局部函数指针表 `funcs_25E23[]`/`funcs_25E3A[]`（表地址待从反汇编 `lea` 提取） | ★★★ |
+| `0x524C6` | `funcs_30469[]` 效果动画分派表（10 项） | 被 `sub_2FF01`（10 处）与 `sub_31266`（4 处）以 `call funcs_30469[reg*4]` 到达；每项是"逐帧粒子发射器"（粒子相位数组 + 原址只读偏移表 + `res_blit`/`svc_play_sfx`，返回值 = 下帧延时或"完成"）。4 项 `[4]/[7]/[8]/[9]` = `0x2C217`/`0x2CAFC`/`0x2CCF4`/`0x2CE1A` **已转译** `game/fx.c`（`fxcheck` 3920 例）；真 ABI = cdecl 5 栈参（栈探针伪像，见 `rounds/32` §62.1）| ★★ |
 | `0x25977` | `play_bgm`（换曲入口，**已转译** `game/bgm.c`，对拍 6000 例） | 32 调用点；res_load(FDMUS.DAT)+AIL 序列族+DPMI lock | ★★ |
 | `0x4E98D` | **RLE 行解压 + blit**（已确认） | 序言 `ESI=src; w=[esi]; h=[esi+2]; EDI = a4 + a3*a5 + a2`（a4=目标基址、a5=pitch、a2/a3=偏移），每个扫描行按 token 做 `rep stosb` / `rep movsb` / 跳过，行末 `EDI += a5 - w`；共 39 个调用点（如 `sub_10652` 解 FDOTHER 资源到 `malloc` 缓冲、`sub_1F894` 解说 0xA0000 帧缓冲） | ★★★ |
 | `0x373CA` | stdio 写核心 | 466 次游戏调用，FILE+12 flags、`_ioalloc` ⇒ 属 CRT，**不转译** | — |
@@ -176,7 +177,8 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 > 淡变 `0x11D40/0x1F882/0x1F525` → `fade.c`（4000）；脚本 VM `0x15F84` → `vm.c`（5512）；
 > 地图/动画/头像绘制（`map.c`/`anim.c`/`dlg.c` 的 `0x126F7`/`0x1297D`/`0x187D6`/
 > `0x12AC6`/`0x129EC`/`0x127E0`/`0x127A9` 等）→ `mapcheck`（97000）；
-> 其中 **85 个经 `src/repl.c` 接入运行中的游戏**（机器码逐字节对拍 + `regress` 8/8，docs/rounds/*.md（按轮次分卷，见 docs/INDEX.md）§19..§58）。
+> **效果动画分派表 `funcs_30469` 的 `[4]/[7]/[8]/[9]` → `fx.c`（`fxcheck` 3920）；
+> 其中 **99 个经 `src/repl.c` 接入运行中的游戏**（机器码逐字节对拍 + `regress` 8/8，docs/rounds/*.md（按轮次分卷，见 docs/INDEX.md）§19..§62）。
 
 游戏侧高频依赖（`lib_nosym`，需归类确认属于谁）：`0x4E381(15/64)`、`0x4EBE3(28/40)`、`0x4DF4C(56/32)`、`0x4E22A(114/13)`、`0x4E31C(101/15)` —— 0x4D000..0x4F000 段像**游戏自带工具库**（位流、24×24 图元、BIOS 封装），优先归类。
 

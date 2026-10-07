@@ -50,6 +50,10 @@ addr,c_name,source_file,group,check,cases,status,note
 0x25977,bgm_play,src/game/bgm.c,bgm,bgmcheck,6000,wired (repl.c),"play_bgm 0x25977; services hooked, event log compared"
 0x25A96,svc_play_sfx,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
 0x25B45,svc_play_sfx2,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
+0x2C217,fx_dots6,src/game/fx.c,fx,?,?,wired (repl.c),
+0x2CAFC,fx_dots3,src/game/fx.c,fx,?,?,wired (repl.c),
+0x2CCF4,fx_dots16,src/game/fx.c,fx,?,?,wired (repl.c),
+0x2CE1A,fx_toggle,src/game/fx.c,fx,?,?,wired (repl.c),
 0x2EB9F,res_blit,src/game/fade.c,res,leafcheck,72000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x33499,unit_exists,src/game/unit.c,rec,reccheck,36327,wired (repl.c),persistent party roster (0x1145A/0x11506/0x112A5)
 0x344F2,rec_status_set,src/game/rec.c,rec,reccheck,36327,wired (repl.c),character record table

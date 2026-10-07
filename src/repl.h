@@ -37,7 +37,8 @@
 #define REPL_SCENE    0x800u
 #define REPL_FADE     0x1000u
 #define REPL_MAP      0x2000u
-#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG | REPL_REC | REPL_SVC | REPL_VM | REPL_RES | REPL_BGM | REPL_SCENE | REPL_FADE | REPL_MAP)
+#define REPL_FX       0x4000u
+#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG | REPL_REC | REPL_SVC | REPL_VM | REPL_RES | REPL_BGM | REPL_SCENE | REPL_FADE | REPL_MAP | REPL_FX)
 
 /* "all" | "none" | comma-separated group names -> mask */
 unsigned repl_parse(const char *spec);

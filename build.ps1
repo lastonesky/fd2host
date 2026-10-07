@@ -87,6 +87,10 @@ $targets = @{
     mapcheck = @{ srcs = @("mapcheck.c", "le.c", "game\map.c", "game\anim.c", "game\sprite24.c", "game\res.c", "game\rle.c", "game\dlg.c", "game\rec.c", "game\tables.c", "game\svc.c", "game\rle2.c", "game\gfx.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: 0x22E5C scene_card vs game/scene.c - services hooked
     scenecheck = @{ srcs = @("scenecheck.c", "le.c", "game\scene.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    # differential test: the funcs_30469[] effect-animation handlers
+    # (0x2C217/0x2CAFC/0x2CCF4/0x2CE1A) vs game/fx.c - res_blit / both SFX
+    # handles / util_rand hooked to recording stubs with a signed pool
+    fxcheck = @{ srcs = @("fxcheck.c", "le.c", "game\fx.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: play_bgm 0x25977 vs game/bgm.c - res_load/lock/AIL
     # services hooked to recording stubs, event sequence + globals compared
     bgmcheck = @{ srcs = @("bgmcheck.c", "le.c", "game\bgm.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
@@ -104,7 +108,7 @@ $targets = @{
     # low-memory mirror, the bios tick thread and a real `int 0x21` serviced
     # by the VEH - same expectations as the Linux build (src/doscheck.c)
     doscheck = @{ srcs = @("doscheck.c", "le.c", "dos.c", "dos_fault_win.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
-    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "dos_fault_win.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "audio_sokol.c", "keylog.c", "keys.c", "keys_win32.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c", "game\unit.c", "game\svc.c", "game\vm.c", "game\res.c", "game\bgm.c", "game\scene.c", "game\fade.c", "game\kbd.c", "game\map.c", "game\anim.c", "game\guest_mem.c");
+    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "dos_fault_win.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "audio_sokol.c", "keylog.c", "keys.c", "keys_win32.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c", "game\unit.c", "game\svc.c", "game\vm.c", "game\res.c", "game\bgm.c", "game\scene.c", "game\fade.c", "game\kbd.c", "game\map.c", "game\anim.c", "game\fx.c", "game\guest_mem.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";
                  # ASLR must stay on (with /DYNAMICBASE:NO Windows reserves the

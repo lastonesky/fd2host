@@ -39,6 +39,7 @@
 | `letest.exe` | 加载结果 vs Ghidra 重定位镜像逐字节 | 加载正确性的**唯一可信判据** |
 | `rlecheck` / `gfxcheck` / `sprite24check` / `utilcheck` / `pathcheck` / `tablescheck` / `rle2check` / `reccheck` | 转译 C vs **原始机器码**逐字节（含全局副作用） | 用例数见 `TRANSLATION.md` §4 |
 | `rescheck` | CRT 重定向后调原版 `0x111BA` vs 转译 C | CRT 重定向术（`TRANSLATION.md` §2） |
+| `fxcheck` | 效果动画 handler 四件套（`funcs_30469` `[4]/[7]/[8]/[9]` vs `game/fx.c`）：**事件实参逐项 + 整个 obj1 数据段快照**逐字节 | `res_blit`/两个 SFX 句柄/`util_rand` 钩成记录桩（rand 池含负数，钉死有符号 `idiv`）；`rounds/32` §62.3 |
 | `boxcheck` | 逐帧 VGA + 5 段快照 + **事件序列** + 每次 delay 抓帧 | 连调用顺序都对拍 |
 | `keycheck` / `typecheck` | 低内存镜像 + **确定性时钟** | 原机器码与转译 C 共用同一个时钟桩（每读一次 tick 加一） |
 | `keyscheck` | 便携键表 `src/keys.c` vs `MapVirtualKeyA`（Windows 参考） | 每个键的 BIOS 扫描码 + VK 双向映射 + `0xE0` 规则；`--dump` 打全表（Linux 入口层的参考）。`build.ps1 -Target keyscheck`（`rounds/16` §46.3） |

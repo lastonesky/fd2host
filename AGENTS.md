@@ -32,7 +32,7 @@
 | `src/render.h` + `render_gdi.c` | **渲染后端接口**与当前 GDI 实现（对拍基准）；`render_sokol.c` = 第 2 步 |
 | `src/host.h` + `src/host.c` | **内核**：参数、LE/DOS/AIL 启动、游戏线程、调色板→BGRA、抓帧、watchdog/autokey；不含窗口与消息泵 |
 | `src/main_win32.c` | **入口层**：`fd2_entry`、窗口/消息泵/定时器、Win32→BIOS 键盘、`input_post_vk`；`main_sokol.c` = 第 2 步 |
-| `src/repl.c` + `src/repl.h` | **源码接入层**：把已验证的转译函数入口改成 5 字节 `jmp rel32` 指向 C 实现（默认全开；`--replace=none\|all\|rle,gfx,sprite24,util,path,dlg,rec,svc,vm,res`）。只对 FD2 build 生效 |
+| `src/repl.c` + `src/repl.h` | **源码接入层**：把已验证的转译函数入口改成 5 字节 `jmp rel32` 指向 C 实现（默认全开；`--replace=none\|all\|rle,gfx,sprite24,util,path,dlg,rec,svc,vm,res,bgm,scene,fade,map,fx`）。只对 FD2 build 生效 |
 | `src/game/*.c` | 转译产物（`rle`/`gfx`/`sprite24`/`util`/`path`/`res`/`dlg`/`rec`/`svc`）；`src/*check.c` 是各自与原机器码逐字节对拍 |
 | `src/ail.c` + `xmidi.c` + `synth.c` + `dls.c` | AIL 替换层 / XMIDI 解析 / 软件合成器 / gm.dls 音色 |
 | `src/letest.c` | 加载器自检（对拍 Ghidra 镜像） |

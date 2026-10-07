@@ -566,3 +566,15 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     **做法**：从 bash 调 PowerShell 脚本传参时**给含反斜杠的值加单引号**
     （`-Bmp 'E:\FD2\port\build\ab_n1.bmp'`），或用正斜杠。
     **判据**：`host.log` 的 dumped 行路径与 `-Bmp` 完全一致、`framediff` 找得到两张图。
+
+75. **栈探针（`_chkstk`）污染的 `__fastcall` 视图会把立即数实参藏进"寄存器参数"**（第 62 轮）：
+    `funcs_30469` 的 handler 入口是 `push <帧大小>; call 0x3702F`（Watcom 栈探针），Hex-Rays
+    把它印成 `int __fastcall f(a1..a9)`；前 4 个"寄存器参数"是探针吞掉的寄存器，真正的
+    cdecl 栈参从后面数。规划稿据此写出的伪代码把 `fx_toggle` 的 `case 4` 当成
+    `res_blit(buf, 4, …)`，而机器码是 `0x2CE9B push 0`——**index 是 0，不是 4**
+    （`sub_2EB9F(4, v9, a3, …)` 里第一个 `4` 只是被吞的 EAX 槽）。
+    `fxcheck` 首跑即报 `event 0 blit arg1 0/4`，改成 0 后 **3920/0**。
+    **做法**：这类"9 参"函数的每个实参都要回到 `--dump` 的 **`push` 顺序**逐条核对；
+    `res_blit(buf,index,dst,pitch,mode)` 的 index 在 `push <index>` 那一行，别信第一参数。
+    与 `rounds/08` §37.3（`vm_run` 的 9 参 ABI）是同一现象的两种后果（那里是参数个数，
+    这里是参数**值**）。判据：把机器码 `push` 序列抄成实参清单后，`*check` 0 failure。

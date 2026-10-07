@@ -16,7 +16,7 @@
  * one heap, one observable.
  *
  * See repl.h for why this is safe. Groups: rle, gfx, sprite24, util, path,
- * dlg, rec, svc, vm.
+ * dlg, rec, svc, vm, res, bgm, scene, fade, map, fx.
  */
 #include <stdio.h>
 #include <stdint.h>
@@ -44,6 +44,7 @@
 #include "game/anim.h"
 #include "game/tables.h"
 #include "game/unit.h"
+#include "game/fx.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -275,6 +276,17 @@ static const struct repl_entry g_repl[] = {
      * The atlas is dword_53A61, a 32-bit offset table filled by 0x11019. */
     { 0x127E0, "dlg_portrait_draw",  (void *)dlg_portrait_draw,    REPL_DLG },
     { 0x127A9, "dlg_portraits_refresh", (void *)dlg_portraits_refresh, REPL_DLG },
+
+    /* --- effect-animation handlers (src/game/fx.c) -----------------------
+     * funcs_30469[] (0x524C6) table entries [4]/[7]/[8]/[9]. Pure per-frame
+     * particle emitters that read/write the game's own data segment and call
+     * res_blit / svc_play_sfx(2) / util_rand through their original addresses
+     * (already C in the host), so no wrapper is needed - plain cdecl, the
+     * five stack arguments map one to one. */
+    { 0x2C217, "fx_dots6",           (void *)fx_dots6,            REPL_FX },
+    { 0x2CAFC, "fx_dots3",           (void *)fx_dots3,            REPL_FX },
+    { 0x2CCF4, "fx_dots16",          (void *)fx_dots16,           REPL_FX },
+    { 0x2CE1A, "fx_toggle",          (void *)fx_toggle,           REPL_FX },
 };
 
 unsigned repl_parse(const char *spec)
@@ -304,6 +316,7 @@ unsigned repl_parse(const char *spec)
         else if (!plat_stricmp(tok, "bgm"))      mask |= REPL_BGM;
         else if (!plat_stricmp(tok, "scene"))    mask |= REPL_SCENE;
         else if (!plat_stricmp(tok, "fade"))     mask |= REPL_FADE;
+        else if (!plat_stricmp(tok, "fx"))       mask |= REPL_FX;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;
