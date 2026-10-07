@@ -54,6 +54,7 @@
 | `rounds/25-number-render.md` | 明细 | 数字渲染链 `0x187D6`/`0x1875D`/`0x1AEB1` | §55 |
 | `rounds/26-cell-sprites.md` | 明细 | 格子对象精灵链 `0x1F183`/`0x12AC6`/`0x129EC` | §56 |
 | `rounds/27-portrait-draw.md` | 明细 | 头像精灵链 `0x127E0`/`0x127A9`（32 位偏移表 `*(0x53A61)`）+ harness 全局值域坑 | §57 |
+| `rounds/28-rec-slots.md` | 明细 | 角色记录 8 槽字段访问器簇 `0x1B722`/`0x344F2`/`0x1BB8C`/`0x1B8E7` + 残留进程锁构建产物坑 | §58 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。

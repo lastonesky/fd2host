@@ -1,17 +1,26 @@
 /* reccheck.c - differential test for the character record table.
  *
- * Runs the original machine code (0x34894 rec_flag, 0x12C60 rec_find) and the
- * C translation (src/game/rec.c) on the same tables and compares the return
- * value plus the global dword_53C1B the search leaves behind.
+ * Runs the original machine code (0x34894 rec_flag, 0x12C60 rec_find,
+ * 0x1B722 rec_field_byte, 0x344F2 rec_status_set, 0x1BB8C rec_slot_claim,
+ * 0x1B8E7 rec_slot_remove) and the C translation (src/game/rec.c) on the same
+ * tables and compares the return value plus every byte both sides touch.
  *
  * The two tables are synthetic buffers, but the globals are the real game
- * ones: both sides read the same data segment, so the test is a true
- * differential test rather than a reimplementation of the algorithm.
+ * ones: both sides read/write the same data segment, so the test is a true
+ * differential test rather than a reimplementation of the algorithm. The
+ * slot writers are run on two byte-identical copies of the input, one per
+ * implementation, and the whole buffer is compared afterwards.
  *
  * Coverage: random tables/counts/wants, plus constructed cases for each path -
  * no match at all, match only in table 2 (several: the original keeps scanning),
  * match in table 1 with the flag set then a later unflagged one, table 1 match
  * with every flag set (so table 2 is not scanned), and want > 255.
+ *
+ * The slot accessors get their own random + constructed cases below:
+ *   rec_field_byte  random index/slot, all byte values
+ *   rec_status_set  random index ranges incl. start>end, value with high bits
+ *   rec_slot_claim  random states, all full, each single hole, first of many
+ *   rec_slot_remove slot 0..7, random contents, plus an unsigned underflow slot
  *
  * Not exercised: a negative index in rec_flag. The original computes
  * `i*5 << 4` in a 32-bit register, so a negative index wraps to an address far
@@ -31,9 +40,17 @@
 
 typedef int (__cdecl *flag_fn)(int);
 typedef int (__cdecl *find_fn)(int);
+typedef int  (__cdecl *field_fn)(int, int);
+typedef void (__cdecl *status_fn)(int, int, int);
+typedef int  (__cdecl *claim_fn)(int, int);
+typedef void *(__cdecl *remove_fn)(int, int);
 
-#define ORIG_FLAG ((flag_fn)(uintptr_t)0x34894)
-#define ORIG_FIND ((find_fn)(uintptr_t)0x12C60)
+#define ORIG_FLAG   ((flag_fn)(uintptr_t)0x34894)
+#define ORIG_FIND   ((find_fn)(uintptr_t)0x12C60)
+#define ORIG_FIELD  ((field_fn)(uintptr_t)0x1B722)
+#define ORIG_STATUS ((status_fn)(uintptr_t)0x344F2)
+#define ORIG_CLAIM  ((claim_fn)(uintptr_t)0x1BB8C)
+#define ORIG_REMOVE ((remove_fn)(uintptr_t)0x1B8E7)
 
 #define G53A45 (*(uint32_t *)(uintptr_t)0x00053A45u)
 #define G53BEB (*(int32_t *)(uintptr_t)0x00053BEBu)
@@ -44,6 +61,12 @@ typedef int (__cdecl *find_fn)(int);
 #define MAXREC 64
 static uint8_t tbl1[MAXREC * REC_STRIDE];
 static uint8_t tbl2[MAXREC * REC_STRIDE];
+
+/* Two byte-identical copies of the input for the slot writers: the original
+ * runs on `obuf`, the C on `cbuf`, and the whole buffer is compared after. */
+static uint8_t inbuf[MAXREC * REC_STRIDE];
+static uint8_t obuf[MAXREC * REC_STRIDE];
+static uint8_t cbuf[MAXREC * REC_STRIDE];
 
 static uint32_t seed = 0x0B0C6E5u;
 static uint32_t rnd(void)
@@ -108,6 +131,196 @@ static void fill_tables(int n1, int n2)
     int i;
     for (i = 0; i < n1 * REC_STRIDE; i++) tbl1[i] = (uint8_t)rnd();
     for (i = 0; i < n2 * REC_STRIDE; i++) tbl2[i] = (uint8_t)rnd();
+}
+
+/* ---- slot accessors (0x1B722 / 0x344F2 / 0x1BB8C / 0x1B8E7) ---------- */
+
+static void fill_all(void)
+{
+    unsigned i;
+    for (i = 0; i < sizeof inbuf; i++) inbuf[i] = (uint8_t)rnd();
+}
+
+/* Compare the return value (already normalised to a buffer offset where the
+ * two implementations legitimately return different pointers) and the whole
+ * buffer the two runs produced. */
+static int cmp_mem(const char *name, unsigned id, int r1, int r2)
+{
+    unsigned k;
+
+    cases_run++;
+    if (r1 != r2) {
+        printf("FAIL %s case %u: ret orig=%d ours=%d\n", name, id, r1, r2);
+        failures++;
+        return -1;
+    }
+    for (k = 0; k < sizeof obuf; k++) {
+        if (obuf[k] != cbuf[k]) {
+            printf("FAIL %s case %u: rec %u off %u orig=%02X ours=%02X\n",
+                   name, id, k / REC_STRIDE, k % REC_STRIDE, obuf[k], cbuf[k]);
+            failures++;
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static void test_field(unsigned ncases)
+{
+    unsigned c;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        int index = (int)(rnd() % MAXREC);
+        int slot  = (int)(rnd() % 8);
+        int r1, r2;
+
+        fill_all();
+        memcpy(obuf, inbuf, sizeof inbuf);
+        G53A45 = (uint32_t)(uintptr_t)obuf;
+        r1 = ORIG_FIELD(index, slot);
+        memcpy(cbuf, inbuf, sizeof inbuf);
+        G53A45 = (uint32_t)(uintptr_t)cbuf;
+        r2 = rec_field_byte(index, slot);
+        cmp_mem("rec_field_byte", 3000 + c, r1, r2);
+    }
+}
+
+static void test_status(unsigned ncases)
+{
+    static const int vals[] = { 0x00, 0x0F, 0x55, 0xA0, 0xF0, 0xFF };
+    unsigned c;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        int start = (int)(rnd() % MAXREC);
+        int end   = (int)(rnd() % MAXREC);   /* may be < start on purpose */
+        int value = vals[rnd() % (sizeof vals / sizeof vals[0])];
+        int r1, r2;
+
+        fill_all();
+        memcpy(obuf, inbuf, sizeof inbuf);
+        G53A45 = (uint32_t)(uintptr_t)obuf;
+        ORIG_STATUS(start, end, value);
+        r1 = 0;
+        memcpy(cbuf, inbuf, sizeof inbuf);
+        G53A45 = (uint32_t)(uintptr_t)cbuf;
+        rec_status_set(start, end, value);
+        r2 = 0;
+        cmp_mem("rec_status_set", 4000 + c, r1, r2);
+    }
+
+    /* constructed: start > end (zero iterations), start == end, full range */
+    {
+        static const int cases[][3] = { { 5, 4, 0x0F }, { 7, 7, 0x55 },
+                                        { 0, MAXREC - 1, 0xF0 } };
+        unsigned k;
+        for (k = 0; k < sizeof cases / sizeof cases[0]; k++) {
+            fill_all();
+            memcpy(obuf, inbuf, sizeof inbuf);
+            G53A45 = (uint32_t)(uintptr_t)obuf;
+            ORIG_STATUS(cases[k][0], cases[k][1], cases[k][2]);
+            memcpy(cbuf, inbuf, sizeof inbuf);
+            G53A45 = (uint32_t)(uintptr_t)cbuf;
+            rec_status_set(cases[k][0], cases[k][1], cases[k][2]);
+            cmp_mem("rec_status_set", 4900 + k, 0, 0);
+        }
+    }
+}
+
+/* Set one slot byte's empty bit (bit 7). */
+static void slot_set_empty(int rec, int slot, int empty)
+{
+    uint8_t *p = inbuf + (size_t)rec * REC_STRIDE + 10 + 2 * slot;
+    if (empty) *p |= 0x80u; else *p &= 0x7Fu;
+}
+
+static void test_claim(unsigned ncases)
+{
+    unsigned c;
+    int rec, slot;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        int index = (int)(rnd() % MAXREC);
+        int value = (int)(rnd() & 0xFF);
+        int r1, r2;
+
+        fill_all();
+        memcpy(obuf, inbuf, sizeof inbuf);
+        G53A45 = (uint32_t)(uintptr_t)obuf;
+        r1 = ORIG_CLAIM(index, value);
+        memcpy(cbuf, inbuf, sizeof inbuf);
+        G53A45 = (uint32_t)(uintptr_t)cbuf;
+        r2 = rec_slot_claim(index, value);
+        cmp_mem("rec_slot_claim", 5000 + c, r1, r2);
+    }
+
+    /* constructed: each single hole, all full, first of several holes */
+    for (rec = 0; rec < 4 && !failures; rec++) {
+        int value = 0xA5;
+        /* all full */
+        fill_all();
+        for (slot = 0; slot < 8; slot++) slot_set_empty(rec, slot, 0);
+        memcpy(obuf, inbuf, sizeof inbuf);
+        G53A45 = (uint32_t)(uintptr_t)obuf;
+        {
+            int r1 = ORIG_CLAIM(rec, value);
+            memcpy(cbuf, inbuf, sizeof inbuf);
+            G53A45 = (uint32_t)(uintptr_t)cbuf;
+            cmp_mem("rec_slot_claim", 5900 + rec * 16 + 8, r1,
+                    rec_slot_claim(rec, value));
+        }
+        for (slot = 0; slot < 8 && !failures; slot++) {
+            fill_all();
+            slot_set_empty(rec, slot, 1);
+            memcpy(obuf, inbuf, sizeof inbuf);
+            G53A45 = (uint32_t)(uintptr_t)obuf;
+            {
+                int r1 = ORIG_CLAIM(rec, value);
+                memcpy(cbuf, inbuf, sizeof inbuf);
+                G53A45 = (uint32_t)(uintptr_t)cbuf;
+                cmp_mem("rec_slot_claim", 5900 + rec * 16 + slot, r1,
+                        rec_slot_claim(rec, value));
+            }
+        }
+    }
+}
+
+static void test_remove(unsigned ncases)
+{
+    unsigned c;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        int index = (int)(rnd() % MAXREC);
+        int slot  = (int)(rnd() % 8);
+        intptr_t o1, o2;
+
+        fill_all();
+        memcpy(obuf, inbuf, sizeof inbuf);
+        G53A45 = (uint32_t)(uintptr_t)obuf;
+        o1 = (intptr_t)ORIG_REMOVE(index, slot) - (intptr_t)obuf;
+        memcpy(cbuf, inbuf, sizeof inbuf);
+        G53A45 = (uint32_t)(uintptr_t)cbuf;
+        o2 = (intptr_t)rec_slot_remove(index, slot) - (intptr_t)cbuf;
+        cmp_mem("rec_slot_remove", 6000 + c, (int)o1, (int)o2);
+    }
+
+    /* constructed: every slot on a few records (slot 7 -> zero-length copy) */
+    {
+        int rec, slot;
+        for (rec = 0; rec < 4 && !failures; rec++) {
+            for (slot = 0; slot < 8 && !failures; slot++) {
+                intptr_t o1, o2;
+                fill_all();
+                memcpy(obuf, inbuf, sizeof inbuf);
+                G53A45 = (uint32_t)(uintptr_t)obuf;
+                o1 = (intptr_t)ORIG_REMOVE(rec, slot) - (intptr_t)obuf;
+                memcpy(cbuf, inbuf, sizeof inbuf);
+                G53A45 = (uint32_t)(uintptr_t)cbuf;
+                o2 = (intptr_t)rec_slot_remove(rec, slot) - (intptr_t)cbuf;
+                cmp_mem("rec_slot_remove", 6900 + rec * 8 + slot,
+                        (int)o1, (int)o2);
+            }
+        }
+    }
 }
 
 int main(int argc, char **argv)
@@ -189,6 +402,12 @@ int main(int argc, char **argv)
     /* empty tables */
     set_globals(0, 0);
     cmp_case(2005, P_EMPTY, 0, 0, 5);
+
+    /* ---- slot accessors (0x1B722 / 0x344F2 / 0x1BB8C / 0x1B8E7) ------- */
+    if (!failures) test_field(800);
+    if (!failures) test_status(800);
+    if (!failures) test_claim(800);
+    if (!failures) test_remove(800);
 
     printf("paths: random=%u none=%u table2=%u flag0=%u flag1_only=%u want>255=%u empty=%u\n",
            path_count[P_RANDOM], path_count[P_NONE], path_count[P_TABLE2], path_count[P_FLAG0],

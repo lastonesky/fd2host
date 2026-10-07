@@ -532,3 +532,12 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     改回 `rnd() & 1` 后 `mapcheck` **97000/0**。同轮另记：静态段 A/B 用 `--shot-tick=500`
     （§8-55 的 380..590 静止窗）得 **0/64000**，而 tick600 落在打字/转场段会差 31 px，
     是采样点问题不是转译问题。
+
+72. **构建 `fd2host` 前先确认没有残留的 `fd2host.exe` 在跑**（第 28/58 轮）：
+    上一会话/被中断的运行留下的 `fd2host.exe` 进程会锁住 `build\fd2host.exe`，
+    `aux_build.bat fd2host` 的链接步骤直接报
+    `LINK : fatal error LNK1104: 无法打开文件 E:\FD2\port\build\fd2host.exe`。
+    这不是构建脚本坏了、也不是源码错，纯粹是文件被占用（另注意可能有**多个**残留进程，
+    杀一个还会在 tasklist 里看到另一个）。
+    **做法**：`taskkill /IM fd2host.exe /F` 后再重建；也可先
+    `tasklist /FI "IMAGENAME eq fd2host.exe"` 确认。**判据**：重建不再 LNK1104。

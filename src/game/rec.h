@@ -48,3 +48,17 @@ int rec_find(int want);
 
 /* 0x1F183 - 1 when the cell-sprite refresh must skip this record */
 int rec_skip(int index);
+
+/* The eight 2-byte slots of a record live at byte +10: [state, value]. */
+
+/* 0x1B722 - value byte (offset +11 + 2*slot) of record `index`. */
+int rec_field_byte(int index, int slot);
+
+/* 0x344F2 - for records [start,end], byte +52 = (+52 & 0xF0) | value. */
+void rec_status_set(int start, int end, int value);
+
+/* 0x1BB8C - claim the first empty slot of record `index`; 1 or -1. */
+int rec_slot_claim(int index, int value);
+
+/* 0x1B8E7 - left-shift delete slot `slot`; returns the memmove destination. */
+void *rec_slot_remove(int index, int slot);

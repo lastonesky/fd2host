@@ -167,6 +167,13 @@ static const struct repl_entry g_repl[] = {
     { 0x34894, "rec_flag",            (void *)rec_flag,             REPL_REC },
     { 0x12C60, "rec_find",            (void *)rec_find,             REPL_REC },
 
+    /* The character-record 2-byte slot accessors (src/game/rec.c): plain cdecl
+     * stack args reading/writing dword_53A45 directly, so no glue is needed. */
+    { 0x1B722, "rec_field_byte",     (void *)rec_field_byte,       REPL_REC },
+    { 0x344F2, "rec_status_set",     (void *)rec_status_set,       REPL_REC },
+    { 0x1BB8C, "rec_slot_claim",     (void *)rec_slot_claim,       REPL_REC },
+    { 0x1B8E7, "rec_slot_remove",    (void *)rec_slot_remove,      REPL_REC },
+
     /* --- tick wait + PCM SFX playback (src/game/svc.c) -------------------
      * App-level too: the globals they need are the game's, and they talk to
      * AIL through the original entry points, which in the host are already

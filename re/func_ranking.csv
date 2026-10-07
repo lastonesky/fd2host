@@ -38,9 +38,9 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x4e8bc,23,sub_4E8BC,lib_nosym,23,23,0,0,0,Y
 0x16886,48,sub_16886,game,23,23,0,0,0,Y
 0x12e38,114,sub_12E38,game,22,22,0,0,0,Y
-0x1b722,46,sub_1B722,game,20,20,0,0,0,-
+0x1b722,46,sub_1B722,game,20,20,0,0,0,Y
 0x127a9,55,sub_127A9,game,20,20,0,0,0,Y
-0x344f2,63,sub_344F2,game,20,20,0,0,0,-
+0x344f2,63,sub_344F2,game,20,20,0,0,0,Y
 0x10620,50,sub_10620,game,17,17,0,0,0,Y
 0x1f183,73,sub_1F183,game,17,17,0,0,0,Y
 0x197e5,366,sub_197E5,game,17,17,0,0,0,-
@@ -70,8 +70,8 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x34531,218,sub_34531,game,14,13,0,1,0,-
 0x15e71,45,sub_15E71,game,13,13,0,0,0,Y
 0x1ca89,62,sub_1CA89,game,13,13,0,0,0,-
-0x1b8e7,75,sub_1B8E7,game,13,13,0,0,0,-
-0x1bb8c,80,sub_1BB8C,game,13,13,0,0,0,-
+0x1b8e7,75,sub_1B8E7,game,13,13,0,0,0,Y
+0x1bb8c,80,sub_1BB8C,game,13,13,0,0,0,Y
 0x1297d,111,sub_1297D,game,13,13,0,0,0,Y
 0x4e22a,114,sub_4E22A,lib_nosym,13,13,0,0,0,Y
 0x311e5,129,sub_311E5,game,13,13,0,0,0,-

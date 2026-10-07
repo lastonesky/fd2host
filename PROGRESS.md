@@ -17,11 +17,11 @@
 **同一份源码也能在 Linux 上跑**（`build/fd2host-linux32`，X11/XWayland + sokol GLCORE）：
 与 Windows 同 guest tick 抓帧**逐像素 0 差异**（`rounds/16-entry-layer.md` §46.10）。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 81 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 85 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。
 
 > ⚠ **进度必须看清**：全量函数表 `re/funcmap.csv` 有 **1359** 个函数，已源码化的只有
-> **81 个 ≈ 6.0%**；**其余 ~94% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
+> **85 个 ≈ 6.3%**；**其余 ~94% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
 > 直接执行**。这正是宿主必须是 **32 位进程**的原因（x86-64 长模式不能执行 32 位代码，
 > 只有 `-m32`/WOW64 这类 32 位进程才行）；**等全部函数源码化后，这个 32 位门槛才会消失**。
 
@@ -50,7 +50,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**81 / 1359 个函数接入（≈6.0%）**           ⏳ 其余 ~94% 仍是原始机器码在跑
+源码转译：**85 / 1359 个函数接入（≈6.3%）**           ⏳ 其余 ~94% 仍是原始机器码在跑
 Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 px** ✅（§46.10）
 ```
 
@@ -106,6 +106,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
 | §55 | 10-07 | **数字渲染链（第 74–76 个）** | `dlg_draw_number`(0x187D6，`%0.Nd` + 逐位 sprite)、`dlg_draw_number_pair`(0x1875D，按相等选 0x1F/0x2A)、`dlg_draw_number_signed`(0x1AEB1，符号 0x83/0x84 + `abs`)；`mapcheck` 合成 256 子图后 **75500/0**；顺带把链 `dlg.c` 的 5 个 harness 补上 `res.c`/`rle.c`/`rec.c`（链接期才炸的漏项）。`regress 8/8`、`repl: installed 76`、A/B **0 px**、Linux 自检全过 | `docs/rounds/25-number-render.md` |
 | §56 | 10-07 | **格子对象精灵链（第 77–79 个）** | 闭 `0x127A9` 依赖：`rec_skip`(0x1F183)、`map_blit_cell_sprite`(0x12AC6，`*(0x53A5D)` 精灵库偏移表 +0x0A / `*(0x53A6D)` 调色板库 +6、plain 与 pal 两路)、`map_refresh_records`(0x129EC)；`mapcheck` 合成三张库表后 **86500/0**（其中 `map_refresh_records` 同时验证 C 版 0x12AC6）。`regress 8/8`、`repl: installed 79`、A/B **0 px**、Linux 自检全过 | `docs/rounds/26-cell-sprites.md` |
 | §57 | 10-07 | **头像精灵链（第 80–81 个）** | `0x127E0` 画单条记录的 24×24 头像/图标（`*(0x53A61)` 32 位偏移表，索引 `mode+12*p[2]+3*p[3]`；每 BIOS tick 翻 `dword_53A04`；`p[5]` bit7 走 `sprite24_ramp24` 否则 `sprite24_plain`）+ `0x127A9` 扫全部未标记记录后 `map_refresh_records`；`mapcheck` 合成 48 帧头像库后 **97000/0**。踩坑：harness 给 `dword_53A04` 随机 int32 把原机器码写出位图 → 段错误（§8-71）。`regress 8/8`、`repl: installed 81`、静态帧 `--shot-tick=500` A/B **0/64000 px**、Linux 自检全过 | `docs/rounds/27-portrait-draw.md`、`docs/PITFALLS.md` §8-71 |
+| §58 | 10-07 | **角色记录 8 槽字段访问器簇（第 82–85 个）** | `rec.c` 加 4 个纯数据叶子：`rec_field_byte`(0x1B722，槽值字节 +11+2·slot)、`rec_status_set`(0x344F2，闭区间 +52 低半字节 OR，`value` 高半字节**不截断**、`jle` 有符号)、`rec_slot_claim`(0x1BB8C，占首空槽 bit7→01)、`rec_slot_remove`(0x1B8E7，memmove 左移删除 + 末槽 0x80)；`reccheck` 写函数用双副本逐字节比对，**28739→32010/0**；`mapcheck`/`utilcheck` 仍 97000/2200。踩坑：残留 `fd2host.exe` 锁住构建产物（§8-72）。`regress 8/8`、`repl: installed 85`、静态帧 A/B **0/64000 px**、Linux 自检全过 | `docs/rounds/28-rec-slots.md`、`docs/PITFALLS.md` §8-72 |
 
 ## 4. 下一步计划（按优先级）
 
@@ -115,9 +116,13 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    **下一个目标**（`docs/TRANSLATION.md` §5）：**主状态机**
    `0x25977`/`0x25EBB`/`0x117E7`/`0x22E5C`/`0x26152`（含 `funcs_25E23[]`/`funcs_25E3A[]`
    函数指针表）——最大一块，一条一条转 + `*check` 对拍；
-   ~~`0x127A9` 头像链~~ **已完成（§57，接入 81）**；顺路按 `re/func_ranking.csv`
-   的用量/依赖拓扑收叶子（§51–§56）。
-   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 81/1359）。
+   ~~`0x127A9` 头像链~~ **已完成（§57，接入 81）**；
+   ~~角色记录 8 槽字段访问器簇 `0x1B722`/`0x344F2`/`0x1BB8C`/`0x1B8E7`~~
+   **已完成（§58，接入 85）**；顺路按 `re/func_ranking.csv`
+   的用量/依赖拓扑收叶子（§51–§58）。
+   下一批同族候选：`0x1B8A6`/`0x1B83D`/`0x1CA89` 及记录单字节置位叶子
+   `0x13512`/`0x32975`/`0x34D64`/`0x35009`（`rounds/28` §58.5）。
+   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 85/1359）。
 2. ~~**补 autokey 配方**~~ **已完成（§40，2026-10-06）**：标准配方 + `--shot-tick=326..334`
    即可落在“打字进行中”，抓到 3 张不同进度的逐字画面（框区差异 455→327→325→0），
    且 **15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽 ⇒ `vm_run`+`dlg_type_step`
