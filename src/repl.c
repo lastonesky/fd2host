@@ -38,6 +38,7 @@
 #include "game/res.h"
 #include "game/bgm.h"
 #include "game/scene.h"
+#include "game/fade.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -201,6 +202,13 @@ static const struct repl_entry g_repl[] = {
      * service sequence; it calls the services through their original
      * addresses (bgm_play / svc_wait_ticks / res_load are already C here). */
     { 0x22E5C, "scene_card",         (void *)scene_card,          REPL_SCENE },
+
+    /* --- palette fades (src/game/fade.c) --------------------------------
+     * Used by scene_card and a long list of state handlers; `outp`/`delay`
+     * are still called by original address (dos.c owns the DAC/tick). */
+    { 0x11D40, "pal_fade_range",     (void *)pal_fade_range,      REPL_FADE },
+    { 0x1F882, "pal_fade_out",       (void *)pal_fade_out,        REPL_FADE },
+    { 0x1F525, "pal_fade_in",        (void *)pal_fade_in,         REPL_FADE },
 };
 
 unsigned repl_parse(const char *spec)
@@ -229,6 +237,7 @@ unsigned repl_parse(const char *spec)
         else if (!plat_stricmp(tok, "res"))      mask |= REPL_RES;
         else if (!plat_stricmp(tok, "bgm"))      mask |= REPL_BGM;
         else if (!plat_stricmp(tok, "scene"))    mask |= REPL_SCENE;
+        else if (!plat_stricmp(tok, "fade"))     mask |= REPL_FADE;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;
