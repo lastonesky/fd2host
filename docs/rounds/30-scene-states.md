@@ -70,7 +70,7 @@ ABI = `void fn(void)`（`rounds/08` §37.3，与 `vm.c`/`unit.c` 同一现象）
 - **手搓抓图别把 `--exit-after` 设成 30**：BIOS tick 由 `bios_tick_thread` 以 18.2 Hz 推进，
   `--shot-tick=500` 实测在**进程启动后 ~31 s** 才到（`frame dumped … age 31187 ms, guest tick 500`），
   30 s 上限会先触发 watchdog ⇒ 永远抓不到图、`--exit-when-file` 也不触发。用既有
-  `build/ab_run.ps1`（`--exit-after=60`）即可。见 `docs/PITFALLS.md` §8-73。
+  `ab_run.ps1`（`--exit-after=60`）即可。见 `docs/PITFALLS.md` §8-73。
 - **`ab_run.ps1` 的 `-WorkingDirectory` 是摆设**：宿主 `--gamedir` 默认硬编码 `E:\FD2`
   （`src/host.c`），脚本删的是 `build/sandbox/FD2.TMP`、实际跑的是 `E:\FD2`。A/B 两侧
   状态相同所以判据成立；`E:\FD2\FD2.SAV` 的 mtime 实测未变（continue 只读存档）。

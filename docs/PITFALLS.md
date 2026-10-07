@@ -549,15 +549,16 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     - **症状**：手搭命令写 `--exit-after=30`，watchdog 在 tick 500 前 ~1 s 先触发，
       于是**永远抓不到图**、`--exit-when-file=<bmp>:256054`（等 BMP 写出）也不触发，
       看起来像 `--screenshot` 参数没被识别。
-    - **做法**：用既有 **`build/ab_run.ps1`**（`--exit-after=60`）；自己写至少给 40 s。
+    - **做法**：用既有 **`ab_run.ps1`**（`--exit-after=60`）；自己写至少给 40 s。
       `--shot-tick` 只钉住 guest 的 18.2 Hz 时钟，快照点仍是 §8-55 的静止窗配方问题。
-    - 另记：`ab_run.ps1` 的 `-WorkingDirectory` 是摆设 —— 宿主的 `--gamedir` 默认
-      **硬编码 `E:\FD2`**（`src/host.c`），脚本删的 `build\sandbox\FD2.TMP` 并非游戏
-      实际读写的那个；A/B 两侧状态相同所以判据不受影响，`E:\FD2\FD2.SAV` 的 mtime 实测未变
-      （continue 路径只读存档）。
+    - 另记：`ab_run.ps1` 的 `-WorkingDirectory` 对宿主是摆设 —— 不传 `--gamedir` 时宿主
+      **静默回落到硬编码 `E:\FD2`**（`src/host.c:552`），脚本删的 `build\sandbox\FD2.TMP`
+      并非游戏实际读写的那个。**该坑原先只记在这里、脚本一直没改**（详见 §8-82）：第 37 轮
+      验收靠 `host.log` 的 `host: working directory = E:\FD2` 才发现历轮 A/B 全程跑在真实
+      游戏目录。现脚本已显式传 `--gamedir=$Sb`（与 `regress.ps1` 同款，`--exe` 保持只读默认路径）。
 
 74. **从 Git Bash 给 `pwsh -File ... -Bmp` 传 Windows 路径，反斜杠会被 bash 吃掉**（第 61 轮）：
-    在 bash 里跑 `pwsh -NoProfile -File build/ab_run.ps1 -Rep none -Bmp E:\FD2\port\build\ab_n1.bmp`，
+    在 bash 里跑 `pwsh -NoProfile -File ab_run.ps1 -Rep none -Bmp E:\FD2\port\build\ab_n1.bmp`，
     bash 把未加引号的 `\F`、`\p`… 当转义吃掉，PowerShell 实际收到
     `E:FD2portbuildab_n1.bmp`；宿主把图“成功”“写出”到这个畸形路径（`host.log` 行
     `host: frame N dumped to E:FD2portbuildab_n1.bmp`），**BMP 不在预期位置**，
@@ -655,3 +656,22 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     **修法**：同 `§8-71`——把哨兵换成游戏内真实值（32×32 视图内不与任何记录重合的格子）。
     **判据**：marker `DC r=4 i=5 x=4660 y=22136` 且 `DC-ORIG-ok` 未打印 ⇒ 崩在原机器码侧、
     C 侧无 bug；修后 `mapcheck` 16 连跑全 PASS `112000/0`（`docs/rounds/37-map-view-core.md` §67.7）。
+
+82. **“坑已写进文档” ≠ “工具已改”——A/B 脚本带着已知缺陷一直跑**（第 37 轮验收）：
+    §8-73 的“另记”**早已写明** `ab_run.ps1` 的 `-WorkingDirectory` 是摆设、宿主 `--gamedir`
+    静默回落 `E:\FD2`，并以“**A/B 两侧状态相同所以判据不受影响**”收尾 —— 结论对，但
+    **只停在文档，脚本从未加 `--gamedir`**，于是历轮 A/B 实际全部跑在**真实游戏目录**，
+    违反 `AGENTS.md` §2“破坏性测试只在 `build/sandbox`”。
+    - **发现方式**：不是靠像素差（0 px 照样成立），而是看 `host.log` 第 4 行
+      `host: working directory = E:\FD2`，再看 `E:\FD2\FD2.TMP` 的 mtime 被 A/B 跑改写。
+      **只比对两帧永远发现不了“跑错了目录”**。
+    - **后果**：`E:\FD2\FD2.SAV`（原件）实测 mtime 未变（continue 只读存档）⇒ **未遂**；
+      但 §8-74 的反斜杠事故把 3 张 `FD2portbuildab_*.bmp` 真的留在了 `E:\FD2\` 下。
+    - **做法**：① 脚本显式 `--gamedir=$Sb`（`regress.ps1` 同款，`--exe` 留默认只读路径）；
+      ② **把工具从 gitignore 的 `build/` 提升到仓库根并提交** —— 它此前根本不在版本库里，
+      新克隆没有这个文件，而 `rounds/33` §63.8 把它当“既有工具”引用（本地漂移）；
+      ③ 审 A/B 结论时**先看 `host.log` 的 `working directory`**，再看像素差。
+    - **流程教训**：验收只盯“数字对不对”会漏掉“数字是在什么环境里量出来的”。
+    - **判据**：修后 `host: working directory = E:\FD2\port\build\sandbox`，
+      沙箱内 `none↔all = 0/64000`（结论不变，且与真实目录跑出的帧逐字节一致），
+      `E:\FD2\` 无新增文件。

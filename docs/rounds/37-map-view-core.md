@@ -203,7 +203,7 @@ if (rec != -1 && rec[7]!=121 && !(rec[31]==10 && rec[6]==1)) {
    让它们下一轮各自成块。转完本轮后 `0x135DD`/`0x1366A`（全表 usage 前二）**只剩 `0x11CAC`**，
    `0x197E5` 依赖已闭合。
 4. **未碰** `0x10B4E` 文件/stdio 簇、`0x2C67D`（fx 浮点）、`funcs_1199C` 剩余 34 项。
-5. **A/B 配方**：`build/ab_run.ps1` 的 `WorkingDirectory` 是摆设——宿主 `--gamedir` 默认硬编码
+5. **A/B 配方**：`ab_run.ps1` 的 `WorkingDirectory` 是摆设——宿主 `--gamedir` 默认硬编码
    `E:\FD2`，必须在参数里显式传 `--gamedir=<sandbox>`，否则跑的是真实目录（`PITFALLS` §8-73）。
    本轮用 `--gamedir=E:\FD2\port\build\sandbox` + 固定 autokey + `--shot-tick=500`，基线 0 px。
 6. Linux 侧沿用分级：纯游戏逻辑转译只做构建 + `letest`/`doscheck`（无平台/渲染/入口改动）。

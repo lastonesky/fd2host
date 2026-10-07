@@ -206,9 +206,9 @@ harness 的 `g_buf` 就按这个结构铺（见 §63.4）。
 
 ---
 
-## 63.8 备注：A/B 抓图要用既有 `build/ab_run.ps1`
+## 63.8 备注：A/B 抓图要用既有 `ab_run.ps1`
 
 手搓 `--screenshot/--shot-tick` 命令时**必须同时给 `--autokey` 并删掉 `FD2.TMP`**，
 否则 `none↔none2` 基线就差 50%+（游戏启动路径随 `FD2.TMP` 是否存在/内容变化）。
-既有 `build/ab_run.ps1` 已封装正确配方（`--autokey=…;--exit-when-file`，
+既有 `ab_run.ps1` 已封装正确配方（`--autokey=…;--exit-when-file`，
 与 `PITFALLS` §8-73 的 `--exit-after=60` 一致）；本轮用它得到 **0 px**。

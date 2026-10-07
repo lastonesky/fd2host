@@ -186,7 +186,7 @@ C 必须显式 `uint16_t` 中转，不能写成 `rec[68] -= x`（那是 8 位，
 
 ## 64.7 备注
 
-- A/B 沿用第 33 轮 `build/ab_run.ps1` 的既有配方（`--autokey=…` + `--exit-when-file`，
+- A/B 沿用第 33 轮 `ab_run.ps1` 的既有配方（`--autokey=…` + `--exit-when-file`，
   必须删 `FD2.TMP`，否则基线自己就差一半，`rounds/33` §63.8、`PITFALLS` §8-73）。
 - `translation_map.py` 的 `MODULE_INFO["rec.c"].cases` 从 `36327` 改到 `42225`
   （该键被 `rec.c` 与 `unit.c` 共用，本轮一并更正），再跑生成 + `--check`。

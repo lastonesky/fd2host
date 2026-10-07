@@ -174,7 +174,7 @@
 
 ## 61.5 一起踩的坑
 
-- **从 Git Bash 给 `pwsh -File build/ab_run.ps1 -Bmp` 传 Windows 路径，反斜杠被 bash 吃掉**：
+- **从 Git Bash 给 `pwsh -File ab_run.ps1 -Bmp` 传 Windows 路径，反斜杠被 bash 吃掉**：
   首次 A/B 三条命令都“跑完”了，但 `host.log` 显示图写到了
   `E:FD2portbuildab_n1.bmp`（畸形路径），`build\ab_*.bmp` 不存在，`framediff` 报 `not found`
   —— 看着像 `--screenshot` 失效，其实是 **bash 未加引号时把 `\F`、`\p`… 当转义**。
