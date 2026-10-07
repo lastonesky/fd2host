@@ -147,6 +147,10 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    现状 51/1359 ≈ 3.8% 已源码化、其余仍是机器码且 C 会回调其固定 32 位地址 ⇒ 过渡期必须 32 位；
    路线（A 转译 → B 转完 → **C 去 guest 化** → D 64 位/三平台）见 `docs/TRANSLATION.md` §6、
    `rounds/16-entry-layer.md` §46.11。**下一步（工作重心）：按 §5 继续源码化**（51 → 1359）。
+   同轮补：**Linux 窗口 180° 倒置修好**（GLSL 多翻一次 v；`--screenshot` 看不到窗口翻转，
+   新增 `FD2_TESTPATTERN`/`FD2_GL_READBACK` 定向自检：修复前 `flipped=0`、修复后 `upright=0`，
+   `PITFALLS` §8-67）；**转译记录/map** = `re/translation_map.csv` +`tools/translation_map.py`
+   （`--check` 防漂移；51 wired + 1 not-wired / 1359）。
 8. ~~FDPS（炎龙外传）~~ **已冻结**（2026-10-05 用户决定）：成果与卡点存档在 `docs/FDPS-ARCHIVE.md`，
    宿主的通用能力（`--exe`、FDPS AIL 表、定时器线程、INT9 注入）留在代码里不再主动维护。
 

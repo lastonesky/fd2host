@@ -12,10 +12,66 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "render.h"
 #include "sokol_gfx.h"
 #include "sokol_glue.h"
 #include "sokol_log.h"
+
+#if defined(SOKOL_GLCORE)
+#include <GL/gl.h>
+/* Orientation self-check for the GL path (docs/PITFALLS.md §8-67). The window
+ * content is *not* what --screenshot captures (that is the shared layer's
+ * BMP), so a flipped present path used to be invisible to the frame diff.
+ * With FD2_GL_READBACK=<n> every n-th frame reads the just-rendered default
+ * framebuffer back and prints how many pixels match the source upright vs
+ * vertically flipped; FD2_TESTPATTERN=1 replaces the guest frame with a
+ * static high-contrast pattern (green ramps with the row, white block
+ * top-left, red block bottom-right) so the answer has no animation noise.
+ * Off by default: the cost is one getenv per frame. */
+static void gl_readback_check(const uint32_t *bgra, int w, int h)
+{
+    static long frames;
+    const char *env = getenv("FD2_GL_READBACK");
+    long interval = env ? atol(env) : 0;
+    int fw, fh, s = 3;                  /* the host's 3x window */
+    unsigned char *px;
+    long up = 0, dn = 0, n = 0;
+    int x, y;
+
+    if (interval <= 0)
+        return;
+    if (++frames % interval)
+        return;
+    fw = w * s;
+    fh = h * s;
+    px = malloc((size_t)fw * fh * 4);
+    if (!px)
+        return;
+    glReadBuffer(GL_BACK);
+    glFinish();
+    glReadPixels(0, 0, fw, fh, GL_RGBA, GL_UNSIGNED_BYTE, px);
+    for (y = 0; y < fh; y += s) {
+        for (x = 0; x < fw; x += s) {
+            /* the shader writes the true (r, g, b) for a source 0x00RRGGBB */
+            uint32_t su = bgra[(h - 1 - y / s) * w + x / s];   /* upright   */
+            uint32_t sd = bgra[(y / s) * w + x / s];           /* flipped   */
+            const unsigned char *p = &px[((size_t)y * fw + x) * 4];
+
+            if (p[0] != ((su >> 16) & 0xFF) || p[1] != ((su >> 8) & 0xFF) ||
+                p[2] != (su & 0xFF))
+                up++;
+            if (p[0] != ((sd >> 16) & 0xFF) || p[1] != ((sd >> 8) & 0xFF) ||
+                p[2] != (sd & 0xFF))
+                dn++;
+            n++;
+        }
+    }
+    printf("sokol: GL readback f%ld: upright mismatches=%ld/%ld, "
+           "flipped mismatches=%ld/%ld\n", frames, up, n, dn, n);
+    free(px);
+}
+#endif
 
 /* ------------------------------------------------------------- shaders ----
  *
@@ -60,7 +116,12 @@ static const char *GLSL_FS =
     "out vec4 frag;\n"
     "uniform sampler2D tex_smp;\n"
     "void main() {\n"
-    "    vec4 c = texture(tex_smp, vec2(uvv.x, 1.0 - uvv.y));\n"
+    /* NO v flip: sokol-gfx uploads image rows as-is, so texel v=0 is the first
+     * uploaded row (the top scanline) exactly like D3D11's convention - the
+     * quad already maps uv.y=0 to the top. Flipping here made the GL window
+     * 180-degrees upside down while --screenshot (shared layer) stayed right;
+     * see docs/PITFALLS.md §8-67. */
+    "    vec4 c = texture(tex_smp, uvv);\n"
     "    frag = vec4(c.b, c.g, c.r, 1.0);\n"
     "}\n";
 
@@ -223,6 +284,27 @@ void render_present(const uint32_t *bgra, int w, int h)
     sg_image_data data;
     sg_pass pass;
     sg_bindings binds;
+#if defined(SOKOL_GLCORE)
+    static uint32_t pattern[320 * 200];
+
+    if (getenv("FD2_TESTPATTERN")) {
+        /* Diagnostic: a static pattern with an unmistakable orientation -
+         * green ramps with the source row, a white block at the top-left and
+         * a red block at the bottom-right. FD2_GL_READBACK then tells
+         * orientation without any animation noise. */
+        int i, r, c;
+        for (i = 0; i < 320 * 200; i++)
+            pattern[i] = ((uint32_t)((i / 320) * 255 / 199) << 8) | 0x00000080u;
+        for (r = 0; r < 8; r++)
+            for (c = 0; c < 8; c++) {
+                pattern[r * 320 + c] = 0x00FFFFFFu;                  /* white, TL */
+                pattern[(199 - r) * 320 + (319 - c)] = 0x000000FFu;  /* red, BR   */
+            }
+        bgra = pattern;
+        w = 320;
+        h = 200;
+    }
+#endif
 
     if (!g_ok || !bgra)
         return;
@@ -263,6 +345,9 @@ void render_present(const uint32_t *bgra, int w, int h)
     sg_apply_bindings(&binds);
     sg_draw(0, 6, 1);
     sg_end_pass();
+#if defined(SOKOL_GLCORE)
+    gl_readback_check(bgra, w, h);
+#endif
     sg_commit();
 }
 

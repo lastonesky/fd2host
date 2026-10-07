@@ -275,3 +275,40 @@ host: watchdog fired after 8 s (12225 frames drawn) - 1526.6 fps
 
 **过渡期怎么少欠账**：新转译的模块尽量"少硬编码 guest 绝对地址"——需要读的全局集中到
 少数访问器（`tables.c` 已经这么做了），这样阶段 C 的改动量可控。
+
+## 46.12 Linux 窗口 180° 倒置的根因与修复；转译记录/map
+
+**用户报告**：Linux 抓帧与 Windows 逐像素一致（0 px），但窗口里看到的画面是 180° 倒置的。
+
+**根因**：`render_sokol.c` 的 GLSL 片元多翻了一次 v
+（`texture(tex_smp, vec2(uv.x, 1.0 - uv.y))`）。sokol-gfx 上传图像行**不翻转**，
+texel `v=0` 就是上传的第一行（源图顶行），quad 已把 `uv.y=0` 放在顶部 ⇒ 再翻就倒过来。
+**为什么之前的验收没发现**：`--screenshot` 的 BMP 由共享层 `host.c` 直接写，
+与后端无关；round 36 的 sokol 验收也比的是这个 BMP。`--wshot`（窗口内容）只有 Win32 实现。
+
+**修复**：GLSL 直接用 `texture(tex_smp, uvv)`；HLSL 本就没有翻转，Windows 侧不动。
+
+**硬证据（新加的定向自检）**：`render_sokol.c` 在 `SOKOL_GLCORE` 下加了两件诊断（默认关）：
+
+- `FD2_GL_READBACK=<n>`：每 n 帧 `glReadPixels` 回读默认 framebuffer，与源像素比，
+  打印 `upright mismatches` / `flipped mismatches`；
+- `FD2_TESTPATTERN=1`：用静态图案（顶左白块、底右红块、绿色随行渐变）替换 guest 帧，
+  消除动画噪声。
+
+| 状态 | 结果 |
+|---|---|
+| 修复前（带 `1.0-v`） | `upright=64000/64000, flipped=0/64000` |
+| 修复后 | **`upright=0/64000, flipped=64000/64000`** |
+
+`--screenshot` 的跨平台判据不受影响（修复前后 Windows↔Linux 都是 **0 px**）——
+这正说明"窗口路径"和"抓帧路径"必须分别验（`PITFALLS` §8-67）。
+
+**转译记录/map（用户要求：转了什么、转后叫什么，要有记录和 map）**：
+
+- 新增 `tools/translation_map.py`：以 `src/repl.c` 的接入表为真源，为每个函数生成
+  `addr / c_name / source_file / group / check / cases / status / note`，
+  并写到 **`re/translation_map.csv`**（含"已转译但未接入"的 `res.c`，注明原因）。
+- 汇总行：**51 wired / 1359 总函数（3.8%） + 1 translated-not-wired**。
+- `python tools/translation_map.py --check` 在 CSV 与 `repl.c` 不一致时退出 1，
+  防止记录漂移（可挂进 CI/回归）。
+- 以后每转译一个函数：`repl.c` 加一行 → 重跑脚本 → CSV 更新。

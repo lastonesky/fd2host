@@ -1,0 +1,53 @@
+addr,c_name,source_file,group,check,cases,status,note
+0x111BA,res_load,src/game/res.c,res,rescheck,160,"translated, NOT wired","translated+checked, not wired: Watcom CRT heap (TRANSLATION §5 item 2)"
+0x12C60,rec_find,src/game/rec.c,rec,reccheck,28739,wired (repl.c),character record table
+0x15F84,vm_run,src/game/vm.c,vm,vmcheck,5512,wired (repl.c),script/text VM 0x15F84
+0x164E8,dlg_type_step,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x16559,dlg_blit_dato,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x165AC,dlg_open_box,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x1685C,dlg_frame_tile,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x168B6,dlg_box_stage,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x16B43,dlg_close_box,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x16C57,dlg_wait_key,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x16E24,dlg_scroll_text,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x17AA9,svc_wait_ticks,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
+0x25A96,svc_play_sfx,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
+0x25B45,svc_play_sfx2,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
+0x34894,rec_flag,src/game/rec.c,rec,reccheck,28739,wired (repl.c),character record table
+0x4DED4,util_rec3,src/game/util.c,util,utilcheck,2200,wired (repl.c),byte/palette utilities
+0x4DEEC,util_translate,src/game/util.c,util,utilcheck,2200,wired (repl.c),byte/palette utilities
+0x4DF09,util_sum_tail4,src/game/util.c,util,utilcheck,2200,wired (repl.c),byte/palette utilities
+0x4DF28,util_deobfuscate,src/game/util.c,util,utilcheck,2200,wired (repl.c),byte/palette utilities
+0x4DF4C,util_fix_records,src/game/util.c,util,utilcheck,2200,wired (repl.c),byte/palette utilities
+0x4DF84,sprite24_ramp,src/game/sprite24.c,sprite24,sprite24check,2100,wired (repl.c),24x24 sprite RLE family
+0x4E016,sprite24_pal_recolor,src/game/sprite24.c,sprite24,sprite24check,2100,wired (repl.c),24x24 sprite RLE family
+0x4E0A2,sprite24_pal,src/game/sprite24.c,sprite24,sprite24check,2100,wired (repl.c),24x24 sprite RLE family
+0x4E127,sprite24_const,src/game/sprite24.c,sprite24,sprite24check,2100,wired (repl.c),24x24 sprite RLE family
+0x4E1A6,sprite24_ramp24,src/game/sprite24.c,sprite24,sprite24check,2100,wired (repl.c),24x24 sprite RLE family
+0x4E22A,sprite24_plain,src/game/sprite24.c,sprite24,sprite24check,2100,wired (repl.c),24x24 sprite RLE family
+0x4E29C,sprite24_plain49,src/game/sprite24.c,sprite24,sprite24check,2100,wired (repl.c),24x24 sprite RLE family
+0x4E390,path_mark,src/game/path.c,path,pathcheck,1000,wired (repl.c),terrain cost flood + path trace
+0x4E4F6,path_find,src/game/path.c,path,pathcheck,1000,wired (repl.c),terrain cost flood + path trace
+0x4E795,util_mask_recolor,src/game/util.c,util,utilcheck,2200,wired (repl.c),byte/palette utilities
+0x4E7DD,tbl_615FE,src/game/tables.c,util,tablescheck,4528,wired (repl.c),table accessors
+0x4E7F2,tbl_626B3,src/game/tables.c,util,tablescheck,4528,wired (repl.c),table accessors
+0x4E809,tbl_6238D,src/game/tables.c,util,tablescheck,4528,wired (repl.c),table accessors
+0x4E821,tbl_620A1,src/game/tables.c,util,tablescheck,4528,wired (repl.c),table accessors
+0x4E838,tbl_61DA1,src/game/tables.c,util,tablescheck,4528,wired (repl.c),table accessors
+0x4E84F,tbl_61AF9,src/game/tables.c,util,tablescheck,4528,wired (repl.c),table accessors
+0x4E866,tbl_619FD,src/game/tables.c,util,tablescheck,4528,wired (repl.c),table accessors
+0x4E87D,tbl_61955_dword,src/game/tables.c,util,tablescheck,4528,wired (repl.c),table accessors
+0x4E88E,tbl_6188A,src/game/tables.c,util,tablescheck,4528,wired (repl.c),table accessors
+0x4E8A5,tbl_61646,src/game/tables.c,util,tablescheck,4528,wired (repl.c),table accessors
+0x4E8BC,tbl_602AD,src/game/tables.c,util,tablescheck,4528,wired (repl.c),table accessors
+0x4E8D3,rle_decode_lut,src/game/rle.c,rle,rlecheck,1900,wired (repl.c),"pure compute, machine-code differential"
+0x4E98D,rle_decode,src/game/rle.c,rle,rlecheck,1900,wired (repl.c),"pure compute, machine-code differential"
+0x4EBAB,rle2_blit_trans,src/game/rle2.c,rle,rle2check,1200,wired (repl.c),0xC0-range RLE blits
+0x4EBFF,rle2_blit,src/game/rle2.c,rle,rle2check,1200,wired (repl.c),0xC0-range RLE blits
+0x4EC31,rle2_blit_mirror,src/game/rle2.c,rle,rle2check,1200,wired (repl.c),0xC0-range RLE blits
+0x4EC7C,gfx_restore_rect,src/game/gfx.c,gfx,gfxcheck,1450,wired (repl.c),"rect save/restore, blits, glyphs"
+0x4ECBF,gfx_save_rect,src/game/gfx.c,gfx,gfxcheck,1450,wired (repl.c),"rect save/restore, blits, glyphs"
+0x4ED0B,gfx_blit_block,src/game/gfx.c,gfx,gfxcheck,1450,wired (repl.c),"rect save/restore, blits, glyphs"
+0x4ED34,gfx_blit_transparent,src/game/gfx.c,gfx,gfxcheck,1450,wired (repl.c),"rect save/restore, blits, glyphs"
+0x4ED7A,gfx_draw_glyph,src/game/gfx.c,gfx,gfxcheck,1450,wired (repl.c),"rect save/restore, blits, glyphs"
+0x4EEE0,gfx_expand_scanlines,src/game/gfx.c,gfx,gfxcheck,1450,wired (repl.c),"rect save/restore, blits, glyphs"

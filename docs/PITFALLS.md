@@ -487,3 +487,15 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     复核后再写代码；`faultprobe64` 那种 glibc 探针只覆盖 x86-64。
     同类：`plat_data_selector()` 的内联汇编 `"=a"` 约束必须是 32 位 `unsigned`（64 位 `unsigned long long`
     在 `-m32` 下报 "inconsistent operand constraints in an asm"）。
+67. **`--screenshot` 与"窗口里看到的"是两条路：GL 着色器多翻一次 v，窗口 180° 倒置却对拍不出来**
+    （第 46 轮）：`render_sokol.c` 的 GLSL 片元里写了 `texture(tex_smp, vec2(uv.x, 1.0-uv.y))`，
+    理由是"GL 原点在左下"。但 sokol-gfx **上传图像行时不做翻转**，texel `v=0` 就是上传的第一行
+    （源图顶行），和 D3D11 的约定一致；quad 本身已经把 `uv.y=0` 放在顶部 ⇒ 再翻一次就上下颠倒。
+    **致命点**：`--screenshot` 的 BMP 由共享层 `host.c` 直接写出（与后端无关），所以
+    `framediff` 永远看不到窗口的翻转（round 36 的 sokol 验收也只比了 BMP）。
+    **判据（可复现）**：`FD2_TESTPATTERN=1 FD2_GL_READBACK=100` 跑 `build/fd2host-linux32`，
+    合成图案（顶左白块/底右红块/绿色随行渐变）下：
+    修复前 `upright=64000/64000, flipped=0/64000`；修复后 `upright=0/64000`。
+    顺带踩的两个诊断坑：① 回读比较的内存序是 **RGBA**（着色器写 `c.bgr` 后得到真 RGB），
+    一开始按 BGRA 比会把所有像素算成不匹配；② 用动画帧判断方向会被"回读晚一帧"干扰，
+    要用 `FD2_TESTPATTERN` 的静态图案。见 `docs/rounds/16-entry-layer.md` §46.12。
