@@ -21,6 +21,11 @@
 #include "le.h"
 #include "game/fade.h"
 
+/* fade.c's pal_tick_word reads the BIOS tick through the low-memory mirror
+ * (dos_lowmem_base is normally defined by dos.c, which this harness does not
+ * link). */
+uint32_t dos_lowmem_base = 0x00070000u;
+
 typedef void (*range_fn)(int, int, int);
 typedef void (*fade_fn)(void);
 #define ORIG_RANGE ((range_fn)(uintptr_t)0x00011D40u)

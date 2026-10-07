@@ -19,6 +19,8 @@
 #include "gfx.h"
 #include "rle.h"
 #include "dlg.h"
+#include "anim.h"
+#include "fade.h"
 #include "guest_mem.h"
 #include "../dos.h"
 
@@ -42,6 +44,9 @@
 #define dword_53A45 (*(uint8_t  **)(uintptr_t)0x00053A45u) /* record table   */
 #define dword_53A61 (*(uint8_t  **)(uintptr_t)0x00053A61u) /* icon bank      */
 #define byte_51A97  ((const uint8_t *)(uintptr_t)0x00051A97u)
+#define byte_54132  (*(uint8_t  *)(uintptr_t)0x00054132u) /* ping phase    */
+#define byte_52725  ((const uint8_t *)(uintptr_t)0x00052725u) /* unit 29-tbl */
+#define dword_53EEC (*(void    **)(uintptr_t)0x00053EECu) /* SFX bank       */
 
 /* --- map view rendering core (round 37) ------------------------------- */
 #define dword_53A00 (*(int32_t  *)(uintptr_t)0x00053A00u) /* last flip tick */
@@ -437,4 +442,70 @@ void map_draw_cursor(uint8_t *dst, int pitch)
                              *(const uint16_t *)(rec + 64),
                              *(const uint16_t *)(rec + 66), 3);
     }
+}
+
+/* 0x32230 - per-record movement blip.
+ *
+ * The 29-byte table *(0x52725) classifies the record's unit type (record +32
+ * is a 1-based index into it). A record that rec_skip() reports as skipped
+ * pings with effect 10 every 6th call; otherwise the unit class selects
+ * effect 9 every 6 (class 0) / every 4 (class 1) / effect 11 every 9 calls.
+ * byte_54132 is the free-running call counter (uint8, wraps at 256), and the
+ * effect always plays on bank *(0x53EEC) with loop count 1.
+ *
+ * The machine code copies the table to the stack first and indexes it as
+ * t[k-1]; record +32 is a valid 1..29 index in the game's data, so the copy
+ * has no observable effect on in-range indices. `sub_25A96` (svc_play_sfx) is
+ * called through its original address so the host and the differential
+ * harness can both observe it at one place.
+ *
+ * Callers ignore the return value (IDA: every call site overwrites EAX). */
+typedef int (*sfx_fn)(const void *bank, int index, int loops);
+#define ORIG_SFX ((sfx_fn)(uintptr_t)0x00025A96u)
+
+void map_unit_ping(int idx)
+{
+    uint8_t t[29];
+    int     s;
+
+    memcpy(t, byte_52725, sizeof t);
+
+    if (rec_skip(idx)) {
+        if ((uint8_t)byte_54132 % 6 == 0)
+            ORIG_SFX(dword_53EEC, 10, 1);
+    } else {
+        int k = *(const uint8_t *)((uintptr_t)dword_53A45 + 80u * (uint32_t)idx
+                                   + 32u);
+
+        s = t[k - 1];
+        if (s == 0) {
+            if ((uint8_t)byte_54132 % 6 == 0)
+                ORIG_SFX(dword_53EEC, 9, 1);
+        } else if (s == 1) {
+            if ((uint8_t)byte_54132 % 4 == 0)
+                ORIG_SFX(dword_53EEC, 9, 1);
+        } else {
+            if ((uint8_t)byte_54132 % 9 == 0)
+                ORIG_SFX(dword_53EEC, 11, 1);
+        }
+    }
+    ++byte_54132;
+}
+
+/* 0x11CAC - the whole map-view refresh: advance the animation frame, update
+ * the DAC animation when `flag == 0`, re-render the 13x8 tile window at the
+ * view origin into the map bitmap, reveal/refresh the cursor and portraits,
+ * then push the 192x312 bitmap window to VGA at 0xA0504. */
+void map_view_update(int flag)
+{
+    uint8_t *view = dword_53A49 + 0x8088;   /* 32904 */
+
+    anim_frame_step();
+    if (flag == 0)
+        pal_anim_step();
+    map_render_view(view, 456, 13, 8, dword_53AA9, dword_53AAD);
+    map_reveal_cursor();
+    dlg_portraits_refresh();
+    map_draw_cursor(view, 456);
+    gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, view, 456, 312, 192);
 }

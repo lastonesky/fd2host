@@ -49,6 +49,9 @@ MODULE_INFO = {
     "fade.c":     ("fadecheck",     "4000",  "palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared"),
     "msg.c":      ("msgcheck",      "465",   "portrait compositor 0x1956B/0x1974C/0x26996; event log + screen pair compared"),
     "ev.c":       ("evcheck",       "2940",  "funcs_1199C event handlers; record table + event log + normalised returns compared"),
+    "map.c":      ("mapcheck",     "122500", "map view render/reveal/cursor/scroller + view refresh"),
+    "anim.c":     ("mapcheck",     "3000",  "BIOS-tick animation frame counter (also in mapcheck)"),
+    "fx.c":       ("fxcheck",      "12884", "funcs_30469 effect-animation handlers; event log + globals compared"),
 }
 
 # Translated and checked, but deliberately *not* in repl.c yet. Keep the reason.
@@ -80,6 +83,14 @@ CASE_OVERRIDE = {            # addr -> (check, cases) when a module needs a one-
     0x11EB0: ("leafcheck", "72000"),
     0x2EB9F: ("leafcheck", "72000"),
     0x12D7B: ("leafcheck", "72000"),
+    0x4E310: ("mapcheck", "500"),
+    0x4E31C: ("mapcheck", "3000"),
+    0x32230: ("mapcheck", "3000"),
+    0x11CAC: ("mapcheck", "4000"),
+    0x11EEE: ("mapcheck", "4000"),
+    0x24D22: ("mapcheck", "3000"),
+    0x122DC: ("mapcheck", "4000"),
+    0x1ACF3: ("mapcheck", "4000"),
 }
 
 
@@ -89,19 +100,31 @@ def repl_src():
 
 
 def module_for(name, file_hint):
-    """The .c file that defines `name`, using the section hint first (the
-    wrappers like rep_dlg_blit live in repl.c but belong to that module)."""
-    if file_hint:
-        return file_hint
-    for fn in os.listdir(os.path.join(ROOT, "src", "game")):
+    """The .c file that *defines* `name`.
+
+    Search the game sources for a column-0 definition (a definition starts at
+    the beginning of a line; calls are indented). The section hint is only a
+    fallback - it leaks across sections when a section comment does not name
+    its file (that mislabelled every map.c row as fade.c), so a real definition
+    always wins. Wrappers that only exist in repl.c have no definition and still
+    fall back to the hint."""
+    defs, calls = [], []
+    for fn in sorted(os.listdir(os.path.join(ROOT, "src", "game"))):
         if not fn.endswith(".c"):
             continue
         with io.open(os.path.join(ROOT, "src", "game", fn), encoding="utf-8",
                      errors="replace") as f:
             body = f.read()
-        if re.search(r'\b' + re.escape(name) + r'\s*\(', body):
-            return fn
-    return ""
+        if re.search(r'(?m)^[A-Za-z_][A-Za-z0-9_ \t\*]*\b'
+                     + re.escape(name) + r'\s*\(', body):
+            defs.append(fn)
+        elif re.search(r'\b' + re.escape(name) + r'\s*\(', body):
+            calls.append(fn)
+    if defs:
+        return defs[0]
+    if file_hint:
+        return file_hint
+    return calls[0] if calls else ""
 
 
 def rows():

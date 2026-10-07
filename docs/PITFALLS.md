@@ -675,3 +675,28 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     - **判据**：修后 `host: working directory = E:\FD2\port\build\sandbox`，
       沙箱内 `none↔all = 0/64000`（结论不变，且与真实目录跑出的帧逐字节一致），
       `E:\FD2\` 无新增文件。
+
+83. **`le_reserve_address_space()` 容忍的“非关键块”提交失败，会在真正用它的 harness 里变成
+    间歇性 `0xC0000005`**（第 38 轮，VGA `0xA0000`）：
+    `le_reserve_address_space_early()` 逐 64 KiB 提交 `0x10000..0x100000`，但只有
+    `< 0x70000` 的块失败才算致命（`critical_ok`）；`0xA0000..0xAFFFF`（VGA）块被某个
+    DLL/loader 映射占住时，宿主/`letest` 类工具照跑不误，而**任何真的写 VGA 的 harness**
+    （`map_view_update` 要写固定的 `0xA0504`）就会在那块上崩，且崩点看上去在 ucrt
+    `memset`（`memset((void*)0xA0000, …, 0x10000)` 的第一字节）而不是游戏代码。
+    - **判据**：VEH 打印 `AV eip=<ucrt> addr=000A0000`（或 `000A1000`），约 2% 概率。
+    - **修法**：reserve 之后**显式** `plat_commit(0xA0000, 0x10000, PLAT_PROT_RWX)`；
+      返回 `NULL` 就打印一行 `VGA block 0xA0000 unavailable` 并**干净退出 2**，绝不让它崩。
+    - **别误判**：`fadecheck`/`mapcheck` 约 2% 的 `reserve failed`（exit 2）与 `0xA0000` 独立
+      ——几乎不分配堆的 `fadecheck` 100 连跑也有 2 次，是“宿主映像/DLL 的 ASLR 落进低 1 MiB”
+      的环境噪声，不是本轮代码缺陷；本轮做的是把它从“崩”降级为“干净退出”。
+
+84. **对拍一个“先 memcpy 到栈再按 1-based 索引”的函数时，域外下标不可复现**（第 38 轮，
+    `map_unit_ping` 0x32230）：原文把 29 字节表 `*(0x52725)` `rep movsd; movsb` 拷到栈顶，
+    再取 `t[k-1]`（`k = *(u8*)(record+80*idx+32)`）。`k` 在 1..29 时等价于直接读全局表；
+    `k=0`/`k=255` 读的是 29 字节栈副本**之外**的栈垃圾，与原函数 ABI 无关。
+    - **症状**：harness 一开始让 `+32` 取 0..255，C 侧 `t[k-1]` 与机器码的栈布局不同，
+      于是 `FAIL map_unit_ping: idx=2 k=120 sfx 1/0` —— 看似是 C 的分支错，实际是域外下标。
+    - **修法**：harness 把 `record+32` 限在游戏真实域 **1..29**（`0x52725` 全 exe 只被此函数
+      引用，是 29 字节 1-based 表）；用表层值 0/1/2 循环把三个音效分支都覆盖。
+    - **一般化**：凡机器码先把全局 `memcpy` 到局部再索引，越界就落到栈布局，与 C 的
+      局部数组布局**不可能一致**；这类输入的“行为”本就未定义，harness 必须限定在真域内。

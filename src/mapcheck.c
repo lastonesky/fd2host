@@ -24,6 +24,7 @@
 #include "game/res.h"
 #include "game/dlg.h"
 #include "game/anim.h"
+#include "game/fade.h"
 #include "game/tables.h"
 
 /* anim.c reads the BIOS tick through DOS_LOWMEM_BASE (dos_lowmem_base is
@@ -104,6 +105,94 @@ static void install_hook(uint32_t addr, const void *dest)
     FlushInstructionCache(GetCurrentProcess(), p, 5);
 }
 
+/* --- 0x4E310/0x4E31C/0x32230/0x11CAC (round 38) -------------------------
+ *
+ * pal_anim_step (0x4E31C) writes the DAC with *inline* `out dx,al`
+ * instructions, so the C side's `outp` (0x37AE5) hook never sees the original
+ * side. Both sides feed one event log: the C goes through stub_outp, the
+ * machine code through a narrow VEH that only claims EXCEPTION_PRIV_INSTRUCTION
+ * inside 0x4E31C and only for the `out dx,al` opcode (0xEE). */
+typedef uint16_t (*tickw_fn)(void);
+typedef void (*palstep_fn)(void);
+typedef void (*ping_fn)(int);
+typedef void (*view_fn)(int);
+#define ORIG_TICKW   ((tickw_fn)   (uintptr_t)0x0004E310u)
+#define ORIG_PALSTEP ((palstep_fn) (uintptr_t)0x0004E31Cu)
+#define ORIG_PING    ((ping_fn)    (uintptr_t)0x00032230u)
+#define ORIG_VIEW    ((view_fn)    (uintptr_t)0x00011CACu)
+
+#define DAC_MAX 512
+static uint32_t g_dac[DAC_MAX], g_dac_saved[DAC_MAX];
+static int      g_dac_n, g_dac_n_saved, g_veh_n;
+
+static void dac_rec(unsigned port, int value)
+{
+    if (g_dac_n < DAC_MAX)
+        g_dac[g_dac_n++] = ((uint32_t)(port & 0xFFFFu) << 8)
+                         | (uint32_t)(value & 0xFF);
+}
+
+static int __cdecl stub_outp(unsigned port, int value)
+{
+    dac_rec(port, value);
+    return 0;
+}
+
+static LONG CALLBACK dac_veh(EXCEPTION_POINTERS *ep)
+{
+    CONTEXT *c = ep->ContextRecord;
+    uint8_t *p;
+
+    if (ep->ExceptionRecord->ExceptionCode != EXCEPTION_PRIV_INSTRUCTION)
+        return EXCEPTION_CONTINUE_SEARCH;
+    if (c->Eip < 0x0004E31Cu || c->Eip >= 0x0004E31Cu + 101u)
+        return EXCEPTION_CONTINUE_SEARCH;
+    p = (uint8_t *)(uintptr_t)c->Eip;
+    if (p[0] != 0xEE)                 /* only `out dx, al` is expected here */
+        return EXCEPTION_CONTINUE_SEARCH;
+    dac_rec((unsigned)(c->Edx & 0xFFFFu), (int)(c->Eax & 0xFFu));
+    g_veh_n++;
+    c->Eip += 1;
+    return EXCEPTION_CONTINUE_EXECUTION;
+}
+
+#define SFX_MAX 16
+static int         g_sfx_n, g_sfx_n_saved;
+static int         g_sfx_idx[SFX_MAX], g_sfx_idx_saved[SFX_MAX];
+static int         g_sfx_loops[SFX_MAX], g_sfx_loops_saved[SFX_MAX];
+static const void *g_sfx_bank[SFX_MAX], *g_sfx_bank_saved[SFX_MAX];
+
+static int __cdecl stub_sfx(const void *bank, int index, int loops)
+{
+    if (g_sfx_n < SFX_MAX) {
+        g_sfx_bank[g_sfx_n]  = bank;
+        g_sfx_idx[g_sfx_n]   = index;
+        g_sfx_loops[g_sfx_n] = loops;
+        g_sfx_n++;
+    }
+    return 0;
+}
+
+/* Game globals touched by the four functions. */
+#define byte_52725  ((const uint8_t *)(uintptr_t)0x00052725u)
+#define byte_54132  (*(uint8_t  *)(uintptr_t)0x00054132u)
+#define dword_53EEC (*(void    **)(uintptr_t)0x00053EECu)
+#define word_60000  (*(uint16_t *)(uintptr_t)0x00060000u)
+#define byte_60002  (*(uint8_t  *)(uintptr_t)0x00060002u)
+#define pal_data    ((uint8_t     *)(uintptr_t)0x00060003u)
+
+/* map_view_update writes 192 rows of 312 bytes at 0xA0504, so the VGA window
+ * fits in 64 KiB. */
+#define VGA_SZ 0x10000
+static uint8_t *res_bmp, *res_vga, *res_scr, *res_exp, *res_cells, *res_recs;
+
+/* int32 game globals the view pipeline mutates; snapshot per case. */
+static const uint32_t g_view_scalars[] = {
+    0x53C0F, 0x53C0B, 0x53C07, 0x53AF5, 0x53A04, 0x53A08, 0x51A0C,
+    0x53A00, 0x539F8, 0x539FC, 0x539F4, 0x53A40, 0x53C1F
+};
+#define N_VIEW_SCALARS ((int)(sizeof g_view_scalars / sizeof g_view_scalars[0]))
+
 /* Redirect the game's low-memory immediates (0x46C tick) into the mirror, so
  * the original 0x1297D reads the same bytes the C does. */
 static int patch_lowmem_refs(le_image *le, uint32_t mirror)
@@ -158,6 +247,102 @@ static size_t fill_tile_stream(uint8_t *p, uint8_t seed)
 
 static void fail(const char *what) { printf("FAIL %s: %s\n", what, g_why); g_fail = 1; }
 
+/* Deterministic input state for one map_view_update case. Called twice per
+ * case with the same g_rnd (the caller restores it), so the machine-code run
+ * and the C run start from identical memory. */
+static void setup_view(uint8_t *bitmap, uint8_t *scr, uint8_t *exp,
+                       uint8_t *cells, uint8_t *ctbl, uint8_t *recs,
+                       int *flag, int *ox, int *oy)
+{
+    static const int modes[12] = { 9, 17, 21, 22, 23, 24, 25, 27, 28,
+                                   29, 5, 3 };
+    uint16_t tick;
+    int      k, n;
+
+    switch (rnd() % 3) {
+    case 0:  *flag = 0;  break;
+    case 1:  *flag = 1;  break;
+    default: *flag = -1; break;
+    }
+    *ox = (int)(rnd() % 20);                    /* 32-wide map, 13-wide view */
+    *oy = (int)(rnd() % 24);                    /* 32-high map, 8-high view  */
+
+    /* cell / tile / record data - all in range so map_cell_info never reads
+     * past the tables (mapcheck's historical ASLR-sensitive fault). */
+    PTR(0x53A51) = cells;
+    I32(0x53A69) = (int32_t)(uintptr_t)ctbl;
+    I32(0x53AC1) = 32;
+    for (k = 0; k < 4 * 64 * 64; k++) cells[k] = (uint8_t)rnd();
+    for (k = 0; k < 1024; k++) ctbl[4 * k] = (uint8_t)rnd();
+
+    n = 1 + (int)(rnd() % 6);
+    I32(0x53BEB) = n;
+    PTR(0x53A45) = recs;
+    memset(recs, 0, 80 * 16);
+    for (k = 0; k < 80 * n; k++) recs[k] = (uint8_t)rnd();
+    for (k = 0; k < n; k++) {
+        recs[80 * k + 0]  = (uint8_t)(rnd() % 32);
+        recs[80 * k + 1]  = (uint8_t)(rnd() % 32);
+        recs[80 * k + 2]  = (uint8_t)(rnd() % 4);
+        recs[80 * k + 3]  = (uint8_t)(rnd() % 4);
+        recs[80 * k + 4]  = (uint8_t)(rnd() & 1);
+        recs[80 * k + 5]  = (uint8_t)(rnd() & 0xFF);
+        recs[80 * k + 7]  = (uint8_t)(rnd() & 0xFF);
+        recs[80 * k + 31] = (uint8_t)(rnd() & 0xFF);
+        recs[80 * k + 32] = (uint8_t)(rnd() & 0xFF);
+        recs[80 * k + 38] = (uint8_t)(rnd() & 1);
+        *(uint16_t *)(recs + 80 * k + 64) = (uint16_t)rnd();
+        *(uint16_t *)(recs + 80 * k + 66) = (uint16_t)rnd();
+    }
+
+    /* view / render-core globals (mirrors the map_render_view section). */
+    I32(0x53AA9) = *ox; I32(0x53AAD) = *oy;
+    I32(0x51A87) = 13; I32(0x51A8B) = 8;
+    I32(0x53C03) = modes[rnd() % 12];
+    I32(0x53C0B) = (int32_t)(rnd() % 4);   /* must stay < 4: dlg_portrait_draw */
+    I32(0x53C07) = (int32_t)(rnd() % 4);
+    I32(0x53C0F) = (int32_t)(int16_t)rnd();
+    I32(0x53B07) = (int32_t)(rnd() % 33);
+    I32(0x53B0B) = (int32_t)(rnd() % 12);
+    I32(0x53AF1) = (int32_t)(rnd() % 2);
+    I32(0x53AED) = (int32_t)(rnd() % 100);
+    I32(0x53AF5) = (int32_t)(rnd() % 100);
+    I32(0x51A93) = (rnd() & 1) ? -1 : (int32_t)(rnd() % 20);
+    I32(0x53A40) = (int32_t)(rnd() % 3);
+    I32(0x53C1F) = (int32_t)(rnd() % 20);
+    I32(0x53A00) = (int32_t)(int16_t)rnd();
+    I32(0x539F8) = (int32_t)(int16_t)rnd();
+    I32(0x539FC) = (rnd() % 4 == 0) ? 15 : (int32_t)(rnd() % 16);
+    I32(0x539F4) = (int32_t)(int16_t)rnd();
+    B8(0x51A10)  = (uint8_t)(rnd() % 193);
+
+    /* cursor / reveal state. */
+    I32(0x51A83) = (int32_t)(rnd() % 8);
+    I32(0x53AB1) = (int32_t)(rnd() % 32);
+    I32(0x53AB5) = (int32_t)(rnd() % 32);
+    B8(0x51AAB)  = (uint8_t)(rnd() & 1);
+    B8(0x51AAC)  = (uint8_t)(rnd() & 1);
+    I32(0x53ABD) = (int32_t)(rnd() % 12);
+    I32(0x53AB9) = (int32_t)(rnd() % 12);
+    I32(0x51A0C) = (int32_t)(rnd() % 256);
+    I32(0x53A04) = (int32_t)(rnd() & 1);
+    I32(0x53A08) = (int32_t)(int16_t)rnd();
+
+    /* palette-animation state + BIOS tick (gate word_60000 near the tick so
+     * pal_anim_step actually uploads on most of the flag==0 cases). */
+    tick = (uint16_t)rnd();
+    *(volatile uint16_t *)(uintptr_t)G_TICK = tick;
+    word_60000 = (uint16_t)(tick - (rnd() % 4));
+    byte_60002 = (uint8_t)(rnd() % 16);
+
+    memset(bitmap, 0x66, BITMAP_SZ);
+    for (k = 0; k < SCR_SZ; k++) scr[k] = (uint8_t)rnd();
+    for (k = 0; k < EXP_SZ; k++) exp[k] = (uint8_t)rnd();
+    memset((void *)(uintptr_t)0xA0000u, 0x77, VGA_SZ);
+    PTR(0x53AFF) = scr;
+    PTR(0x53B03) = exp;
+}
+
 int main(int argc, char **argv)
 {
     le_image le;
@@ -185,10 +370,29 @@ int main(int argc, char **argv)
     uint8_t *recB  = (uint8_t *)malloc(80 * 16);
 
     if (le_reserve_address_space() != 0) { printf("reserve failed\n"); return 2; }
+    /* The VGA block is not critical to the loader, so a failed commit there is
+     * tolerated by le_reserve_address_space(). The view test writes through
+     * the fixed 0xA0504, so commit 0xA0000 explicitly and bail out cleanly
+     * (never crash) when it is not available. */
+    if (plat_commit((uintptr_t)0xA0000u, VGA_SZ, PLAT_PROT_RWX) == NULL) {
+        fprintf(stderr, "mapcheck: VGA block 0xA0000 unavailable, aborting\n");
+        return 2;
+    }
     setvbuf(stdout, NULL, _IONBF, 0);
     if (le_open(&le, (argc > 1) ? argv[1] : "E:\\FD2\\FD2.EXE") != 0) return 1;
     if (le_map_and_relocate(&le, &applied) != 0) return 1;
     printf("mapped: %u fixups applied, original code ready\n", (unsigned)applied);
+
+    /* The view-case result buffers are allocated after the guest window is
+     * reserved: every allocation before le_reserve_address_space() grows the
+     * CRT heap and can push it into 0x10000..0x70000, making the reservation
+     * fail intermittently. */
+    res_bmp   = (uint8_t *)malloc(BITMAP_SZ);
+    res_vga   = (uint8_t *)malloc(VGA_SZ);
+    res_scr   = (uint8_t *)malloc(SCR_SZ);
+    res_exp   = (uint8_t *)malloc(EXP_SZ);
+    res_cells = (uint8_t *)malloc(4 * 64 * 64);
+    res_recs  = (uint8_t *)malloc(80 * 16);
 
     install_hook(0x3790A, stub_delay);
     /* The map render core reaches the Watcom CRT heap (0x24D22 -> malloc /
@@ -197,12 +401,20 @@ int main(int argc, char **argv)
     install_hook(0x3706E, stub_malloc);
     install_hook(0x3771C, stub_memmove);
     install_hook(0x3776E, stub_free);
+    install_hook(0x37AE5, stub_outp);    /* C-side DAC writes           */
+    install_hook(0x25A96, stub_sfx);     /* map_unit_ping sound effect  */
+    /* The original 0x4E31C writes the DAC with inline `out` - let the VEH
+     * service exactly that instruction range (dos.c does the same in the
+     * host, but this harness must not link the whole DOS layer). */
+    AddVectoredExceptionHandler(1, dac_veh);
     printf("mapcheck: redirected %d low-memory references to 0x%X\n",
            patch_lowmem_refs(&le, MIRROR), MIRROR);
 
     if (!bitmap || !tileset || !lmi || !dstA || !dstB || !recs || !cells || !ctbl || !nres || !sbank || !pbank || !ibank)
         return 2;
     if (!scrA || !scrB || !expA || !expB || !cellA || !cellB || !recA || !recB)
+        return 2;
+    if (!res_bmp || !res_vga || !res_scr || !res_exp || !res_cells || !res_recs)
         return 2;
 
     /* ---- tileset layout: table at +6, 32 sub-images at +22 (indices 0..18
@@ -903,6 +1115,205 @@ int main(int argc, char **argv)
                 fail("map_draw_cursor");
             }
         }
+
+        /* ---- pal_tick_word (0x4E310) / pal_anim_step (0x4E31C) -------- */
+        if (!g_fail) {
+            /* The tick word itself: both sides read the same mirrored BDA. */
+            {
+                uint16_t t = (uint16_t)rnd();
+
+                *(volatile uint16_t *)(uintptr_t)G_TICK = t;
+                cases++;
+                if (ORIG_TICKW() != pal_tick_word() || pal_tick_word() != t) {
+                    snprintf(g_why, sizeof g_why, "tick=%u -> %u/%u", t,
+                             (unsigned)ORIG_TICKW(), (unsigned)pal_tick_word());
+                    fail("pal_tick_word");
+                }
+            }
+            for (i = 0; i < 6 && !g_fail; i++) {
+                uint16_t tick = (uint16_t)rnd();
+                uint16_t w0;
+                uint8_t  f0 = (uint8_t)(rnd() % 16);
+                uint16_t wa, wb;
+                uint8_t  fa, fb;
+                int      k, da, db;
+
+                /* gate: only (uint16_t)(tick - w0) >= 2 may upload, including
+                 * the 0xFFFF -> 0x0000 wrap. */
+                switch (rnd() % 4) {
+                case 0:  w0 = tick; break;
+                case 1:  w0 = (uint16_t)(tick - 1); break;
+                case 2:  w0 = (uint16_t)(tick - 2 - (rnd() % 0x10000)); break;
+                default: w0 = (uint16_t)(tick - 0x8000); break;
+                }
+                /* byte_60002 can read up to 3*15+48 bytes past 0x60003 */
+                for (k = 0; k < 128; k++) pal_data[k] = (uint8_t)rnd();
+
+                *(volatile uint16_t *)(uintptr_t)G_TICK = tick;
+                word_60000 = w0; byte_60002 = f0;
+                g_dac_n = 0;
+                ORIG_PALSTEP();
+                da = g_dac_n;
+                memcpy(g_dac_saved, g_dac, sizeof(uint32_t) * (size_t)da);
+                wa = word_60000; fa = byte_60002;
+
+                *(volatile uint16_t *)(uintptr_t)G_TICK = tick;
+                word_60000 = w0; byte_60002 = f0;
+                g_dac_n = 0;
+                pal_anim_step();
+                db = g_dac_n;
+                wb = word_60000; fb = byte_60002;
+                cases++;
+                if (da != db
+                    || memcmp(g_dac_saved, g_dac,
+                              sizeof(uint32_t) * (size_t)da) != 0
+                    || wa != wb || fa != fb) {
+                    snprintf(g_why, sizeof g_why,
+                             "tick=%u w0=%u frame=%u dac %d/%d w %u/%u f %u/%u",
+                             tick, w0, f0, da, db, wa, wb, fa, fb);
+                    fail("pal_anim_step");
+                }
+            }
+        }
+
+        /* ---- map_unit_ping (0x32230) --------------------------------- */
+        for (i = 0; i < 6 && !g_fail; i++) {
+            int     n   = 1 + (int)(rnd() % 8);
+            int     idx = (int)(rnd() % n);
+            uint8_t ba  = (uint8_t)rnd();
+            int     k, ka, na, nb, c0, c1;
+            int     skip = (int)(rnd() & 1);   /* 1 = rec_skip() reports 1 */
+
+            /* The table's 29 entries pick the unit class; cycle 0/1/2 so all
+             * three effect branches are hit for in-range indices. */
+            for (k = 0; k < 29; k++)
+                ((uint8_t *)byte_52725)[k] = (uint8_t)(rnd() % 3);
+            dword_53EEC = (void *)(uintptr_t)0x00C0FFEEu;   /* sentinel bank */
+            I32(0x53BEB) = n;
+            PTR(0x53A45) = recs;
+            memset(recs, 0, 80 * 16);
+            for (k = 0; k < 80 * n; k++) recs[k] = (uint8_t)rnd();
+            recs[80 * idx + 7] = (uint8_t)(rnd() & 0xFF);
+            if (recs[80 * idx + 7] == 0x1C)      /* first rec_skip test */
+                recs[80 * idx + 7] = 0;
+            if (skip) {
+                recs[80 * idx + 0x20] = 0x13;    /* rec_skip -> 1 */
+            } else {
+                /* record +32 is a valid 1..29 index into the table and also
+                 * doubles as rec_skip's p[0x20]; keep it away from 0x13.
+                 * Out-of-range values would make the original index its
+                 * stack copy out of bounds (out of the function's domain). */
+                ka = 1 + (int)(rnd() % 29);
+                if (ka == 0x13)
+                    ka = 1;
+                recs[80 * idx + 0x20] = (uint8_t)ka;
+                recs[80 * idx + 0x1F] = (uint8_t)(rnd() & 0xFF);
+                if (recs[80 * idx + 0x1F] == 4 || recs[80 * idx + 0x1F] == 5)
+                    recs[80 * idx + 0x1F] = 0;
+            }
+            byte_54132 = ba;
+            memcpy(recB, recs, 80 * n);
+
+            g_sfx_n = 0;
+            ORIG_PING(idx);
+            na = g_sfx_n;
+            memcpy((void *)g_sfx_bank_saved,  (const void *)g_sfx_bank,
+                   sizeof(void *) * (size_t)na);
+            memcpy(g_sfx_idx_saved,   g_sfx_idx,   sizeof(int)    * (size_t)na);
+            memcpy(g_sfx_loops_saved, g_sfx_loops, sizeof(int)    * (size_t)na);
+            c0 = byte_54132;
+
+            byte_54132 = ba;
+            g_sfx_n = 0;
+            map_unit_ping(idx);
+            nb = g_sfx_n;
+            c1 = byte_54132;
+            cases++;
+            if (na != nb
+                || memcmp((const void *)g_sfx_bank_saved, (const void *)g_sfx_bank,
+                          sizeof(void *) * (size_t)na) != 0
+                || memcmp(g_sfx_idx_saved, g_sfx_idx,
+                          sizeof(int) * (size_t)na) != 0
+                || memcmp(g_sfx_loops_saved, g_sfx_loops,
+                          sizeof(int) * (size_t)na) != 0
+                || c0 != c1 || memcmp(recB, recs, 80 * n) != 0) {
+                snprintf(g_why, sizeof g_why,
+                         "idx=%d k=%u skip=%u c=%d/%d sfx %d/%d",
+                         idx, (unsigned)recs[80 * idx + 32], skip, c0, c1,
+                         na, nb);
+                fail("map_unit_ping");
+            }
+        }
+
+        /* ---- map_view_update (0x11CAC) ------------------------------- */
+        for (i = 0; i < 8 && !g_fail; i++) {
+            uint32_t save = g_rnd;
+            int      flag, ox, oy, k, mismatch = 0;
+            int      da, wa, fa, sb0;
+            int32_t  sa[N_VIEW_SCALARS], cur[N_VIEW_SCALARS];
+
+            setup_view(bitmap, scrA, expA, cells, ctbl, recs,
+                       &flag, &ox, &oy);
+            g_dac_n = 0;
+            ORIG_VIEW(flag);
+            da = g_dac_n;
+            memcpy(g_dac_saved, g_dac, sizeof(uint32_t) * (size_t)da);
+            wa = word_60000; fa = byte_60002;
+            sb0 = (int)B8(0x51A10);
+            memcpy(res_bmp,   bitmap, BITMAP_SZ);
+            memcpy(res_vga,   (void *)(uintptr_t)0xA0000u, VGA_SZ);
+            memcpy(res_scr,   scrA,   SCR_SZ);
+            memcpy(res_exp,   expA,   EXP_SZ);
+            memcpy(res_cells, cells,  4 * 64 * 64);
+            memcpy(res_recs,  recs,   80 * 16);
+            for (k = 0; k < N_VIEW_SCALARS; k++)
+                sa[k] = I32(g_view_scalars[k]);
+
+            g_rnd = save;
+            setup_view(bitmap, scrA, expA, cells, ctbl, recs,
+                       &flag, &ox, &oy);
+            g_dac_n = 0;
+            map_view_update(flag);
+            for (k = 0; k < N_VIEW_SCALARS; k++)
+                cur[k] = I32(g_view_scalars[k]);
+            cases++;
+
+            if (da != g_dac_n
+                || memcmp(g_dac_saved, g_dac,
+                          sizeof(uint32_t) * (size_t)da) != 0
+                || wa != word_60000 || fa != byte_60002 || sb0 != (int)B8(0x51A10)
+                || memcmp(res_bmp, bitmap, BITMAP_SZ) != 0
+                || memcmp(res_vga, (void *)(uintptr_t)0xA0000u, VGA_SZ) != 0
+                || memcmp(res_scr, scrA, SCR_SZ) != 0
+                || memcmp(res_exp, expA, EXP_SZ) != 0
+                || memcmp(res_cells, cells, 4 * 64 * 64) != 0
+                || memcmp(res_recs, recs, 80 * 16) != 0
+                || memcmp(sa, cur, sizeof sa) != 0)
+                mismatch = 1;
+            if (mismatch) {
+                unsigned where = 0;
+                for (where = 0; where < BITMAP_SZ; where++)
+                    if (res_bmp[where] != bitmap[where]) break;
+                snprintf(g_why, sizeof g_why,
+                         "flag=%d ox=%d oy=%d dac %d/%d bitmap@%u scr%d exp%d "
+                         "cells%d recs%d scal%d",
+                         flag, ox, oy, da, g_dac_n, where,
+                         memcmp(res_scr, scrA, SCR_SZ) != 0,
+                         memcmp(res_exp, expA, EXP_SZ) != 0,
+                         memcmp(res_cells, cells, 4 * 64 * 64) != 0,
+                         memcmp(res_recs, recs, 80 * 16) != 0,
+                         memcmp(sa, cur, sizeof sa) != 0);
+                fail("map_view_update");
+            }
+        }
+    }
+
+    /* The machine-code side of 0x4E31C only runs if the narrow VEH serviced
+     * its inline `out` instructions; a clean run without any hit means the
+     * harness silently stopped comparing the original. */
+    if (!g_fail && g_veh_n == 0) {
+        snprintf(g_why, sizeof g_why, "dac_veh never fired (0x4E31C not run?)");
+        fail("dac_veh self-check");
     }
 
     printf("%s: %ld cases, %d failures\n", g_fail ? "FAILED" : "PASS",

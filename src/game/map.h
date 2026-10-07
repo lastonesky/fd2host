@@ -28,4 +28,11 @@ void map_cell_info(int x, int y, uint8_t *out);
 void map_blit_cell_sprite(void *dst, int x, int y);
 void map_refresh_records(void);
 
+/* 0x32230 - per-record movement blip (SFX + byte_54132 counter). */
+void map_unit_ping(int idx);
+
+/* 0x11CAC - full map-view refresh; `flag != 0` skips the DAC palette
+ * animation step. */
+void map_view_update(int flag);
+
 #endif /* GAME_MAP_H */

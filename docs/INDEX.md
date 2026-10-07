@@ -64,6 +64,7 @@
 | `rounds/35-msg-portrait.md` | 明细 | 对话框/头像合成三件套 `0x1956B`/`0x1974C`/`0x26996`（112–114 个；新模块 `game/msg.c`，第 28 轮后置的 `guest_mem` 堆簇；`msgcheck` 465/0） | §65 |
 | `rounds/36-ev-handlers.md` | 明细 | `funcs_1199C` 事件 handler 闭包子集 `0x34738`…`0x35258`（115–125 个；新模块 `game/ev.c`，6 服务记录桩 + 记录表逐字节 + 归一化返回值，`evcheck` 2940/0）+ `_chkstk` 保持 EAX ⇒ 部分返回值无定义（§8-79） | §66 |
 | `rounds/37-map-view-core.md` | 明细 | 地图视图渲染核 `0x11EEE`/`0x24D22`/`0x122DC`/`0x1ACF3`（126–129 个；并入 `game/map.c`，CRT `malloc/memmove/free` 重定向 + 三块缓冲逐字节 + 6 相位全局，`mapcheck` 112000/0；关键手法 `apply_tinfo` 回写真 cdecl 原型再反编译，§8-80） | §67 |
+| `rounds/38-palette-and-map-refresh.md` | 明细 | 调色板动画 + 地图视图刷新 `0x4E310`/`0x4E31C`/`0x32230`/`0x11CAC`（130–133 个；`fade.c`/`map.c`，窄 VEH `out` 陷阱 + 事件序列/整块 VGA 逐字节，`mapcheck` 122500/0；新蹈坑：非关键 VGA 块未提交致间歇 AV（§8-83）、域外 `t[k-1]` 不可复现（§8-84）） | §68 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。

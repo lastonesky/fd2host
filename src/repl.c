@@ -287,6 +287,8 @@ static const struct repl_entry g_repl[] = {
     { 0x11D40, "pal_fade_range",     (void *)pal_fade_range,      REPL_FADE },
     { 0x1F882, "pal_fade_out",       (void *)pal_fade_out,        REPL_FADE },
     { 0x1F525, "pal_fade_in",        (void *)pal_fade_in,         REPL_FADE },
+    { 0x4E310, "pal_tick_word",      (void *)pal_tick_word,       REPL_FADE },
+    { 0x4E31C, "pal_anim_step",      (void *)pal_anim_step,       REPL_FADE },
 
     /* --- hot leaves (round 52, src/leafcheck.c) --------------------------
      * Small, frequently called helpers found by tools/func_ranking.py. */
@@ -314,6 +316,8 @@ static const struct repl_entry g_repl[] = {
     { 0x24D22, "map_scroll_lines",    (void *)map_scroll_lines,     REPL_MAP },
     { 0x122DC, "map_reveal_cursor",   (void *)map_reveal_cursor,    REPL_MAP },
     { 0x1ACF3, "map_draw_cursor",     (void *)map_draw_cursor,      REPL_MAP },
+    { 0x32230, "map_unit_ping",       (void *)map_unit_ping,        REPL_MAP },
+    { 0x11CAC, "map_view_update",     (void *)map_view_update,      REPL_MAP },
 
     /* --- portrait icon draw chain (src/game/dlg.c) -----------------------
      * 0x127E0 draws one record's 24x24 icon (sprite24 plain/ramp24) and
