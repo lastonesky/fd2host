@@ -499,3 +499,10 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     顺带踩的两个诊断坑：① 回读比较的内存序是 **RGBA**（着色器写 `c.bgr` 后得到真 RGB），
     一开始按 BGRA 比会把所有像素算成不匹配；② 用动画帧判断方向会被"回读晚一帧"干扰，
     要用 `FD2_TESTPATTERN` 的静态图案。见 `docs/rounds/16-entry-layer.md` §46.12。
+68. **用 `sed s/…/…/` 改文档里带 `|` 的行会按正则跑飞，把整份文档改烂**（第 46 轮）：
+    想更新 AGENTS.md 里 `--replace=none|all|rle,gfx,...` 这一行，写了
+    `sed -i 's#`--replace=none\|all\|rle,gfx,sprite24,util,path`#…#` ——`\|` 在 BRE 里是
+    交替运算符，模式变成"这些词任意一个"，于是**全文多处被替换**（`m--replace=...oc` 这种）。
+    抢救：`git checkout HEAD -- AGENTS.md` 后改用 edit 工具做**唯一一处**替换。
+    **规则**：改 Markdown（尤其含 `|`/`/`/`*` 的行）用编辑工具按精确文本替换，不要 `sed`；
+    真要 sed，先用 `grep -c` 确认唯一匹配。

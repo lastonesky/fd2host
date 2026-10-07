@@ -125,9 +125,9 @@ int main(int argc, char **argv)
             int      use_old = (int)(rnd() & 1);
 
             oa = ORIG_LOAD(g_path, use_old ? malloc(16) : NULL, i);
-            osz = GUEST_SIZE;
+            osz = GUEST_SIZE;              /* snapshot after the original */
             ob = res_load(g_path, use_old ? malloc(16) : NULL, i);
-            msz = res_size;
+            msz = GUEST_SIZE;              /* the translation overwrites it */
             cases_run++;
 
             if (osz != (uint32_t)g_len[i] || msz != (uint32_t)g_len[i]) {

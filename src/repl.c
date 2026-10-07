@@ -6,14 +6,14 @@
  * pointer) then reach the C implementation.
  *
  * Deliberately NOT wired in yet:
- *   - res.c (0x111BA): the original allocates through the Watcom CRT heap,
- *     and the game frees those buffers with the same heap. Replacing it with
- *     a libc-malloc version would mix heaps. It goes in together with the
- *     CRT heap replacement.
  *   - 0x15E71 (restore + free a VGA snapshot block) and 0x15E9E (save one):
- *     same heap reasoning - 0x15E71 has callers outside the replaced set
- *     that hand it Watcom-CRT buffers. dlg.c calls both at their original
- *     addresses instead, which keeps one heap on every path.
+ *     heap-coupled - dlg.c calls both at their original addresses instead,
+ *     which keeps one heap on every path. They can move to C once their
+ *     snapshot buffers also come from guest_mem (docs/TRANSLATION.md §5).
+ *
+ * res.c (0x111BA) IS wired in: it allocates/frees through guest_mem.h, so it
+ * uses the game's heap, and publishes the size to the game's dword_53BFF -
+ * one heap, one observable.
  *
  * See repl.h for why this is safe. Groups: rle, gfx, sprite24, util, path,
  * dlg, rec, svc, vm.
@@ -35,6 +35,7 @@
 #include "game/rec.h"
 #include "game/svc.h"
 #include "game/vm.h"
+#include "game/res.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -171,6 +172,13 @@ static const struct repl_entry g_repl[] = {
      * It reaches the services through their original addresses, which is
      * how src/game/dlg.c and src/game/res.c are reached from here too. */
     { 0x15F84, "vm_run",             (void *)vm_run,              REPL_VM },
+
+    /* --- LMI resource loader (src/game/res.c) ---------------------------
+     * Was held back until the heap question was settled: res_load frees the
+     * caller's old_buffer and returns a buffer the game later frees, so both
+     * must be the game's heap - guest_mem.h now provides exactly that, and
+     * the size is published to dword_53BFF (0x53BFF). */
+    { 0x111BA, "res_load",           (void *)res_load,            REPL_RES },
 };
 
 unsigned repl_parse(const char *spec)
@@ -196,6 +204,7 @@ unsigned repl_parse(const char *spec)
         else if (!plat_stricmp(tok, "rec"))      mask |= REPL_REC;
         else if (!plat_stricmp(tok, "svc"))      mask |= REPL_SVC;
         else if (!plat_stricmp(tok, "vm"))       mask |= REPL_VM;
+        else if (!plat_stricmp(tok, "res"))      mask |= REPL_RES;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

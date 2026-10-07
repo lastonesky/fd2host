@@ -42,13 +42,11 @@ MODULE_INFO = {
     "rec.c":      ("reccheck",      "28739", "character record table"),
     "svc.c":      ("typecheck",     "1176",  "BIOS tick wait + PCM SFX (also in typecheck)"),
     "vm.c":       ("vmcheck",       "5512",  "script/text VM 0x15F84"),
+    "res.c":      ("rescheck",      "160",   "LMI resource loader; heap via guest_mem"),
 }
 
 # Translated and checked, but deliberately *not* in repl.c yet. Keep the reason.
-NOT_WIRED = [
-    (0x111BA, "res_load", "src/game/res.c", "res", "rescheck", "160",
-     "translated+checked, not wired: Watcom CRT heap (TRANSLATION §5 item 2)"),
-]
+NOT_WIRED = []
 
 ENTRY = re.compile(
     r'\{\s*(0x[0-9A-Fa-f]+),\s*"([^"]+)",\s*\(void\s*\*\)\s*([A-Za-z0-9_]+),\s*(REPL_[A-Z0-9_]+)\s*\}')
