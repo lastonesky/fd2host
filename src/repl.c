@@ -37,6 +37,7 @@
 #include "game/vm.h"
 #include "game/res.h"
 #include "game/bgm.h"
+#include "game/scene.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -194,6 +195,12 @@ static const struct repl_entry g_repl[] = {
      * and the AIL sequence entry points through their original addresses, so
      * this replaces exactly what the machine code did. */
     { 0x25977, "bgm_play",           (void *)bgm_play,            REPL_BGM },
+
+    /* --- main state machine scenes (src/game/scene.c) --------------------
+     * First scene: 0x22E5C (the dword_53ECC==1 transition card), a pure
+     * service sequence; it calls the services through their original
+     * addresses (bgm_play / svc_wait_ticks / res_load are already C here). */
+    { 0x22E5C, "scene_card",         (void *)scene_card,          REPL_SCENE },
 };
 
 unsigned repl_parse(const char *spec)
@@ -221,6 +228,7 @@ unsigned repl_parse(const char *spec)
         else if (!plat_stricmp(tok, "vm"))       mask |= REPL_VM;
         else if (!plat_stricmp(tok, "res"))      mask |= REPL_RES;
         else if (!plat_stricmp(tok, "bgm"))      mask |= REPL_BGM;
+        else if (!plat_stricmp(tok, "scene"))    mask |= REPL_SCENE;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

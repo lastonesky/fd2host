@@ -73,6 +73,15 @@
 6. **回归**：动了宿主行为就跑 `pwsh -File port\regress.ps1`，以 **8/8 PASS** 为准；
    涉及显示还要同帧 `--screenshot` 对拍。**只在 `build/sandbox` 里做破坏性测试**，
    不要动 `E:\FD2` 下的真实存档（`FD2.SAV` 是原件）。
+   **Linux 侧分级（别每轮都拍）**：
+   - **每轮**（哪怕只转译游戏逻辑 C）：`make -f Makefile.linux`（构建，0 warning）、
+     `letest-linux`（三对象哈希）、`doscheck-linux`（49 断言）—— 秒级，能抓到"编不过/平台缝"。
+   - **可选廉价冒烟**：`build/fd2host-linux32 --exit-after=15`（或 `--exit-when-file=FD2.TMP:207360`）
+     不抓图、不等 tick600，只确认能跑到 `repl: installed N` + FD2.TMP 尺寸对——约 15 s。
+   - **Linux 同 tick 截图对拍（~35 s）只在**：动 `le.c`/`dos.c`/`platform_*`/渲染/输入/入口层/
+     `guest_mem`/音频栈，或里程碑节点。纯游戏逻辑转译（bgm/scene/rec…）不必每轮跑：
+     新增风险仅是"编不过"（构建已抓），运行期行为由 Windows 的 `*check`+`regress`+A/B 钉住。
+   - 抓图一律用 `--exit-when-file=<bmp>:256054` 提前退出，`--exit-after` 只当上限（不要空等到上限）。
 
 ---
 

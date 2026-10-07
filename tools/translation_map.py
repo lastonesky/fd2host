@@ -44,6 +44,7 @@ MODULE_INFO = {
     "vm.c":       ("vmcheck",       "5512",  "script/text VM 0x15F84"),
     "res.c":      ("rescheck",      "160",   "LMI resource loader; heap via guest_mem"),
     "bgm.c":      ("bgmcheck",      "6000",  "play_bgm 0x25977; services hooked, event log compared"),
+    "scene.c":    ("scenecheck",    "100",   "scene_card 0x22E5C; service sequence compared"),
 }
 
 # Translated and checked, but deliberately *not* in repl.c yet. Keep the reason.
