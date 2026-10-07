@@ -45,6 +45,7 @@
 #include "game/tables.h"
 #include "game/unit.h"
 #include "game/fx.h"
+#include "game/msg.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -160,6 +161,17 @@ static const struct repl_entry g_repl[] = {
     { 0x16B43, "dlg_close_box",       (void *)dlg_close_box,        REPL_DLG },
     { 0x168B6, "dlg_box_stage",       (void *)dlg_box_stage,        REPL_DLG },
     { 0x1685C, "dlg_frame_tile",      (void *)dlg_frame_tile,       REPL_DLG },
+
+    /* --- dialogue portrait compositor (src/game/msg.c) ------------------
+     * 0x1956B / 0x1974C / 0x26996 share the three screen-pair globals
+     * dword_53C5B/F/63, so they must be enabled as a unit - REPL_DLG is
+     * atomic and already owns the box helpers they call. The buffers are
+     * allocated/freed through guest_mem (one heap); the services go through
+     * their original addresses (dlg_box_stage / res_load / rle2_blit_mirror
+     * are already C in the host). */
+    { 0x1956B, "msg_open_portrait",   (void *)msg_open_portrait,    REPL_DLG },
+    { 0x1974C, "msg_blit_band",       (void *)msg_blit_band,        REPL_DLG },
+    { 0x26996, "msg_close_portrait",  (void *)msg_close_portrait,   REPL_DLG },
     { 0x16C57, "dlg_wait_key",        (void *)dlg_wait_key,         REPL_DLG },
     { 0x164E8, "dlg_type_step",       (void *)dlg_type_step,        REPL_DLG },
 

@@ -47,6 +47,7 @@ MODULE_INFO = {
     "bgm.c":      ("bgmcheck",      "6000",  "play_bgm 0x25977; services hooked, event log compared"),
     "scene.c":    ("scenecheck",    "100",   "scene_card 0x22E5C; service sequence compared"),
     "fade.c":     ("fadecheck",     "4000",  "palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared"),
+    "msg.c":      ("msgcheck",      "465",   "portrait compositor 0x1956B/0x1974C/0x26996; event log + screen pair compared"),
 }
 
 # Translated and checked, but deliberately *not* in repl.c yet. Keep the reason.
