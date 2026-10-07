@@ -230,6 +230,9 @@ static const struct repl_entry g_repl[] = {
     { 0x1297D, "anim_frame_step",    (void *)anim_frame_step,     REPL_MAP },
     { 0x12C0D, "dlg_portrait_find",  (void *)dlg_portrait_find,   REPL_DLG },
     { 0x4EB48, "tbl_off627D8",       (void *)tbl_off627D8,        REPL_UTIL },
+    { 0x187D6, "dlg_draw_number",    (void *)dlg_draw_number,      REPL_DLG },
+    { 0x1875D, "dlg_draw_number_pair", (void *)dlg_draw_number_pair, REPL_DLG },
+    { 0x1AEB1, "dlg_draw_number_signed", (void *)dlg_draw_number_signed, REPL_DLG },
 };
 
 unsigned repl_parse(const char *spec)

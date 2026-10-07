@@ -48,6 +48,11 @@ typedef void *(*tbl_fn)(int);
 #define ORIG_CELL   ((cell_fn)  (uintptr_t)0x00012E38u)
 #define ORIG_FIND   ((find_fn)  (uintptr_t)0x00012C0Du)
 #define ORIG_TBL    ((tbl_fn)   (uintptr_t)0x0004EB48u)
+typedef void (*num_fn)(void *, int, int, int, int);
+typedef void (*sign_fn)(void *, int, int);
+#define ORIG_NUM     ((num_fn)  (uintptr_t)0x000187D6u)
+#define ORIG_NUMPAIR ((num_fn)  (uintptr_t)0x0001875Du)
+#define ORIG_NUMSIGN ((sign_fn) (uintptr_t)0x0001AEB1u)
 
 #define BITMAP_SZ (400 * 1024)
 #define TILE_W    24
@@ -141,6 +146,7 @@ int main(int argc, char **argv)
     uint8_t *recs = (uint8_t *)malloc(80 * 16);
     uint8_t *cells = (uint8_t *)malloc(4 * 64 * 64);
     uint8_t *ctbl = (uint8_t *)malloc(4 * 1024);
+    uint8_t *nres = (uint8_t *)malloc(32 * 1024);
 
     if (le_reserve_address_space() != 0) { printf("reserve failed\n"); return 2; }
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -152,7 +158,7 @@ int main(int argc, char **argv)
     printf("mapcheck: redirected %d low-memory references to 0x%X\n",
            patch_lowmem_refs(&le, MIRROR), MIRROR);
 
-    if (!bitmap || !tileset || !lmi || !dstA || !dstB || !recs || !cells || !ctbl)
+    if (!bitmap || !tileset || !lmi || !dstA || !dstB || !recs || !cells || !ctbl || !nres)
         return 2;
 
     /* ---- tileset layout: table at +6, 4 sub-images at +22 ---- */
@@ -176,6 +182,28 @@ int main(int argc, char **argv)
             off += 4 + (uint32_t)fill_tile_stream(p + 4, (uint8_t)(i * 23 + 5));
         }
     }
+
+    /* number sprites at *(0x53A81): 256 sub-images, each u16 w=8,h=8 plus
+     * 8 rows of one "literal 8" token, so any digit index resolves. */
+    {
+        uint32_t off = 6 + 4 * 256;
+        int k, y, x;
+        for (k = 0; k < 256; k++) {
+            uint8_t *p = nres + off;
+            *(uint32_t *)(nres + 6 + 4 * k) = off;
+            *(uint16_t *)p = 8;
+            *(uint16_t *)(p + 2) = 8;
+            {
+                uint8_t *q = p + 4;
+                for (y = 0; y < 8; y++) {
+                    *q++ = (uint8_t)((2 << 6) | 7);
+                    for (x = 0; x < 8; x++) *q++ = (uint8_t)(k + x + y);
+                }
+                off += (uint32_t)(q - p);
+            }
+        }
+    }
+    PTR(0x53A81) = nres;
 
     PTR(0x53A49) = bitmap;
     PTR(0x53A4D) = tileset;
@@ -356,6 +384,56 @@ int main(int argc, char **argv)
             if (ra != rc) {
                 snprintf(g_why, sizeof g_why, "n=%d want=%d -> %d/%d", n, want, ra, rc);
                 fail("dlg_portrait_find"); break;
+            }
+        }
+
+        /* ---- dlg_draw_number (0x187D6) -------------------------------- */
+        for (i = 0; i < 20 && !g_fail; i++) {
+            int pitch = 320;
+            int digits = 1 + (int)(rnd() % 3);
+            int value = (int)(rnd() % (digits == 3 ? 2000 : (digits == 2 ? 200 : 10)));
+            int base = (int)(rnd() % 200);
+            memset(dstA, 0x33, BITMAP_SZ);
+            memset(dstB, 0x33, BITMAP_SZ);
+            ORIG_NUM(dstA, pitch, value, base, digits);
+            dlg_draw_number(dstB, pitch, value, base, digits);
+            cases++;
+            if (memcmp(dstA, dstB, BITMAP_SZ) != 0) {
+                size_t k, where = 0;
+                for (k = 0; k < BITMAP_SZ; k++)
+                    if (dstA[k] != dstB[k]) { where = k; break; }
+                snprintf(g_why, sizeof g_why, "value=%d base=%d digits=%d @%u (%02X/%02X)",
+                         value, base, digits, (unsigned)where, dstA[where], dstB[where]);
+                fail("dlg_draw_number"); break;
+            }
+        }
+
+        /* ---- dlg_draw_number_pair (0x1875D) --------------------------- */
+        for (i = 0; i < 10 && !g_fail; i++) {
+            int pitch = 320, digits = 2 + (int)(rnd() % 2);
+            int value = (int)(rnd() % 300);
+            int cmp = (rnd() & 1) ? value : (int)(rnd() % 300);
+            memset(dstA, 0x44, BITMAP_SZ); memset(dstB, 0x44, BITMAP_SZ);
+            ORIG_NUMPAIR(dstA, pitch, value, cmp, digits);
+            dlg_draw_number_pair(dstB, pitch, value, cmp, digits);
+            cases++;
+            if (memcmp(dstA, dstB, BITMAP_SZ) != 0) {
+                snprintf(g_why, sizeof g_why, "value=%d cmp=%d digits=%d", value, cmp, digits);
+                fail("dlg_draw_number_pair"); break;
+            }
+        }
+
+        /* ---- dlg_draw_number_signed (0x1AEB1) ------------------------- */
+        for (i = 0; i < 10 && !g_fail; i++) {
+            int pitch = 320;
+            int value = (int)(rnd() % 300) - ((rnd() & 1) ? 200 : 50);
+            memset(dstA, 0x55, BITMAP_SZ); memset(dstB, 0x55, BITMAP_SZ);
+            ORIG_NUMSIGN(dstA, pitch, value);
+            dlg_draw_number_signed(dstB, pitch, value);
+            cases++;
+            if (memcmp(dstA, dstB, BITMAP_SZ) != 0) {
+                snprintf(g_why, sizeof g_why, "value=%d", value);
+                fail("dlg_draw_number_signed"); break;
             }
         }
 

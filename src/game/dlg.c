@@ -47,8 +47,12 @@
 #include "rle2.h"
 #include "svc.h"
 #include "rec.h"
+#include "res.h"
+#include "rle.h"
 #include "guest_mem.h"
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #define VGA_BASE 0x000A0000u
 
@@ -419,4 +423,57 @@ int dlg_portrait_find(void)
             return i;
     }
     return -1;
+}
+
+/* 0x187D6 - draw a decimal number as digit sprites from the box-frame
+ * resource *(0x53A81). `digits` glyphs are placed 6 px apart starting at
+ * `dst`; `base_index` is the sprite index of the digit '0' (each digit adds
+ * its value). Values too wide for the digit count use dedicated sprites
+ * (0x5D when 2 digits and value > 99, base+10 when 3 digits and value > 999). */
+void dlg_draw_number(void *dst, int pitch, int value, int base_index, int digits)
+{
+    char fmt[8];
+    char buf[16];
+    int  i;
+
+    if (value < 0)
+        value = 0;
+    strcpy(fmt, "%0.5d");
+    if (digits == 3 && value > 999) {
+        res_blit6(dst, pitch, dword_53A81, base_index + 10);
+        return;
+    }
+    if (digits == 2 && value > 99) {
+        res_blit6(dst, pitch, dword_53A81, 0x5D);
+        return;
+    }
+    fmt[3] = (char)(digits + '0');
+    sprintf(buf, fmt, value);
+    for (i = 0; i < digits; i++) {
+        int idx = (uint8_t)buf[i] + base_index - '0';
+        res_blit6((uint8_t *)dst + 6 * i, pitch, dword_53A81, idx);
+    }
+}
+
+/* 0x1875D - draw `value` with the sprite base chosen by whether it equals
+ * `compare` (0x1F) or not (0x2A). */
+void dlg_draw_number_pair(void *dst, int pitch, int value, int compare, int digits)
+{
+    dlg_draw_number(dst, pitch, value, (value == compare) ? 0x1F : 0x2A, digits);
+}
+
+/* 0x1AEB1 - signed 2-digit number: a sign sprite (0x83 positive / 0x84
+ * negative) at `dst`, then the absolute value at dst + 8. */
+void dlg_draw_number_signed(void *dst, int pitch, int value)
+{
+    int idx = 0x83;
+
+    if (value < 0) {
+        value = abs(value);
+        idx   = 0x84;
+    }
+    rle_decode((uint8_t *)dword_53A81
+                   + *(const uint32_t *)((uint8_t *)dword_53A81 + 4 * idx + 6),
+               0, 0, dst, pitch, -1);
+    dlg_draw_number((uint8_t *)dst + 8, pitch, value, 31, 2);
 }
