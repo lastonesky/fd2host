@@ -2,6 +2,13 @@
  *
  *   0x34894  rec_flag    bit 0 of record byte +5
  *   0x12C60  rec_find    search the record tables for a byte +8 match
+ *   0x1B8A6  rec_slot_free   count of the eight free slots
+ *   0x1B83D  rec_slot_find   first slot with state bit 6 set
+ *   0x1CA89  rec_sub_table5  word +68 -= byte 5 of the 0x619FD entry
+ *   0x13512  rec_flag_or80   byte +5 |= 0x80
+ *   0x32975  rec_flag_set1   byte +5 = 1
+ *   0x34D64  rec_status_mask_records  records 10..27: byte +52 &= 0x80
+ *   0x35009  rec_status_set_record14  record 14: byte +52 = 0x83
  *
  * Two tables of 80-byte records live in the game's data segment:
  *
@@ -44,8 +51,6 @@ int rec_flag(int index);
 /* 0x12C60 - returns the index, or -1 (see the note about table 2 above) */
 int rec_find(int want);
 
-#endif /* GAME_REC_H */
-
 /* 0x1F183 - 1 when the cell-sprite refresh must skip this record */
 int rec_skip(int index);
 
@@ -62,3 +67,24 @@ int rec_slot_claim(int index, int value);
 
 /* 0x1B8E7 - left-shift delete slot `slot`; returns the memmove destination. */
 void *rec_slot_remove(int index, int slot);
+
+/* 0x1B8A6 - number of the eight slots whose state byte has bit 7 clear. */
+int rec_slot_free(int index);
+
+/* 0x1B83D - first slot with state bit 6 set and value byte < 0x80
+ * (want_high == 0) or >= 0x80 (want_high != 0); -1 when none. */
+int rec_slot_find(int index, int want_high);
+
+/* 0x1CA89 - word +68 -= byte 5 of entry `tidx` of the 7-byte table at 0x619FD;
+ * returns the record address (the machine code returns it in EAX). */
+uint32_t rec_sub_table5(int index, int tidx);
+
+/* 0x13512 / 0x32975 - flag writers; both return 80*index, not the address. */
+int rec_flag_or80(int index);
+int rec_flag_set1(int index);
+
+/* 0x34D64 / 0x35009 - no arguments (the dispatch pushes one that is unused). */
+uint32_t rec_status_mask_records(void);
+uint32_t rec_status_set_record14(void);
+
+#endif /* GAME_REC_H */

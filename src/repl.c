@@ -176,6 +176,18 @@ static const struct repl_entry g_repl[] = {
     { 0x1BB8C, "rec_slot_claim",     (void *)rec_slot_claim,       REPL_REC },
     { 0x1B8E7, "rec_slot_remove",    (void *)rec_slot_remove,      REPL_REC },
 
+    /* The round-34 record leaves: plain cdecl readers/writers of the record
+     * table, so the C signature matches the machine code one to one. 0x34D64 /
+     * 0x35009 take no argument even though the dispatch in sub_117E7 pushes one
+     * (the caller cleans up), so an argument-less C function is exact. */
+    { 0x1B8A6, "rec_slot_free",        (void *)rec_slot_free,           REPL_REC },
+    { 0x1B83D, "rec_slot_find",        (void *)rec_slot_find,           REPL_REC },
+    { 0x1CA89, "rec_sub_table5",       (void *)rec_sub_table5,          REPL_REC },
+    { 0x13512, "rec_flag_or80",        (void *)rec_flag_or80,           REPL_REC },
+    { 0x32975, "rec_flag_set1",        (void *)rec_flag_set1,           REPL_REC },
+    { 0x34D64, "rec_status_mask_records", (void *)rec_status_mask_records, REPL_REC },
+    { 0x35009, "rec_status_set_record14", (void *)rec_status_set_record14, REPL_REC },
+
     /* The persistent party roster (src/game/unit.c): the three functions
      * that build/sync/recalc its 80-byte records. They call each other, so
      * they share one group and are enabled atomically. */
@@ -322,6 +334,7 @@ unsigned repl_parse(const char *spec)
         else if (!plat_stricmp(tok, "scene"))    mask |= REPL_SCENE;
         else if (!plat_stricmp(tok, "fade"))     mask |= REPL_FADE;
         else if (!plat_stricmp(tok, "fx"))       mask |= REPL_FX;
+        else if (!plat_stricmp(tok, "map"))      mask |= REPL_MAP;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

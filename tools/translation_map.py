@@ -39,7 +39,7 @@ MODULE_INFO = {
     "path.c":     ("pathcheck",     "1000",  "terrain cost flood + path trace"),
     "dlg.c":      ("dlgcheck+boxcheck+keycheck+typecheck", "800+240+100+1176",
                    "dialogue helpers, box animation, wait-key, typewriter"),
-    "rec.c":      ("reccheck",      "36327", "character record table"),
+    "rec.c":      ("reccheck",      "42225", "character record table (incl. round-34 leaves)"),
     "unit.c":     ("reccheck",      "36327", "persistent party roster (0x1145A/0x11506/0x112A5)"),
     "svc.c":      ("typecheck",     "1176",  "BIOS tick wait + PCM SFX (also in typecheck)"),
     "vm.c":       ("vmcheck",       "5512",  "script/text VM 0x15F84"),

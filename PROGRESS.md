@@ -17,11 +17,11 @@
 **同一份源码也能在 Linux 上跑**（`build/fd2host-linux32`，X11/XWayland + sokol GLCORE）：
 与 Windows 同 guest tick 抓帧**逐像素 0 差异**（`rounds/16-entry-layer.md` §46.10）。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 104 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 111 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。
 
 > ⚠ **进度必须看清**：全量函数表 `re/funcmap.csv` 有 **1359** 个函数，已源码化的只有
-> **104 个 ≈ 7.7%**；**其余 ~92% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
+> **111 个 ≈ 8.2%**；**其余 ~92% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
 > 直接执行**。这正是宿主必须是 **32 位进程**的原因（x86-64 长模式不能执行 32 位代码，
 > 只有 `-m32`/WOW64 这类 32 位进程才行）；**等全部函数源码化后，这个 32 位门槛才会消失**。
 
@@ -50,7 +50,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**104 / 1359 个函数接入（≈7.7%）**           ⏳ 其余 ~92% 仍是原始机器码在跑
+源码转译：**111 / 1359 个函数接入（≈8.2%）**           ⏳ 其余 ~92% 仍是原始机器码在跑
 Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 px** ✅（§46.10）
 ```
 
@@ -113,6 +113,8 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
 | §62 | 10-07 | **`funcs_30469` 效果动画 handler 四件套（第 96–99 个）** | 新模块 `game/fx.c/.h`：`funcs_30469`(`0x524C6`) 表项 `[4]/[7]/[8]/[9]` = `fx_dots6`(0x2C217)/`fx_dots3`(0x2CAFC)/`fx_dots16`(0x2CCF4)/`fx_toggle`(0x2CE1A)，6/3/16 粒子发射器 + 双帧翻转，共 1630 B、60 到达点；只读写游戏数据段全局 + 原址 `memcpy` 三张只读表 + 调 4 个已接入服务（`res_blit`/`svc_play_sfx(2)`/`util_rand`），无文件/堆/VGA。**真 ABI = cdecl 5 栈参**（探针伪像，见 `rounds/08` §37.3 / §8-75）；`fxcheck` 新增记录桩 + 全区 obj1 快照，**3920/0**；接入新分组 `REPL_FX`。踩坑：Hex-Rays 9 参视图把 `fx_toggle` case 4 的 index 从 `0` 伪装成 `4`（§8-75）。`regress 8/8`、`repl: installed 99`、静态帧 A/B **0/64000 px**、Linux 自检全过 | `docs/rounds/32-fx-handlers.md`、`docs/PITFALLS.md` §8-75、`re/RE_MAP.md` |
 | §63 | 10-07 | **`funcs_30469` 收尾：剩余 5 handler + 1 辅助（第 100–104 个）** | `game/fx.c` 扩 `fx_dots7`(0x2B996)/`fx_dots8`(0x2BB33)/`fx_blob`(0x2BD6C)+`fx_advance`(0x2BF83)/`fx_dots12`(0x2BFD9)/`fx_dots6b`(0x2C441)，共 **2749 B**、75 个到达点 + 2 个内部调用；表 `[0]/[1]/[2]/[3]/[5]` 完成 ⇒ **整表 9/10**（仅余 `[6] 0x2C67D` 1151 B 含 CRT 浮点）。依赖仍全闭合（只读表原址 `memcpy` + 4 个已接入服务 + CRT 栈探针）。`fxcheck` 扩到 **12884/0**（新增 8964，含 `fx_advance` 资源块直测）。**当场抓到 2 个真 bug**：`fx_dots8` blit 上界是 `<0xF` 非 `<0x10`；`fx_dots12` `++phase==3` 时 `r=1` **无条件**（sfx2 才看 `v20[slot]==0`）。`regress 8/8`、`repl: installed 104`、静态帧 A/B **0/64000 px**、Linux 自检全过 | `docs/rounds/33-fx-tail.md`、`docs/TRANSLATION.md` §4/§5、`re/RE_MAP.md` |
 
+| §64 | 10-07 | **角色记录表七个数据叶子（第 105–111 个）** | 第 28 轮排好队的依赖闭合叶子：`rec_slot_free`(0x1B8A6，八槽 state bit7 清零个数)/`rec_slot_find`(0x1B83D，bit6 + 按 `want_high` 比 value `<0x80` 或 `>=0x80`，无则 -1)/`rec_sub_table5`(0x1CA89，**16 位字** `+68 -= 0x619FD` 表项字节 5，返回记录地址)/`rec_flag_or80`(0x13512)/`rec_flag_set1`(0x32975)/`rec_status_mask_records`(0x34D64，固定记录 10..27)/`rec_status_set_record14`(0x35009)，共 375 B、69 个到达点；**6 个返回值语义只有 1 个是记录地址**（`0x13512`/`0x32975` 返回 `80*index` 偏移，`0x34D64` 返回表基址，`0x35009` 返回 `base+1120`）。收 `funcs_1199C`(`0x51B91`) `[28]`/`[36]`；排除 `0x205BE`（真入口是 `0x205B4`，条目不合法）。`reccheck` **37398→42225/0**（+4827）。顺手修 2 个工具 bug：`repl_parse()` 漏认 `map` 组名（`--replace=map` 静默等同 `none`，§8-77）；`rec.c` 新引 `tbl_ptr` 使 5 个 check target **链接期**缺 `tables.c`（§8-78）。`regress 8/8`、`repl: installed 111`、静态帧 A/B **0/64000 px**、Linux 自检全过 | `docs/rounds/34-rec-leaves.md`、`docs/PITFALLS.md` §8-77/§8-78、`re/RE_MAP.md` |
+
 ## 4. 下一步计划（按优先级）
 
 1. **源码化继续**（工作重心）。~~`sub_15F84` 脚本 VM~~ **已完成（§39）**；
@@ -142,9 +144,14 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    （共 2749 B，`fxcheck` 3920→**12884/0**）；**整表 9/10 完成**，仅余 `[6] 0x2C67D`
    （1151 B，含 CRT `cos/sin`，另开一轮），转完可让小分派器 `sub_31266`（632 B）
    只差 `0x2FB2C`(744)+`0x2FE14`(237) 即闭合（`rounds/32` §62.6、`rounds/33` §63.7）。
-   下一批同族候选：`0x1B8A6`/`0x1B83D`/`0x1CA89` 及记录单字节置位叶子
-   `0x13512`/`0x32975`/`0x34D64`/`0x35009`（`rounds/28` §58.5）。
-   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 104/1359）。
+   下一批同族候选 `0x1B8A6`/`0x1B83D`/`0x1CA89` 及记录单字节置位叶子
+   `0x13512`/`0x32975`/`0x34D64`/`0x35009`（`rounds/28` §58.5）
+   **已完成（§64，接入 111）**——7 个叶子进 `game/rec.c`，`reccheck` 37398→**42225/0**；
+   排除 `0x205BE`（条目不合法，真入口 `0x205B4` 另评估）。
+   下一批主候选：**`funcs_1199C`(`0x51B91`) 表项**（本轮只收 `[28]`/`[36]`，表里还有
+   `[0]=0x34531`/`[1]=0x3460B`/… 这批同族 80 字节记录服务，依赖待逐个闭合）；
+   `funcs_30469` 仍只差 `[6] 0x2C67D`。
+   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 111/1359）。
 2. ~~**补 autokey 配方**~~ **已完成（§40，2026-10-06）**：标准配方 + `--shot-tick=326..334`
    即可落在“打字进行中”，抓到 3 张不同进度的逐字画面（框区差异 455→327→325→0），
    且 **15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽 ⇒ `vm_run`+`dlg_type_step`
@@ -186,7 +193,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    （GLCORE，7948 fixup、65 低内存引用、52 AIL 打桩），与 Windows 同 tick `--screenshot`
    **0 / 64000 px** 差异。
    **关于 32 位**：用户要求终局**不再用 32 位**（要能上 macOS，而 macOS 已无 32 位）。
-   现状 104/1359 ≈ 7.7% 已源码化、其余仍是机器码且 C 会回调其固定 32 位地址 ⇒ 过渡期必须 32 位；
+   现状 111/1359 ≈ 8.2% 已源码化、其余仍是机器码且 C 会回调其固定 32 位地址 ⇒ 过渡期必须 32 位；
    路线（A 转译 → B 转完 → **C 去 guest 化** → D 64 位/三平台）见 `docs/TRANSLATION.md` §6、
    `rounds/16-entry-layer.md` §46.11。**下一步（工作重心）：按 §5 继续源码化**（51 → 1359）。
    同轮补：**Linux 窗口 180° 倒置修好**（GLSL 多翻一次 v；`--screenshot` 看不到窗口翻转，

@@ -60,6 +60,7 @@
 | `rounds/31-scene-state-14.md` | 明细 | `funcs_25E23[14]` handler `0x239BD` + 队伍身份查询叶子 `0x33499`（闭合第 6 个表项） | §61 |
 | `rounds/32-fx-handlers.md` | 明细 | `funcs_30469` 效果动画 handler 四件套 `0x2C217`/`0x2CAFC`/`0x2CCF4`/`0x2CE1A`（新模块 `fx.c`，新分组 `REPL_FX`）+ 栈探针伪像藏立即数 | §62 |
 | `rounds/33-fx-tail.md` | 明细 | `funcs_30469` 收尾 5 handler + 辅助 `0x2B996`/`0x2BB33`/`0x2BD6C`+`0x2BF83`/`0x2BFD9`/`0x2C441`（整表 9/10）+ `fx_advance` 资源块直测 + A/B 需 autokey 配方 | §63 |
+| `rounds/34-rec-leaves.md` | 明细 | 角色记录表七个数据叶子 `0x1B8A6`/`0x1B83D`/`0x1CA89`/`0x13512`/`0x32975`/`0x34D64`/`0x35009`（105–111 个；**6 个返回值语义只有 1 个是记录地址**、`0x1CA89` 16 位回绕）+ `repl_parse` 漏 `map` 组名（§8-77）+ 新跨模块调用只在链接期暴露（§8-78） | §64 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。

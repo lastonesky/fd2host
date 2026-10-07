@@ -7,6 +7,13 @@
  *   0x344F2  rec_status_set - range-set the low nibble of record byte +52
  *   0x1BB8C  rec_slot_claim - claim the first empty of the eight 2-byte slots
  *   0x1B8E7  rec_slot_remove- left-shift delete one slot, mark the last 0x80
+ *   0x1B8A6  rec_slot_free  - how many of the eight slots are still free
+ *   0x1B83D  rec_slot_find  - first slot with state bit 6 set, by value sign
+ *   0x1CA89  rec_sub_table5 - word +68 -= byte 5 of the 0x619FD table entry
+ *   0x13512  rec_flag_or80  - byte +5 |= 0x80
+ *   0x32975  rec_flag_set1  - byte +5 = 1
+ *   0x34D64  rec_status_mask- records 10..27: byte +52 &= 0x80
+ *   0x35009  rec_status_14  - record 14: byte +52 = 0x83
  *
  * App-level: the C reads and writes the same data-segment globals the machine
  * code does, so src/repl.c can hook all of them with no glue.
@@ -21,6 +28,7 @@
 #include <string.h>
 
 #include "rec.h"
+#include "tables.h"
 
 /* IDA names kept so the C reads like the original decompilation.
  * Addresses verified against E:\FD2\FD2.EXE.i64. */
@@ -29,6 +37,7 @@
 #define dword_53BF7 (*(uint32_t *)(uintptr_t)0x00053BF7u) /* record table 2 */
 #define dword_53BFB (*(int32_t *)(uintptr_t)0x00053BFBu)  /* table 2 records */
 #define dword_53C1B (*(uint32_t *)(uintptr_t)0x00053C1Bu) /* matched record */
+#define TBL_619FD   0x000619FDu                            /* 7-byte entry table */
 
 /* 0x34894 */
 int rec_flag(int index)
@@ -134,6 +143,63 @@ void *rec_slot_remove(int index, int slot)
 /* 0x1F183 - "skip this record" predicate used by the cell-sprite refresh:
  *   0 unless record[7] != 0x1C and (record[0x20] == 0x13 or record[0x1F] is
  *   4 or 5). Field semantics are UNCONFIRMED; the machine code is the spec. */
+/* 0x1B8A6 - how many of the eight slots are free. A slot's state byte is
+ * 0x80 when empty (rec_slot_claim clears the bit when it claims one), so this
+ * counts the state bytes whose bit 7 is clear. */
+int rec_slot_free(int index)
+{
+    const uint8_t *rec = (const uint8_t *)((uintptr_t)dword_53A45
+                                           + REC_STRIDE * (uint32_t)index);
+    int n = 0;
+    int i;
+
+    for (i = 0; i < 8; i++)
+        if (!(rec[2u * (uint32_t)i + 10u] & 0x80))
+            n++;
+    return n;
+}
+
+/* 0x1B83D - first slot whose state byte has bit 6 set and whose value byte is
+ * below 0x80 when `want_high` is 0, or at least 0x80 when it is not. -1 when
+ * no slot matches. Both comparisons are unsigned byte compares. */
+int rec_slot_find(int index, int want_high)
+{
+    const uint8_t *rec = (const uint8_t *)((uintptr_t)dword_53A45
+                                           + REC_STRIDE * (uint32_t)index);
+    int i;
+
+    for (i = 0; i < 8; i++) {
+        const uint8_t *slot = rec + 2u * (uint32_t)i + 10u;
+        if (!(slot[0] & 0x40))
+            continue;
+        if (want_high) {
+            if (slot[1] >= 0x80)
+                return i;
+        } else {
+            if (slot[1] < 0x80)
+                return i;
+        }
+    }
+    return -1;
+}
+
+/* 0x1CA89 - subtract byte 5 of entry `tidx` of the 7-byte table at 0x619FD
+ * from the word the record keeps at +68, in 16-bit unsigned arithmetic. The
+ * machine code returns the record address in EAX, so the C returns it too. */
+uint32_t rec_sub_table5(int index, int tidx)
+{
+    uint8_t *rec = (uint8_t *)((uintptr_t)dword_53A45
+                               + REC_STRIDE * (uint32_t)index);
+    const uint8_t *e = (const uint8_t *)tbl_ptr((void *)(uintptr_t)TBL_619FD,
+                                                 7, tidx, 0);
+    uint16_t w = (uint16_t)(rec[68] | (rec[69] << 8));
+
+    w = (uint16_t)(w - e[5]);
+    rec[68] = (uint8_t)w;
+    rec[69] = (uint8_t)(w >> 8);
+    return (uint32_t)(uintptr_t)rec;
+}
+
 int rec_skip(int index)
 {
     const uint8_t *p = (const uint8_t *)(uintptr_t)dword_53A45 + 80 * index;
@@ -145,4 +211,51 @@ int rec_skip(int index)
     if (p[0x1F] == 4 || p[0x1F] == 5)
         return 1;
     return 0;
+}
+
+/* 0x13512 / 0x32975 - the two single-record flag writers. Both compute the
+ * record offset as `i*5 << 4` in a 32-bit register and return it in EAX, so
+ * the C returns the offset (80*index), not the record address - that is what
+ * the callers see. */
+int rec_flag_or80(int index)
+{
+    uint8_t *rec = (uint8_t *)((uintptr_t)dword_53A45
+                               + REC_STRIDE * (uint32_t)index);
+
+    rec[5] |= 0x80;
+    return (int)(REC_STRIDE * (uint32_t)index);
+}
+
+int rec_flag_set1(int index)
+{
+    uint8_t *rec = (uint8_t *)((uintptr_t)dword_53A45
+                               + REC_STRIDE * (uint32_t)index);
+
+    rec[5] = 1;
+    return (int)(REC_STRIDE * (uint32_t)index);
+}
+
+/* 0x34D64 - keep only bit 7 of byte +52 for records 10..27 (eighteen records,
+ * a fixed window, not bounded by dword_53BEB). Takes no argument even though
+ * the dispatch in sub_117E7 pushes one; returns the table base. */
+uint32_t rec_status_mask_records(void)
+{
+    uint32_t base = dword_53A45;
+    int i;
+
+    for (i = 0; i < 18; i++) {
+        uint8_t *rec = (uint8_t *)((uintptr_t)(base + REC_STRIDE * (uint32_t)(i + 10)));
+        rec[52] &= 0x80;
+    }
+    return base;
+}
+
+/* 0x35009 - the single-record twin: record 14 gets byte +52 = 0x83, and the
+ * record address is returned. */
+uint32_t rec_status_set_record14(void)
+{
+    uint8_t *rec = (uint8_t *)((uintptr_t)dword_53A45 + REC_STRIDE * 14u);
+
+    rec[52] = 0x83;
+    return (uint32_t)(uintptr_t)rec;
 }

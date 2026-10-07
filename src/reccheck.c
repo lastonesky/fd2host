@@ -3,7 +3,10 @@
  * Runs the original machine code (0x34894 rec_flag, 0x12C60 rec_find,
  * 0x1B722 rec_field_byte, 0x344F2 rec_status_set, 0x1BB8C rec_slot_claim,
  * 0x1B8E7 rec_slot_remove, 0x1145A unit_recalc, 0x11506 unit_refresh_all,
- * 0x112A5 unit_add, 0x33499 unit_exists) and the C translation
+ * 0x112A5 unit_add, 0x33499 unit_exists, 0x1B8A6 rec_slot_free,
+ * 0x1B83D rec_slot_find, 0x1CA89 rec_sub_table5, 0x13512 rec_flag_or80,
+ * 0x32975 rec_flag_set1, 0x34D64 rec_status_mask_records,
+ * 0x35009 rec_status_set_record14) and the C translation
  * (src/game/rec.c, src/game/unit.c) on the same
  * tables and compares the return value plus every byte both sides touch.
  *
@@ -23,6 +26,14 @@
  *   rec_status_set  random index ranges incl. start>end, value with high bits
  *   rec_slot_claim  random states, all full, each single hole, first of many
  *   rec_slot_remove slot 0..7, random contents, plus an unsigned underflow slot
+ *
+ * The round-34 leaves get random + constructed cases too:
+ *   rec_slot_free            random state bytes; all-free / all-occupied
+ *   rec_slot_find            both want_high branches, no bit-6 slot, first hit
+ *   rec_sub_table5           random 0x619FD entries, 16-bit wrap at word +68
+ *   rec_flag_or80 / set1     random byte +5, and the return value (80*index)
+ *   rec_status_mask_records  the fixed records 10..27 window
+ *   rec_status_set_record14  record 14
  *
  * Not exercised: a negative index in rec_flag. The original computes
  * `i*5 << 4` in a 32-bit register, so a negative index wraps to an address far
@@ -47,6 +58,9 @@ typedef int  (__cdecl *field_fn)(int, int);
 typedef void (__cdecl *status_fn)(int, int, int);
 typedef int  (__cdecl *claim_fn)(int, int);
 typedef void *(__cdecl *remove_fn)(int, int);
+typedef int  (__cdecl *free_fn)(int);
+typedef int  (__cdecl *slotfind_fn)(int, int);
+typedef uint32_t (__cdecl *sub5_fn)(int, int);
 
 #define ORIG_FLAG   ((flag_fn)(uintptr_t)0x34894)
 #define ORIG_FIND   ((find_fn)(uintptr_t)0x12C60)
@@ -60,6 +74,8 @@ typedef void (__cdecl *refresh_fn)(void);
 typedef int  (__cdecl *add_fn)(int);
 typedef int  (__cdecl *exists_fn)(int);
 
+typedef uint32_t (__cdecl *noarg_fn)(void);
+
 #define ORIG_RECALC  ((recalc_fn)(uintptr_t)0x1145A)
 #define ORIG_REFRESH ((refresh_fn)(uintptr_t)0x11506)
 #define ORIG_ADD     ((add_fn)(uintptr_t)0x112A5)
@@ -70,6 +86,19 @@ typedef int  (__cdecl *exists_fn)(int);
 #define G53BF7 (*(uint32_t *)(uintptr_t)0x00053BF7u)
 #define G53BFB (*(int32_t *)(uintptr_t)0x00053BFBu)
 #define G53C1B (*(uint32_t *)(uintptr_t)0x00053C1Bu)
+
+#define ORIG_FREE     ((free_fn)(uintptr_t)0x1B8A6)
+#define ORIG_FINDSLOT ((slotfind_fn)(uintptr_t)0x1B83D)
+#define ORIG_SUB5     ((sub5_fn)(uintptr_t)0x1CA89)
+#define ORIG_OR80     ((flag_fn)(uintptr_t)0x13512)
+#define ORIG_SET1     ((flag_fn)(uintptr_t)0x32975)
+#define ORIG_MASKREC  ((noarg_fn)(uintptr_t)0x34D64)
+#define ORIG_SET14    ((noarg_fn)(uintptr_t)0x35009)
+
+/* The 7-byte entry table 0x1CA89 reads. It is a real game data address, so both
+ * sides read the same bytes; the harness only fills the entries it uses. */
+#define TBL619        ((uint8_t *)(uintptr_t)0x000619FDu)
+#define TBL619_ENTRIES 200   /* ends at 0x62069, inside the mapped data segment */
 
 #define MAXREC 64
 static uint8_t tbl1[MAXREC * REC_STRIDE];
@@ -337,6 +366,245 @@ static void test_remove(unsigned ncases)
                 cmp_mem("rec_slot_remove", 6900 + rec * 8 + slot,
                         (int)o1, (int)o2);
             }
+        }
+    }
+}
+
+/* ---- round 34 record-table leaves ----------------------------------
+ * 0x1B8A6 rec_slot_free, 0x1B83D rec_slot_find, 0x1CA89 rec_sub_table5,
+ * 0x13512 rec_flag_or80, 0x32975 rec_flag_set1, 0x34D64 rec_status_mask_records,
+ * 0x35009 rec_status_set_record14.
+ *
+ * The two readers need no buffer pair: both sides read the same bytes, so
+ * G53A45 is pointed at inbuf and only the return value is compared. The writers
+ * use the obuf/cbuf pair as before, and pointer return values are normalised to
+ * a buffer offset because the two implementations run on different copies.
+ */
+
+/* Fill the eight slots of record `index` in inbuf:
+ *   0 no slot has state bit 6
+ *   1 bit 6 set, random values
+ *   2 bit 6 set, every value < 0x80
+ *   3 bit 6 set, every value >= 0x80
+ *   4 slot 0 without bit 6, slot 1 value 0x7F, slot 2 value 0x80
+ */
+static void leaf_slots(int index, unsigned mode)
+{
+    int i;
+
+    for (i = 0; i < 8; i++) {
+        uint8_t *slot = inbuf + (size_t)index * REC_STRIDE + 10 + 2 * i;
+        switch (mode) {
+        case 0:  slot[0] = (uint8_t)(rnd() & 0xBFu); slot[1] = (uint8_t)rnd(); break;
+        case 1:  slot[0] = (uint8_t)(0x40u | (rnd() & 0x3Fu)); slot[1] = (uint8_t)rnd(); break;
+        case 2:  slot[0] = 0x40; slot[1] = (uint8_t)(rnd() & 0x7Fu); break;
+        case 3:  slot[0] = 0x40; slot[1] = (uint8_t)(0x80u | (rnd() & 0x7Fu)); break;
+        default:
+            slot[0] = (uint8_t)(i ? 0x40 : 0x00);
+            slot[1] = (uint8_t)(i == 1 ? 0x7F : (i == 2 ? 0x80 : 0));
+            break;
+        }
+    }
+}
+
+static int cmp_read(const char *name, unsigned id, int r1, int r2)
+{
+    cases_run++;
+    if (r1 != r2) {
+        printf("FAIL %s case %u: ret orig=%d ours=%d\n", name, id, r1, r2);
+        failures++;
+        return -1;
+    }
+    return 0;
+}
+
+static void test_free(unsigned ncases)
+{
+    unsigned c, k;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        int index = (int)(rnd() % MAXREC);
+        fill_all();
+        G53A45 = (uint32_t)(uintptr_t)inbuf;
+        cmp_read("rec_slot_free", 7000 + c, ORIG_FREE(index), rec_slot_free(index));
+    }
+
+    /* constructed: all free, all occupied, alternating */
+    fill_all();
+    for (k = 0; k < 3 && !failures; k++) {
+        int i;
+        for (i = 0; i < 8; i++) {
+            uint8_t *slot = inbuf + k * REC_STRIDE + 10 + 2 * i;
+            slot[0] = (uint8_t)(k == 0 ? 0x00 : (k == 1 ? 0x80 : (i & 1 ? 0x80 : 0x00)));
+            slot[1] = (uint8_t)rnd();
+        }
+        G53A45 = (uint32_t)(uintptr_t)inbuf;
+        cmp_read("rec_slot_free", 7900 + k, ORIG_FREE((int)k), rec_slot_free((int)k));
+    }
+}
+
+static void test_findslot(unsigned ncases)
+{
+    unsigned c, mode, want;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        int index = (int)(rnd() % MAXREC);
+        int want_high = (int)(rnd() & 1);
+        fill_all();
+        leaf_slots(index, rnd() % 5);
+        G53A45 = (uint32_t)(uintptr_t)inbuf;
+        cmp_read("rec_slot_find", 8000 + c,
+                 ORIG_FINDSLOT(index, want_high), rec_slot_find(index, want_high));
+    }
+
+    /* constructed: every mode x both want_high branches */
+    fill_all();
+    for (mode = 0; mode < 5 && !failures; mode++) {
+        for (want = 0; want < 2 && !failures; want++) {
+            leaf_slots(0, mode);
+            G53A45 = (uint32_t)(uintptr_t)inbuf;
+            cmp_read("rec_slot_find", 8900 + mode * 2 + want,
+                     ORIG_FINDSLOT(0, (int)want), rec_slot_find(0, (int)want));
+        }
+    }
+}
+
+static void test_sub5(unsigned ncases)
+{
+    unsigned c, k;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        int index = (int)(rnd() % MAXREC);
+        int tidx  = (int)(rnd() % TBL619_ENTRIES);
+        int r1, r2;
+
+        for (k = 0; k < TBL619_ENTRIES; k++) TBL619[k] = (uint8_t)rnd();
+        fill_all();
+        memcpy(obuf, inbuf, sizeof obuf);
+        G53A45 = (uint32_t)(uintptr_t)obuf;
+        r1 = (int)(ORIG_SUB5(index, tidx) - (uint32_t)(uintptr_t)obuf);
+        memcpy(cbuf, inbuf, sizeof cbuf);
+        G53A45 = (uint32_t)(uintptr_t)cbuf;
+        r2 = (int)(rec_sub_table5(index, tidx) - (uint32_t)(uintptr_t)cbuf);
+        cmp_mem("rec_sub_table5", 9000 + c, r1, r2);
+    }
+
+    /* constructed: 16-bit wrap - word +68 = 0x0003 minus table byte 0x04 */
+    {
+        static const struct { uint8_t lo, hi, sub; } wraps[] = {
+            { 0x03, 0x00, 0x04 }, { 0x00, 0x00, 0x01 }, { 0xFF, 0xFF, 0x01 },
+            { 0x00, 0x80, 0x00 }, { 0x7F, 0x7F, 0x80 },
+        };
+        unsigned j;
+        int r1, r2;
+        for (j = 0; j < sizeof wraps / sizeof wraps[0] && !failures; j++) {
+            int index = (int)j;
+            fill_all();
+            for (k = 0; k < TBL619_ENTRIES; k++) TBL619[k] = 0;
+            TBL619[5] = wraps[j].sub;          /* entry 0, byte 5 */
+            inbuf[index * REC_STRIDE + 68] = wraps[j].lo;
+            inbuf[index * REC_STRIDE + 69] = wraps[j].hi;
+            memcpy(obuf, inbuf, sizeof obuf);
+            G53A45 = (uint32_t)(uintptr_t)obuf;
+            r1 = (int)(ORIG_SUB5(index, 0) - (uint32_t)(uintptr_t)obuf);
+            memcpy(cbuf, inbuf, sizeof cbuf);
+            G53A45 = (uint32_t)(uintptr_t)cbuf;
+            r2 = (int)(rec_sub_table5(index, 0) - (uint32_t)(uintptr_t)cbuf);
+            cmp_mem("rec_sub_table5", 9900 + j, r1, r2);
+        }
+    }
+}
+
+static void test_flagwriters(unsigned ncases)
+{
+    unsigned c;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        int index = (int)(rnd() % MAXREC);
+        int r1, r2;
+
+        fill_all();
+        memcpy(obuf, inbuf, sizeof obuf);
+        G53A45 = (uint32_t)(uintptr_t)obuf;
+        r1 = ORIG_OR80(index);
+        memcpy(cbuf, inbuf, sizeof cbuf);
+        G53A45 = (uint32_t)(uintptr_t)cbuf;
+        r2 = rec_flag_or80(index);
+        cmp_mem("rec_flag_or80", 10000 + c, r1, r2);
+
+        fill_all();
+        memcpy(obuf, inbuf, sizeof obuf);
+        G53A45 = (uint32_t)(uintptr_t)obuf;
+        r1 = ORIG_SET1(index);
+        memcpy(cbuf, inbuf, sizeof cbuf);
+        G53A45 = (uint32_t)(uintptr_t)cbuf;
+        r2 = rec_flag_set1(index);
+        cmp_mem("rec_flag_set1", 10500 + c, r1, r2);
+    }
+
+    /* constructed: byte +5 values that show the OR is not an assignment */
+    {
+        static const uint8_t vals[] = { 0x00, 0x01, 0x7F, 0x80, 0xFF };
+        unsigned j;
+        int r1, r2;
+        for (j = 0; j < sizeof vals / sizeof vals[0] && !failures; j++) {
+            int index = (int)j;
+            fill_all();
+            inbuf[index * REC_STRIDE + 5] = vals[j];
+            memcpy(obuf, inbuf, sizeof obuf);
+            G53A45 = (uint32_t)(uintptr_t)obuf;
+            r1 = ORIG_OR80(index);
+            memcpy(cbuf, inbuf, sizeof cbuf);
+            G53A45 = (uint32_t)(uintptr_t)cbuf;
+            r2 = rec_flag_or80(index);
+            cmp_mem("rec_flag_or80", 10900 + j, r1, r2);
+        }
+    }
+}
+
+static void test_status_records(unsigned ncases)
+{
+    unsigned c;
+
+    for (c = 0; c < ncases && !failures; c++) {
+        int r1, r2;
+
+        fill_all();
+        memcpy(obuf, inbuf, sizeof obuf);
+        G53A45 = (uint32_t)(uintptr_t)obuf;
+        r1 = (int)(ORIG_MASKREC() - (uint32_t)(uintptr_t)obuf);
+        memcpy(cbuf, inbuf, sizeof cbuf);
+        G53A45 = (uint32_t)(uintptr_t)cbuf;
+        r2 = (int)(rec_status_mask_records() - (uint32_t)(uintptr_t)cbuf);
+        cmp_mem("rec_status_mask_records", 11000 + c, r1, r2);
+
+        fill_all();
+        memcpy(obuf, inbuf, sizeof obuf);
+        G53A45 = (uint32_t)(uintptr_t)obuf;
+        r1 = (int)(ORIG_SET14() - (uint32_t)(uintptr_t)obuf);
+        memcpy(cbuf, inbuf, sizeof cbuf);
+        G53A45 = (uint32_t)(uintptr_t)cbuf;
+        r2 = (int)(rec_status_set_record14() - (uint32_t)(uintptr_t)cbuf);
+        cmp_mem("rec_status_set_record14", 11500 + c, r1, r2);
+    }
+
+    /* constructed: the window boundary. Records 9 and 28 must stay untouched by
+     * 0x34D64, which only covers 10..27; record 14 is the only one 0x35009 writes. */
+    {
+        static const int recs[] = { 9, 10, 27, 28 };
+        unsigned j;
+        for (j = 0; j < sizeof recs / sizeof recs[0] && !failures; j++) {
+            int r = recs[j];
+            int r1, r2;
+            fill_all();
+            inbuf[r * REC_STRIDE + 52] = 0xF7;
+            memcpy(obuf, inbuf, sizeof obuf);
+            G53A45 = (uint32_t)(uintptr_t)obuf;
+            r1 = (int)(ORIG_MASKREC() - (uint32_t)(uintptr_t)obuf);
+            memcpy(cbuf, inbuf, sizeof cbuf);
+            G53A45 = (uint32_t)(uintptr_t)cbuf;
+            r2 = (int)(rec_status_mask_records() - (uint32_t)(uintptr_t)cbuf);
+            cmp_mem("rec_status_mask_records", 11900 + j, r1, r2);
         }
     }
 }
@@ -808,6 +1076,13 @@ int main(int argc, char **argv)
 
     /* ---- identity lookup (0x33499) ----------------------------------- */
     if (!failures) test_exists(1050);
+
+    /* ---- round 34 record-table leaves -------------------------------- */
+    if (!failures) test_free(800);
+    if (!failures) test_findslot(800);
+    if (!failures) test_sub5(800);
+    if (!failures) test_flagwriters(800);
+    if (!failures) test_status_records(400);
 
     printf("paths: random=%u none=%u table2=%u flag0=%u flag1_only=%u want>255=%u empty=%u\n",
            path_count[P_RANDOM], path_count[P_NONE], path_count[P_TABLE2], path_count[P_FLAG0],

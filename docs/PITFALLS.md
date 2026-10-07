@@ -590,3 +590,29 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     **做法**：规划稿是“语义骨架”，**每一次 `cmp` 的边界、每一个置位/自增是在条件内还是外**
     都要回反汇编定案；harness 的 profile 必须覆盖边界值（`0xE/0xF`、`2/3`）才能把这类
     差一/差一个分支的错误逼出来。判据：`fxcheck` 修正后 **12884/0**。
+
+77. **`repl_parse()` 少一个组名 = 分组 A/B 静默拿基线当对照组**（第 64 轮，工具 bug）：
+    `src/repl.c` 的 `repl_parse()` 用 `else if (token == ...) mask |= GROUP` 串认组名，
+    **`map` 这一支一直漏着**（`rle/gfx/sprite24/util/path/dlg/rec/svc/vm/res/bgm/scene/fade/fx`
+    14 个都在）。未知 token 的后果是**丢弃不报错** ⇒ `mask` 保持 0 ⇒
+    `--replace=map` 的行为**与 `--replace=none` 完全一致**，于是“关掉 map 组看差异”
+    的对照实验会跑出“两边同为基线”的 0 px，**看起来像没问题，实际根本没关**。
+    这类静默回退与 `§8-32`（命令行参数写法不匹配→静默默认值）同根。
+    **修法**：补 `else if (!plat_stricmp(tok, "map")) mask |= REPL_MAP;`。
+    **判据**：修前 `--replace=map` 打出 `repl: installed 0`，修后打出
+    `repl: installed 5 translated function(s) (mask 0x2000)`（`rounds/34` §64.4）。
+    **做法**：新增组名后，**跑一次“只开这一组”验一下 `installed N` 是否等于该组条目数**；
+    或者把“未知 token → 报错”改为显式行为（本轮只修漏项，没动错误处理）。
+
+78. **给共享模块新增跨模块调用，只会在链接期暴露；check target 的 `srcs` 要跟着加**（第 64 轮）：
+    `src/game/rec.c` 新增 `rec_sub_table5`，内部调用 `tables.c` 的 `tbl_ptr`（对应原
+    `0x4E866`）。**编译期零 warning**（对编译器而言只是 extern），但 `dlgcheck`/`boxcheck`/
+    `keycheck`/`leafcheck`/`typecheck` 这 5 个 target 的 `srcs` 里有 `game\rec.c` 却**没有**
+    `game\tables.c` ⇒ 直接报 `LNK2019: 无法解析的外部符号 _tbl_ptr`，而且 `build.ps1 -Target all`
+    是逐个 target 跑的，报错只炸第一个（`boxcheck`），后面几个要编到才炸。
+    **修法**：给这 5 个 target 补 `"game\tables.c"`（与 `mapcheck`/`reccheck` 已有的一致）。
+    **判据**：`pwsh -File build.ps1 -Target all` **必须全部 target 都出 `-> ...exe`**——
+    只 build 单个 target 会漏掉另外 4 个。`Makefile.linux` 那侧本来就把 `rec.c` 与
+    `tables.c` 一起编（`HOST_SRC`），所以只有 Windows 侧会中招。
+    **做法**：见 `docs/TRANSLATION.md` §1 第 7 步“回归”——动了模块间依赖就先
+    `-Target all` 再跑逐个 check。
