@@ -141,7 +141,8 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | `0x25BF4` | `main` | 主流程：AIL 初始化 → `sub_111BA` 加载 8 组 DAT → `int386(0x10)` 设 0x13 模式 → `rand()%256` 次 `sub_4EBE3` → 主状态机循环 → `int386(0x10)` mode 3 退出 | ★★★ 骨架 |
 | `0x111BA` | 资源加载器（**已转译** `src/game/res.c`，对拍 160 例） | cdecl 3 参 `res_load(filename, oldbuf, index)`；LMI 容器 `+6` 起 count+1 个 u32 偏移；写 `dword_53BFF`；132 调用点 | ★★★ |
 | `0x15F84` | 脚本 VM（PROGRESS 中 `FUN_00015f84`）—— **已转译 `src/game/vm.c`（§39，`vmcheck` 5512 例）** | 1380 字节，**9 个 cdecl 栈参数**（不是 `__usercall` 14 寄存器参数：入口 `push <帧大小>; call 0x3702F` 是 Watcom 栈探针 `_chkstk`，IDA 把它的原型当成了函数的 ABI），局部状态机 | ★★★ |
-| `0x25977` `0x25EBB` `0x117E7` `0x22E5C` `0x26152` | 主状态机 | main 循环核心；含局部函数指针表 `funcs_25E23[]`/`funcs_25E3A[]`（表地址待从反汇编 `lea` 提取） | ★★★ |
+| `0x25EBB` `0x117E7` `0x22E5C` `0x26152` | 主状态机 | main 循环核心；含局部函数指针表 `funcs_25E23[]`/`funcs_25E3A[]`（表地址待从反汇编 `lea` 提取） | ★★★ |
+| `0x25977` | `play_bgm`（换曲入口，**已转译** `game/bgm.c`，对拍 6000 例） | 32 调用点；res_load(FDMUS.DAT)+AIL 序列族+DPMI lock | ★★ |
 | `0x4E98D` | **RLE 行解压 + blit**（已确认） | 序言 `ESI=src; w=[esi]; h=[esi+2]; EDI = a4 + a3*a5 + a2`（a4=目标基址、a5=pitch、a2/a3=偏移），每个扫描行按 token 做 `rep stosb` / `rep movsb` / 跳过，行末 `EDI += a5 - w`；共 39 个调用点（如 `sub_10652` 解 FDOTHER 资源到 `malloc` 缓冲、`sub_1F894` 解说 0xA0000 帧缓冲） | ★★★ |
 | `0x373CA` | stdio 写核心 | 466 次游戏调用，FILE+12 flags、`_ioalloc` ⇒ 属 CRT，**不转译** | — |
 | `0x10010` | 存档 | 1552B，引用 `FD2.SAV`/`FD2.TMP` | ★★ |

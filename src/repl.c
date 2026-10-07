@@ -36,6 +36,7 @@
 #include "game/svc.h"
 #include "game/vm.h"
 #include "game/res.h"
+#include "game/bgm.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -187,6 +188,12 @@ static const struct repl_entry g_repl[] = {
      * must be the game's heap - guest_mem.h now provides exactly that, and
      * the size is published to dword_53BFF (0x53BFF). */
     { 0x111BA, "res_load",           (void *)res_load,            REPL_RES },
+
+    /* --- background music entry (src/game/bgm.c) ------------------------
+     * 0x25977, the only "change track" entry (32 call sites). Calls res_load
+     * and the AIL sequence entry points through their original addresses, so
+     * this replaces exactly what the machine code did. */
+    { 0x25977, "bgm_play",           (void *)bgm_play,            REPL_BGM },
 };
 
 unsigned repl_parse(const char *spec)
@@ -213,6 +220,7 @@ unsigned repl_parse(const char *spec)
         else if (!plat_stricmp(tok, "svc"))      mask |= REPL_SVC;
         else if (!plat_stricmp(tok, "vm"))       mask |= REPL_VM;
         else if (!plat_stricmp(tok, "res"))      mask |= REPL_RES;
+        else if (!plat_stricmp(tok, "bgm"))      mask |= REPL_BGM;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

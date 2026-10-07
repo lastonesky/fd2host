@@ -33,7 +33,8 @@
 #define REPL_SVC      0x80u
 #define REPL_VM       0x100u
 #define REPL_RES      0x200u
-#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG | REPL_REC | REPL_SVC | REPL_VM | REPL_RES)
+#define REPL_BGM      0x400u
+#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG | REPL_REC | REPL_SVC | REPL_VM | REPL_RES | REPL_BGM)
 
 /* "all" | "none" | comma-separated group names -> mask */
 unsigned repl_parse(const char *spec);

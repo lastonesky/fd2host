@@ -43,6 +43,7 @@ MODULE_INFO = {
     "svc.c":      ("typecheck",     "1176",  "BIOS tick wait + PCM SFX (also in typecheck)"),
     "vm.c":       ("vmcheck",       "5512",  "script/text VM 0x15F84"),
     "res.c":      ("rescheck",      "160",   "LMI resource loader; heap via guest_mem"),
+    "bgm.c":      ("bgmcheck",      "6000",  "play_bgm 0x25977; services hooked, event log compared"),
 }
 
 # Translated and checked, but deliberately *not* in repl.c yet. Keep the reason.

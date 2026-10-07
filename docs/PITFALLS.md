@@ -506,3 +506,11 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     抢救：`git checkout HEAD -- AGENTS.md` 后改用 edit 工具做**唯一一处**替换。
     **规则**：改 Markdown（尤其含 `|`/`/`/`*` 的行）用编辑工具按精确文本替换，不要 `sed`；
     真要 sed，先用 `grep -c` 确认唯一匹配。
+69. **机器码的 `movzx + cmp` 不能照着写成 `(uint8_t)` 比较**（第 49 轮，`play_bgm`）：
+    `0x25977` 开头 `movzx eax,byte_51A11; cmp eax,arg_0` —— 把存下来的**字节零扩展**后与
+    **完整 32 位实参**比。照着直觉写 `if (byte_51A11 == (uint8_t)track) return;`，
+    在 `track == -1` 时就反了：C 里 `0xFF == 0xFF` 直接返回，机器码是 `0xFF != 0xFFFFFFFF`
+    继续执行（发 4 秒淡出）。修法：比较用整数（`(unsigned)byte_51A11 == (unsigned)track`），
+    只在**写入**时 `(uint8_t)track` 截断。
+    **判据**：`bgmcheck` 第 81 例（`track=-1, byte_51A11=0xFF`）当场 `event count 1/0`；
+    改前 FAIL、改后 **6000/0**。教训：反编译出来的 `(unsigned __int8)` 比较要回看汇编确认是谁被截断。
