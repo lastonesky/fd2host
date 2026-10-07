@@ -39,10 +39,10 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x16886,48,sub_16886,game,23,23,0,0,0,Y
 0x12e38,114,sub_12E38,game,22,22,0,0,0,Y
 0x1b722,46,sub_1B722,game,20,20,0,0,0,-
-0x127a9,55,sub_127A9,game,20,20,0,0,0,-
+0x127a9,55,sub_127A9,game,20,20,0,0,0,Y
 0x344f2,63,sub_344F2,game,20,20,0,0,0,-
 0x10620,50,sub_10620,game,17,17,0,0,0,Y
-0x1f183,73,sub_1F183,game,17,17,0,0,0,-
+0x1f183,73,sub_1F183,game,17,17,0,0,0,Y
 0x197e5,366,sub_197E5,game,17,17,0,0,0,-
 0x373ca,466,sub_373CA,lib_nosym,17,17,0,0,0,-
 0x14818,480,sub_14818,game,17,17,0,0,0,-
@@ -82,7 +82,7 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x13512,36,sub_13512,game,11,11,0,0,0,-
 0x34d64,46,sub_34D64,game,11,10,0,1,0,-
 0x25b45,175,sub_25B45,game,11,11,0,0,0,Y
-0x127e0,413,sub_127E0,game,11,11,0,0,0,-
+0x127e0,413,sub_127E0,game,11,11,0,0,0,Y
 0x1c2da,498,sub_1C2DA,game,11,11,0,0,0,-
 0x36439,7,sub_36439,game,10,9,0,1,0,-
 0x36440,7,sub_36440,game,10,9,0,1,0,-
@@ -318,13 +318,13 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x237d5,202,sub_237D5,game,4,3,0,1,0,-
 0x24d22,208,sub_24D22,game,4,4,0,0,0,-
 0x1f42d,214,sub_1F42D,game,4,4,0,0,0,-
-0x129ec,218,sub_129EC,game,4,4,0,0,0,-
+0x129ec,218,sub_129EC,game,4,4,0,0,0,Y
 0x232e8,222,sub_232E8,game,4,3,0,1,0,-
 0x238dc,225,sub_238DC,game,4,3,0,1,0,-
 0x2921a,230,sub_2921A,game,4,4,0,0,0,-
 0x234bb,257,sub_234BB,game,4,3,0,1,0,-
 0x24c1e,260,sub_24C1E,game,4,3,0,1,0,-
-0x12ac6,327,sub_12AC6,game,4,4,0,0,0,-
+0x12ac6,327,sub_12AC6,game,4,4,0,0,0,Y
 0x23a0a,341,sub_23A0A,game,4,3,0,1,0,-
 0x244b6,354,sub_244B6,game,4,3,0,1,0,-
 0x23cd5,356,sub_23CD5,game,4,3,0,1,0,-

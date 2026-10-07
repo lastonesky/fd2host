@@ -147,6 +147,7 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 | `0x373CA` | stdio 写核心 | 466 次游戏调用，FILE+12 flags、`_ioalloc` ⇒ 属 CRT，**不转译** | — |
 | `0x10010` | 存档 | 1552B，引用 `FD2.SAV`/`FD2.TMP` | ★★ |
 | `0x10B4E` | FDICON.B24 加载 | 引用 `File 'FDICON.B24' error` | ★★ |
+| `0x11019`/`0x127E0`/`0x127A9` | 头像/图标图集与绘制（**已转译** `game/dlg.c`，`mapcheck` 97000 例） | `0x11019` 把每个图标资源的 12 张子图读进 `*(0x53A61)`（**32 位偏移表在基址**，表长 12×已载资源数）；`0x127E0` 按记录字段选帧（索引 `mode+12*p[2]+3*p[3]`，每 BIOS tick 翻 `dword_53A04`，`p[5]` bit7 选 `sprite24_ramp24`/`plain`）；`0x127A9` 扫全部未标记记录后 `map_refresh_records` | ★★ |
 | `0x20421` | ANI.DAT 加载 | 引用 `ANI.DAT` | ★★ |
 | `0x4E381` | 清键盘缓冲 | `MEMORY[0x41C]=MEMORY[0x41A]`（BDA） | ★（宿主 BDA 已支持） |
 | `0x4EBE3` | 随机表滚动 | `ROL16(word_627B8-28652)` | ★ |
@@ -160,7 +161,10 @@ AIL_set_sample_loop_count(h, a7); AIL_start_sample(h);
 > `0x165AC/0x16B43/0x168B6/0x1685C` → `dlg.c`（boxcheck 240）；等键+嘴型 `0x16C57` → `dlg.c`（keycheck 100）；
 > 角色记录表 `0x34894/0x12C60` → `rec.c`（28739）；**系统服务** `0x17AA9` 等 N 个 BIOS tick /
 > `0x25A96` 播 PCM 音效 → `svc.c`，打字机步进 `0x164E8` → `dlg.c`（typecheck 1176）；
-> 其中 **49 个经 `src/repl.c` 接入运行中的游戏**（机器码逐字节对拍 + `regress` 8/8，docs/rounds/*.md（按轮次分卷，见 docs/INDEX.md）§19..§33）。
+> 淡变 `0x11D40/0x1F882/0x1F525` → `fade.c`（4000）；脚本 VM `0x15F84` → `vm.c`（5512）；
+> 地图/动画/头像绘制（`map.c`/`anim.c`/`dlg.c` 的 `0x126F7`/`0x1297D`/`0x187D6`/
+> `0x12AC6`/`0x129EC`/`0x127E0`/`0x127A9` 等）→ `mapcheck`（97000）；
+> 其中 **81 个经 `src/repl.c` 接入运行中的游戏**（机器码逐字节对拍 + `regress` 8/8，docs/rounds/*.md（按轮次分卷，见 docs/INDEX.md）§19..§57）。
 
 游戏侧高频依赖（`lib_nosym`，需归类确认属于谁）：`0x4E381(15/64)`、`0x4EBE3(28/40)`、`0x4DF4C(56/32)`、`0x4E22A(114/13)`、`0x4E31C(101/15)` —— 0x4D000..0x4F000 段像**游戏自带工具库**（位流、24×24 图元、BIOS 封装），优先归类。
 

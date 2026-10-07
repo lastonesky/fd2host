@@ -59,6 +59,10 @@ typedef void (*refresh_fn)(void);
 #define ORIG_SKIP    ((skip_fn)    (uintptr_t)0x0001F183u)
 #define ORIG_CELLSPR ((cellspr_fn) (uintptr_t)0x00012AC6u)
 #define ORIG_REFRESH ((refresh_fn) (uintptr_t)0x000129ECu)
+typedef void (*draw_fn)(int);
+typedef void (*refreshall_fn)(void);
+#define ORIG_DRAW    ((draw_fn)       (uintptr_t)0x000127E0u)
+#define ORIG_ALLPORT ((refreshall_fn) (uintptr_t)0x000127A9u)
 
 #define BITMAP_SZ (400 * 1024)
 #define TILE_W    24
@@ -155,6 +159,7 @@ int main(int argc, char **argv)
     uint8_t *nres = (uint8_t *)malloc(32 * 1024);
     uint8_t *sbank = (uint8_t *)malloc(0x0A + 4 * 2048 + 2048 * 600);
     uint8_t *pbank = (uint8_t *)malloc(6 + 4 * 256 + 256 * 256);
+    uint8_t *ibank = (uint8_t *)malloc(64 * 1024);
 
     if (le_reserve_address_space() != 0) { printf("reserve failed\n"); return 2; }
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -166,7 +171,7 @@ int main(int argc, char **argv)
     printf("mapcheck: redirected %d low-memory references to 0x%X\n",
            patch_lowmem_refs(&le, MIRROR), MIRROR);
 
-    if (!bitmap || !tileset || !lmi || !dstA || !dstB || !recs || !cells || !ctbl || !nres || !sbank || !pbank)
+    if (!bitmap || !tileset || !lmi || !dstA || !dstB || !recs || !cells || !ctbl || !nres || !sbank || !pbank || !ibank)
         return 2;
 
     /* ---- tileset layout: table at +6, 4 sub-images at +22 ---- */
@@ -242,6 +247,18 @@ int main(int argc, char **argv)
     PTR(0x53A49) = bitmap;
     PTR(0x53A4D) = tileset;
     PTR(0x53A45) = recs;
+
+    /* icon/portrait bank *(0x53A61): 32-bit offset table at the base, four
+     * resources of twelve 24x24 frames each (index = mode + 12*res + 3*dir). */
+    {
+        uint32_t off = 4 * 48;
+        int k;
+        for (k = 0; k < 48; k++) {
+            *(uint32_t *)(ibank + 4 * k) = off;
+            off += (uint32_t)fill_tile_stream(ibank + off, (uint8_t)(k * 11 + 9));
+        }
+    }
+    PTR(0x53A61) = ibank;
 
     for (round = 0; round < 500 && !g_fail; round++) {
         int i;
@@ -539,6 +556,96 @@ int main(int argc, char **argv)
             cases++;
             if (memcmp(dstA, dstB, BITMAP_SZ) != 0)
                 fail("map_blit_cell_sprite");
+        }
+
+        /* ---- dlg_portrait_draw (0x127E0) ------------------------------ */
+        for (i = 0; i < 20 && !g_fail; i++) {
+            int     idx = (int)(rnd() % 8);
+            int     k;
+            int16_t tick = (int16_t)rnd();
+            int32_t a4i  = (int32_t)(rnd() & 1);   /* only ever toggled 0/1 */
+            int32_t a8i  = (int32_t)(int16_t)rnd();
+            int32_t a4a, a8a, a4b, a8b;
+
+            PTR(0x53A45) = recs;
+            I32(0x53BEB) = 8;
+            for (k = 0; k < 80 * 8; k++) recs[k] = (uint8_t)rnd();
+            recs[80 * idx + 0]  = (uint8_t)(rnd() % 20);   /* x, some out of view */
+            recs[80 * idx + 1]  = (uint8_t)(rnd() % 20);   /* y                   */
+            recs[80 * idx + 2]  = (uint8_t)(rnd() % 4);    /* icon resource       */
+            recs[80 * idx + 3]  = (uint8_t)(rnd() % 4);    /* direction           */
+            recs[80 * idx + 4]  = (uint8_t)(rnd() & 1);    /* frame               */
+            recs[80 * idx + 5]  = (uint8_t)(rnd() & 0xFF); /* bit 7 = ramp24      */
+            recs[80 * idx + 38] = (uint8_t)(rnd() & 1);    /* flip variant        */
+
+            I32(0x53AA9) = 0; I32(0x53AAD) = 0;
+            I32(0x51A87) = 12; I32(0x51A8B) = 10;
+            I32(0x53C07) = (int32_t)(rnd() % 4);
+            I32(0x53C0B) = (int32_t)(rnd() % 4);
+
+            *(volatile uint16_t *)(uintptr_t)G_TICK = (uint16_t)tick;
+            I32(0x53A04) = a4i; I32(0x53A08) = a8i;
+            memset(bitmap, 0x66, BITMAP_SZ);
+            ORIG_DRAW(idx);
+            memcpy(dstA, bitmap, BITMAP_SZ);
+            a4a = I32(0x53A04); a8a = I32(0x53A08);
+
+            *(volatile uint16_t *)(uintptr_t)G_TICK = (uint16_t)tick;
+            I32(0x53A04) = a4i; I32(0x53A08) = a8i;
+            memset(bitmap, 0x66, BITMAP_SZ);
+            dlg_portrait_draw(idx);
+            a4b = I32(0x53A04); a8b = I32(0x53A08);
+            cases++;
+            if (memcmp(dstA, bitmap, BITMAP_SZ) != 0 || a4a != a4b || a8a != a8b) {
+                size_t q, where = 0;
+                for (q = 0; q < BITMAP_SZ; q++)
+                    if (dstA[q] != bitmap[q]) { where = q; break; }
+                snprintf(g_why, sizeof g_why,
+                         "idx=%d x=%d y=%d @%u a4 %d/%d a8 %d/%d", idx,
+                         recs[80 * idx], recs[80 * idx + 1], (unsigned)where,
+                         a4a, a4b, a8a, a8b);
+                fail("dlg_portrait_draw");
+            }
+        }
+
+        /* ---- dlg_portraits_refresh (0x127A9) -------------------------- */
+        if (!g_fail) {
+            int     n = 1 + (int)(rnd() % 6);
+            int     k;
+            int16_t tick = (int16_t)rnd();
+            int32_t a4i  = (int32_t)(rnd() & 1);   /* only ever toggled 0/1 */
+            int32_t a8i  = (int32_t)(int16_t)rnd();
+
+            PTR(0x53A45) = recs;
+            I32(0x53BEB) = n;
+            for (k = 0; k < 80 * n; k++) recs[k] = (uint8_t)rnd();
+            for (k = 0; k < n; k++) {
+                recs[80 * k + 0]  = (uint8_t)(rnd() % 20);
+                recs[80 * k + 1]  = (uint8_t)(rnd() % 20);
+                recs[80 * k + 2]  = (uint8_t)(rnd() % 4);
+                recs[80 * k + 3]  = (uint8_t)(rnd() % 4);
+                recs[80 * k + 4]  = (uint8_t)(rnd() & 1);
+                recs[80 * k + 5]  = (uint8_t)(rnd() & 0xFF);
+                recs[80 * k + 38] = (uint8_t)(rnd() & 1);
+            }
+            I32(0x53AA9) = 0; I32(0x53AAD) = 0;
+            I32(0x51A87) = 12; I32(0x51A8B) = 10;
+            I32(0x53C07) = (int32_t)(rnd() % 4);
+            I32(0x53C0B) = (int32_t)(rnd() % 4);
+
+            *(volatile uint16_t *)(uintptr_t)G_TICK = (uint16_t)tick;
+            I32(0x53A04) = a4i; I32(0x53A08) = a8i;
+            memset(bitmap, 0x66, BITMAP_SZ);
+            ORIG_ALLPORT();
+            memcpy(dstA, bitmap, BITMAP_SZ);
+
+            *(volatile uint16_t *)(uintptr_t)G_TICK = (uint16_t)tick;
+            I32(0x53A04) = a4i; I32(0x53A08) = a8i;
+            memset(bitmap, 0x66, BITMAP_SZ);
+            dlg_portraits_refresh();
+            cases++;
+            if (memcmp(dstA, bitmap, BITMAP_SZ) != 0)
+                fail("dlg_portraits_refresh");
         }
 
         /* ---- tbl_off627D8 (0x4EB48) ----------------------------------- */

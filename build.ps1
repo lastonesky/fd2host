@@ -65,21 +65,21 @@ $targets = @{
     rle2check = @{ srcs = @("rle2check.c", "le.c", "game\rle2.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/dlg.c (dialogue box helpers) vs 0x16559/0x16E24
     # game\svc.c: dlg.c's dlg_type_step calls svc_play_sfx / svc_wait_ticks
-    dlgcheck = @{ srcs = @("dlgcheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c", "game\res.c", "game\rle.c", "game\rec.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    dlgcheck = @{ srcs = @("dlgcheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c", "game\res.c", "game\rle.c", "game\rec.c", "game\map.c", "game\sprite24.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: src/game/dlg.c box animation vs 0x165AC/0x16B43/0x168B6/0x1685C,
     # with the CRT heap / delay / BDA / portrait-glide services hooked to event-recording stubs
-    boxcheck = @{ srcs = @("boxcheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c", "game\res.c", "game\rle.c", "game\rec.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    boxcheck = @{ srcs = @("boxcheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c", "game\res.c", "game\rle.c", "game\rec.c", "game\map.c", "game\sprite24.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: dlg_wait_key vs 0x16C57 - low-memory mirror + BDA
     # operand redirect (like the host), palette hook drives a deterministic
     # tick, int386 hook scripts the key
-    keycheck = @{ srcs = @("keycheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c", "game\res.c", "game\rle.c", "game\rec.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    keycheck = @{ srcs = @("keycheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c", "game\res.c", "game\rle.c", "game\rec.c", "game\map.c", "game\sprite24.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # portable key table (src/keys.c) pinned against MapVirtualKeyA - the
     # Windows reference the entry layers use; see src/keyscheck.c
     keyscheck = @{ srcs = @("keyscheck.c", "keys.c", "keys_win32.c"); libs = @("user32.lib"); subsystem = "console"; link = "" }
     # differential test: the six hot leaves (kbd/util/gfx/res/dlg) vs their
     # machine code - low-mem redirect for the BDA pair, real FDOTHER sub-image
     # for res_blit; see src/leafcheck.c
-    leafcheck = @{ srcs = @("leafcheck.c", "le.c", "game\kbd.c", "game\util.c", "game\gfx.c", "game\res.c", "game\rle.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\rec.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    leafcheck = @{ srcs = @("leafcheck.c", "le.c", "game\kbd.c", "game\util.c", "game\gfx.c", "game\res.c", "game\rle.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\rec.c", "game\map.c", "game\sprite24.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: palette fades 0x11D40/0x1F882/0x1F525 vs game/fade.c
     fadecheck = @{ srcs = @("fadecheck.c", "le.c", "game\fade.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: map_blit_tile (0x126F7) + res_blit6 (0x16886) +
@@ -95,7 +95,7 @@ $targets = @{
     # differential test: dlg_type_step (0x164E8) plus the two services it ends
     # with - svc_play_sfx (0x25A96) and svc_wait_ticks (0x17AA9). Low-memory
     # mirror + a tick stub that both sides read through (see src/typecheck.c)
-    typecheck = @{ srcs = @("typecheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c", "game\res.c", "game\rle.c", "game\rec.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    typecheck = @{ srcs = @("typecheck.c", "le.c", "game\dlg.c", "game\svc.c", "game\rle2.c", "game\gfx.c", "game\res.c", "game\rle.c", "game\rec.c", "game\map.c", "game\sprite24.c", "game\guest_mem.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # differential test: the script VM 0x15F84 vs src/game/vm.c - every
     # service is hooked to a recording stub so both sides see one world
     # (see src/vmcheck.c)

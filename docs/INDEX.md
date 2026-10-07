@@ -42,6 +42,18 @@
 | `rounds/13-portability.md` | 明细 | **跨平台第 1 刀**：`platform.h` 内存层、`le.c` 零 Win32、Win32/Linux 哈希一致、全仓 Win32 依赖面测绘 | §43 |
 | `rounds/14-fixup-boundary.md` | 明细 | **跨页 fixup 两类之辨**：补回 11 处漏掉的重定位，三对象与 Ghidra 逐字节一致 | §44 |
 | `rounds/15-dos-and-faults.md` | 明细 | **跨平台第 2 刀**：`dos_fault.h`（VEH/sigaction 薄包装 + 可移植核心）、`dos_ctx`、platform.h 第 2 切片（`pread/pwrite`）、`faultprobe32` 实测 i386 compat 故障模型、`doscheck` 两平台 49/49 | §45 |
+| `rounds/16-entry-layer.md` | 明细 | **跨平台第 3 刀**：便携键表 `keys.c` + X11/XWayland 判定、`host.c`/`keylog.c` 过河、Linux 宿主 `host32` | §46 |
+| `rounds/17-res-and-guest-heap.md` | 明细 | `res.c` 接入 + **`guest_mem` 唯一堆缝**（游戏堆 / 宿主 malloc） | §47 |
+| `rounds/18-snapshot-pair.md` | 明细 | 快照对 `0x15E9E`/`0x15E71` → `dlg_snap_save/restore`（走 guest_mem） | §48 |
+| `rounds/19-play-bgm.md` | 明细 | 主状态机族第一刀：换曲入口 `play_bgm`（`movzx+cmp` 不能写成 `(uint8_t)` 比较） | §49 |
+| `rounds/20-scene-card.md` | 明细 | `scene_card` 场景卡 + 钉死状态机分派表 `funcs_25E23/25E3A` | §50 |
+| `rounds/21-fade.md` | 明细 | 调色板淡变三件套 `0x11D40`/`0x1F882`/`0x1F525` | §51 |
+| `rounds/22-hot-leaves.md` | 明细 | 热叶子六件套（kbd/util/gfx/res/dlg）+ `rle_decode` 目的地偏移坑 | §52 |
+| `rounds/23-map-view.md` | 明细 | 地图视图叶子四件套 `map_blit_tile`/`pal_fade_add`/`res_blit6`/`dlg_portrait_clear` | §53 |
+| `rounds/24-anim-cell.md` | 明细 | 动画/地图格/头像查找四件套（BDA tick 帧计数、格信息、头像查找、表访问器） | §54 |
+| `rounds/25-number-render.md` | 明细 | 数字渲染链 `0x187D6`/`0x1875D`/`0x1AEB1` | §55 |
+| `rounds/26-cell-sprites.md` | 明细 | 格子对象精灵链 `0x1F183`/`0x12AC6`/`0x129EC` | §56 |
+| `rounds/27-portrait-draw.md` | 明细 | 头像精灵链 `0x127E0`/`0x127A9`（32 位偏移表 `*(0x53A61)`）+ harness 全局值域坑 | §57 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。

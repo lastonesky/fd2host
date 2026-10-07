@@ -100,6 +100,11 @@ void dlg_portrait_clear(void);
 /* 0x12C0D - index of the portrait record at qword_53AB1 (or -1) */
 int dlg_portrait_find(void);
 
+/* 0x127E0 - draw the icon/portrait sprite of record `idx`; 0x127A9 draws
+ * every unflagged record and then refreshes the map cell sprites. */
+void dlg_portrait_draw(int idx);
+void dlg_portraits_refresh(void);
+
 /* 0x187D6 / 0x1875D / 0x1AEB1 - number rendering from the box-frame sprites */
 void dlg_draw_number(void *dst, int pitch, int value, int base_index, int digits);
 void dlg_draw_number_pair(void *dst, int pitch, int value, int compare, int digits);

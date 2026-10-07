@@ -67,6 +67,8 @@ CASE_OVERRIDE = {            # addr -> (check, cases) when a module needs a one-
     0x1F183: ("mapcheck", "3000"),
     0x12AC6: ("mapcheck", "3000"),
     0x129EC: ("mapcheck", "3000"),
+    0x127E0: ("mapcheck", "4000"),
+    0x127A9: ("mapcheck", "500"),
     0x16886: ("mapcheck", "3000"),
     0x134E4: ("mapcheck", "3000"),
     0x4E381: ("leafcheck", "72000"),

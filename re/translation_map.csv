@@ -5,6 +5,8 @@ addr,c_name,source_file,group,check,cases,status,note
 0x11DF2,pal_fade_add,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x11EB0,gfx_copy_rows,src/game/fade.c,gfx,leafcheck,72000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x126F7,map_blit_tile,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
+0x127A9,dlg_portraits_refresh,src/game/dlg.c,dlg,mapcheck,500,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x127E0,dlg_portrait_draw,src/game/dlg.c,dlg,mapcheck,4000,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x1297D,anim_frame_step,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x129EC,map_refresh_records,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x12AC6,map_blit_cell_sprite,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared

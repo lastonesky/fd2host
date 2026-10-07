@@ -236,6 +236,13 @@ static const struct repl_entry g_repl[] = {
     { 0x1F183, "rec_skip",           (void *)rec_skip,             REPL_REC },
     { 0x12AC6, "map_blit_cell_sprite", (void *)map_blit_cell_sprite, REPL_MAP },
     { 0x129EC, "map_refresh_records", (void *)map_refresh_records,  REPL_MAP },
+
+    /* --- portrait icon draw chain (src/game/dlg.c) -----------------------
+     * 0x127E0 draws one record's 24x24 icon (sprite24 plain/ramp24) and
+     * 0x127A9 sweeps every unflagged record then refreshes the map cells.
+     * The atlas is dword_53A61, a 32-bit offset table filled by 0x11019. */
+    { 0x127E0, "dlg_portrait_draw",  (void *)dlg_portrait_draw,    REPL_DLG },
+    { 0x127A9, "dlg_portraits_refresh", (void *)dlg_portraits_refresh, REPL_DLG },
 };
 
 unsigned repl_parse(const char *spec)

@@ -49,6 +49,8 @@
 #include "rec.h"
 #include "res.h"
 #include "rle.h"
+#include "map.h"
+#include "sprite24.h"
 #include "guest_mem.h"
 #include <string.h>
 #include <stdio.h>
@@ -73,6 +75,16 @@
 #define dword_53A14 (*(int32_t *)(uintptr_t)0x00053A14u) /* chars since blit   */
 #define dword_53AB9 (*(int32_t *)(uintptr_t)0x00053AB9u) /* portrait cols */
 #define dword_53ABD (*(int32_t *)(uintptr_t)0x00053ABDu) /* portrait rows */
+#define dword_53A49 (*(uint8_t **)(uintptr_t)0x00053A49u) /* map bitmap   */
+#define dword_53A61 (*(uint8_t **)(uintptr_t)0x00053A61u) /* icon bank    */
+#define dword_53A04 (*(uint32_t *)(uintptr_t)0x00053A04u) /* portrait flip */
+#define dword_53A08 (*(int32_t  *)(uintptr_t)0x00053A08u) /* last tick    */
+#define dword_53AA9 (*(int32_t  *)(uintptr_t)0x00053AA9u) /* view x origin */
+#define dword_53AAD (*(int32_t  *)(uintptr_t)0x00053AADu) /* view y origin */
+#define dword_51A87 (*(int32_t  *)(uintptr_t)0x00051A87u) /* view cols    */
+#define dword_51A8B (*(int32_t  *)(uintptr_t)0x00051A8Bu) /* view rows    */
+#define dword_53C07 (*(int32_t  *)(uintptr_t)0x00053C07u) /* anim phase A */
+#define dword_53C0B (*(int32_t  *)(uintptr_t)0x00053C0Bu) /* anim phase B */
 #define dword_53C67 (*(int32_t *)(uintptr_t)0x00053C67u) /* box position */
 #define word_53A8D  (*(uint16_t *)(uintptr_t)0x00053A8Du) /* INT 16h REGS.EAX */
 #define byte_53A8E  (*(uint8_t  *)(uintptr_t)0x00053A8Eu) /* .. AH (scan code) */
@@ -423,6 +435,86 @@ int dlg_portrait_find(void)
             return i;
     }
     return -1;
+}
+
+/* 0x127E0 - draw the icon/portrait sprite of record `idx`.
+ *
+ * The record (dword_53A45 + 80*idx) gives the cell (x, y), the icon
+ * resource p[2], a direction/mouth byte p[3] and a frame byte p[4]; p[38]
+ * selects the "flip" variant. The sprite bank is dword_53A61, a 32-bit
+ * offset table whose entry `mode + 12*p[2] + 3*p[3]` points at a 24x24
+ * sprite24 stream; `mode` is the animation phase dword_53C07 (frame != 0)
+ * or dword_53C0B (frame == 0), with 3 folded to 1 and p[38] forcing 0.
+ * The two-frame wobble toggles dword_53A04 once per BIOS tick and offsets
+ * the destination; p[5] bit 7 selects ramp24 recolouring, else plain.
+ * Called by dlg_portraits_refresh and several state handlers.
+ * Verified byte-for-byte against the machine code by src/mapcheck.c. */
+void dlg_portrait_draw(int idx)
+{
+    const uint8_t *p = (const uint8_t *)(uintptr_t)dword_53A45 + 80 * idx;
+    int32_t tick = (int32_t)(int16_t)ORIG_TICK();
+    int x, y, dir, frame, mouth, step, off, mode;
+    const uint8_t *src;
+
+    if (tick != dword_53A08) {
+        dword_53A04 ^= 1;              /* low byte flips, like the machine */
+        dword_53A08 = tick;
+    }
+
+    x = p[0]; y = p[1]; dir = p[3]; frame = p[4]; mouth = p[5];
+
+    if (x < dword_53AA9 - 1 || x > dword_53AA9 + dword_51A87)
+        return;
+    if (y < dword_53AAD - 1 || y > dword_53AAD + dword_51A8B + 1)
+        return;
+
+    if (dir != 0) {
+        if (dir == 1)
+            step = -4;
+        else if (dir == 2)
+            step = -1824;
+        else
+            step = 4;
+    } else {
+        step = 1824;
+    }
+
+    off = 24 * (x - dword_53AA9) + 10944 * (y - dword_53AAD) + step * frame;
+    if (p[38] != 0)
+        off += dword_53A04;
+
+    if (frame != 0)
+        mode = dword_53C07;
+    else
+        mode = dword_53C0B;
+    if (mode == 3)
+        mode = 1;
+    if (p[38] != 0)
+        mode = 0;
+
+    src = (const uint8_t *)(uintptr_t)dword_53A61
+        + *(const uint32_t *)(uintptr_t)(dword_53A61
+                                         + 4 * (mode + 12 * p[2] + 3 * dir));
+    off += 30168;
+    if (off < 0)
+        return;
+
+    if (mouth & 0x80)
+        sprite24_ramp24(src, (uint8_t *)(uintptr_t)dword_53A49 + off, 456);
+    else
+        sprite24_plain(src, (uint8_t *)(uintptr_t)dword_53A49 + off, 456);
+}
+
+/* 0x127A9 - draw every unflagged portrait record, then refresh the map cell
+ * sprites under the records. */
+void dlg_portraits_refresh(void)
+{
+    int i;
+
+    for (i = 0; i < dword_53BEB; i++)
+        if (rec_flag(i) == 0)
+            dlg_portrait_draw(i);
+    map_refresh_records();
 }
 
 /* 0x187D6 - draw a decimal number as digit sprites from the box-frame
