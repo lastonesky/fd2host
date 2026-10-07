@@ -85,10 +85,23 @@
 
 1. ~~`sub_15F84` 脚本 VM~~ **已完成（§39）**：`game/vm.c` + `vmcheck` **5512 例全过**，接入分组 `vm`。
    遗留 `0x15E9E`/`0x15E71`（快照/还原）按第 2 条与 CRT 堆整体替换一起接。
-2. **CRT 堆 + 文件层整体替换**（下一个大目标）：
-   Watcom CRT 的 `malloc/free/fopen/fread/...` 换成宿主 libc 后，`res.c`（已对拍 160 例但
-   因“两套堆”未接入）与 `0x15E71`/`0x15E9E` 才能安全接入 `repl.c`。判据：`rescheck` 仍过 +
-   `regress` 8/8 + 同 tick A/B 0 px。
+2. **接入 `res.c` + `0x15E71`/`0x15E9E`（堆一致性）** —— **下一个目标**。
+   先做的调研结论（第 46 轮，IDA + 现有代码）：
+   - 游戏自己的堆入口是 `0x3706E malloc` / `0x3776E free`（`re/funcmap.csv` 的 `crt_sym`），
+     底下是 `_nmalloc/__MemAllocator/sbrk`。**不整体换成 libc**：CRT 内部（stdio 的
+     `_ioalloc` 等）直接用自家堆，只换 `malloc/free` 会变成两堆混用。
+   - **先例已是“共用游戏堆”**：`game/dlg.c` 用 `ORIG_ALLOC = 0x3706E` 分配，
+     释放走原 `0x15E71`（内部 Watcom `free`）——这就是现有做法。
+   - **`res.c` 要改两处才能接**：① `malloc/free` → 游戏堆（`old_buffer` 是游戏给的、
+     `buf` 要还给游戏释放）；② `res_size` 现在写的是 C 自己的变量，必须改成写
+     游戏全局 `dword_53BFF`（`0x53BFF`），否则游戏读不到；`rescheck` 相应改成
+     “每次调用后先快照 `GUEST_SIZE`”。文件 I/O 可继续用宿主 libc（只是读字节）。
+   - **落地方式**：抽 `src/game/guest_mem.h`（`guest_malloc/guest_free`）作为**唯一堆缝**
+     （宿主里指向 `0x3706E/0x3776E`；check 工具里已被 CRT 重定向成 host malloc），
+     供 `res.c`、`dlg.c`（逐步迁移）、将来的 `0x15E71`/`0x15E9E` 共用；
+     **阶段 C（去 guest 化）只需把它的实现换成宿主 malloc**。
+   - 判据：`rescheck` 仍过（含新的 guest-global 检查）+ `regress` 8/8 +
+     同 tick A/B（`--replace=none` vs `all`）**0 px**。
 3. **主状态机**（`re/RE_MAP.md`：`0x25977`/`0x25EBB`/`0x117E7`/`0x22E5C`/`0x26152`，
    含 `funcs_25E23[]`/`funcs_25E3A[]` 函数指针表）：占比最大的一族，一条一条转、
    每条都挂 `*check` 对拍后再接入。
