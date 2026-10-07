@@ -46,6 +46,7 @@
 #include "gfx.h"
 #include "rle2.h"
 #include "svc.h"
+#include "rec.h"
 #include "guest_mem.h"
 #include <string.h>
 
@@ -62,6 +63,7 @@
 #define dword_53A85 (*(void **)(uintptr_t)0x00053A85u)   /* DATO sub-images    */
 #define dword_53A45 (*(void **)(uintptr_t)0x00053A45u)   /* portrait records   */
 #define dword_53BEB (*(int32_t *)(uintptr_t)0x00053BEBu)  /* portrait count     */
+#define qword_53AB1 (*(uint64_t *)(uintptr_t)0x00053AB1u) /* current position   */
 #define dword_53EEC (*(void **)(uintptr_t)0x00053EECu)   /* SFX bank resource  */
 #define dword_53A10 (*(int32_t *)(uintptr_t)0x00053A10u) /* mouth phase 0..3   */
 #define dword_53A14 (*(int32_t *)(uintptr_t)0x00053A14u) /* chars since blit   */
@@ -402,4 +404,19 @@ void dlg_portrait_clear(void)
         p += 80;
     }
     ORIG_DELAY(20);
+}
+
+/* 0x12C0D - find the portrait record whose (byte0,byte1) equals the 64-bit
+ * position qword_53AB1 and which is not flagged by rec_flag(); -1 if none. */
+int dlg_portrait_find(void)
+{
+    const uint8_t *p = (const uint8_t *)(uintptr_t)dword_53A45;
+    int i;
+
+    for (i = 0; i < dword_53BEB; i++, p += 80) {
+        uint64_t v = (uint64_t)p[0] | ((uint64_t)p[1] << 32);
+        if (v == qword_53AB1 && rec_flag(i) == 0)
+            return i;
+    }
+    return -1;
 }

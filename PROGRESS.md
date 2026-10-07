@@ -17,11 +17,11 @@
 **同一份源码也能在 Linux 上跑**（`build/fd2host-linux32`，X11/XWayland + sokol GLCORE）：
 与 Windows 同 guest tick 抓帧**逐像素 0 差异**（`rounds/16-entry-layer.md` §46.10）。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 69 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 73 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。
 
 > ⚠ **进度必须看清**：全量函数表 `re/funcmap.csv` 有 **1359** 个函数，已源码化的只有
-> **69 个 ≈ 5.1%**；**其余 ~96% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
+> **73 个 ≈ 5.4%**；**其余 ~96% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
 > 直接执行**。这正是宿主必须是 **32 位进程**的原因（x86-64 长模式不能执行 32 位代码，
 > 只有 `-m32`/WOW64 这类 32 位进程才行）；**等全部函数源码化后，这个 32 位门槛才会消失**。
 
@@ -50,7 +50,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**65 / 1369 个函数接入（≈5.1%）**           ⏳ 其余 ~96% 仍是原始机器码在跑
+源码转译：**65 / 1373 个函数接入（≈5.4%）**           ⏳ 其余 ~96% 仍是原始机器码在跑
 Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 px** ✅（§46.10）
 ```
 
@@ -102,6 +102,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
 | §51 | 10-07 | **调色板淡变三件套转译（第 57–59 个）** | `0x11D40` 区间淡变（`outp 0x3C8/9`，`pal-*(0x53A65)` 下限 0）+ `0x1F882` 变暗（sub 0→63）+ `0x1F525` 变亮（64→0），共 29 个调用点；`game/fade.c`，服务仍走原地址（`outp`/`delay`）。`fadecheck` **4000/0**；顺带修掉对拍自身越界（1024 事件/步 × 65 步 ≈ 66k，改用 FNV 哈希+计数，`rounds/21` §51.2）。判据：`regress` 8/8、`repl: installed 59`、`none↔all` 同 tick **0 px**、Linux 只做构建+`letest`/`doscheck`（新分级） | `docs/rounds/21-fade.md`、`docs/TRANSLATION.md` §4 |
 | §52 | 10-07 | **热叶子六件套（第 60–65 个）** | 按 `re/func_ranking.csv` 的用量排序取 6 个叶子：`kbd_flush`(64)/`kbd_pending`(17)（BDA，走 `DOS_LOWMEM_BASE` 镜像）、`util_rand`(40)、`gfx_copy_rows`(115)、`res_blit`(82，调已对拍 `rle_decode`)、`dlg_portrait_glide`(28)，共约 350 调用点；新 `kbd.c` + `src/leafcheck.c`（72008 例，含真实 FDOTHER.DAT 子图 × 4 mode）。踩坑：`rle_decode` 目的地偏移用实参 x/y、尺寸取流头（`§8-70`）。判据：`leafcheck` **72008/0**、`regress` 8/8、`repl: installed 65`、A/B **0 px**、Linux 构建+自检（新分级） | `docs/rounds/22-hot-leaves.md`、`docs/PITFALLS.md` §8-70 |
 | §53 | 10-07 | **地图视图叶子四件套（第 66–69 个）** | 按 ranking 取依赖闭合的 4 个：`map_blit_tile`(0x126F7)、`pal_fade_add`(0x11DF2，加+上限 0x3F)、`res_blit6`(0x16886，偏移表在 +6)、`dlg_portrait_clear`(0x134E4)；调用图里没有未转译游戏函数。新 `game/map.c` + `src/mapcheck.c`（**25000/0**），`fadecheck` 扩到 4 模式；`regress 8/8`、`repl: installed 69`、A/B **0 px**、Linux 构建+自检 | `docs/rounds/23-map-view.md` |
+| §54 | 10-07 | **动画/地图格/头像查找四件套（第 70–73 个）** | 沿 `0x11CAC` 的依赖拓扑收全闭合的 4 个：`anim_frame_step`(0x1297D，BDA tick 帧计数)、`map_cell_info`(0x12E38)、`dlg_portrait_find`(0x12C0D)、`tbl_off627D8`(0x4EB48)；新 `game/anim.c`；`mapcheck` 加低内存重定向后 **55500/0**。`regress 8/8`、`repl: installed 73`、A/B **0 px**、Linux 构建+自检 | `docs/rounds/24-anim-cell.md` |
 
 ## 4. 下一步计划（按优先级）
 
@@ -111,7 +112,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    **下一个目标**（`docs/TRANSLATION.md` §5）：**主状态机**
    `0x25977`/`0x25EBB`/`0x117E7`/`0x22E5C`/`0x26152`（含 `funcs_25E23[]`/`funcs_25E3A[]`
    函数指针表）——最大一块，一条一条转 + `*check` 对拍；
-   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 69/1359）。
+   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 73/1359）。
 2. ~~**补 autokey 配方**~~ **已完成（§40，2026-10-06）**：标准配方 + `--shot-tick=326..334`
    即可落在“打字进行中”，抓到 3 张不同进度的逐字画面（框区差异 455→327→325→0），
    且 **15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽 ⇒ `vm_run`+`dlg_type_step`
@@ -153,13 +154,13 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    （GLCORE，7948 fixup、65 低内存引用、52 AIL 打桩），与 Windows 同 tick `--screenshot`
    **0 / 64000 px** 差异。
    **关于 32 位**：用户要求终局**不再用 32 位**（要能上 macOS，而 macOS 已无 32 位）。
-   现状 69/1359 ≈ 4.8% 已源码化、其余仍是机器码且 C 会回调其固定 32 位地址 ⇒ 过渡期必须 32 位；
+   现状 73/1359 ≈ 4.8% 已源码化、其余仍是机器码且 C 会回调其固定 32 位地址 ⇒ 过渡期必须 32 位；
    路线（A 转译 → B 转完 → **C 去 guest 化** → D 64 位/三平台）见 `docs/TRANSLATION.md` §6、
    `rounds/16-entry-layer.md` §46.11。**下一步（工作重心）：按 §5 继续源码化**（51 → 1359）。
    同轮补：**Linux 窗口 180° 倒置修好**（GLSL 多翻一次 v；`--screenshot` 看不到窗口翻转，
    新增 `FD2_TESTPATTERN`/`FD2_GL_READBACK` 定向自检：修复前 `flipped=0`、修复后 `upright=0`，
    `PITFALLS` §8-67）；**转译记录/map** = `re/translation_map.csv` +`tools/translation_map.py`
-   （`--check` 防漂移；69 wired / 1359）。
+   （`--check` 防漂移；73 wired / 1359）。
 8. ~~FDPS（炎龙外传）~~ **已冻结**（2026-10-05 用户决定）：成果与卡点存档在 `docs/FDPS-ARCHIVE.md`，
    宿主的通用能力（`--exe`、FDPS AIL 表、定时器线程、INT9 注入）留在代码里不再主动维护。
 

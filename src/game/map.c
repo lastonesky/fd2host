@@ -24,6 +24,9 @@
 #define dword_51A8B (*(int32_t  *)(uintptr_t)0x00051A8Bu) /* view rows      */
 #define dword_53AA9 (*(int32_t  *)(uintptr_t)0x00053AA9u) /* view x origin  */
 #define dword_53AAD (*(int32_t  *)(uintptr_t)0x00053AADu) /* view y origin  */
+#define dword_53A51 (*(uint8_t **)(uintptr_t)0x00053A51u) /* cell table    */
+#define dword_53A69 (*(uint32_t  *)(uintptr_t)0x00053A69u) /* cell → 4 bytes */
+#define dword_53AC1 (*(int32_t   *)(uintptr_t)0x00053AC1u) /* map width      */
 
 void map_blit_tile(int x, int y, int index)
 {
@@ -39,4 +42,18 @@ void map_blit_tile(int x, int y, int index)
     dst = dword_53A49 + (y - dword_53AAD) * 10944 + (x - dword_53AA9) * 24
         + 32904;
     sprite24_plain(src, dst, 456);
+}
+
+/* 0x12E38 - read one map cell: out[0..1] = terrain tile (14 bits),
+ * out[2..3] = flags (0x1F), out[4..7] = the 4 bytes of dword_53A69[tile]. */
+void map_cell_info(int x, int y, uint8_t *out)
+{
+    const uint8_t *cell = dword_53A51 + 4 * (x + dword_53AC1 * y);
+    uint16_t tile  = *(const uint16_t *)(cell + 4) & 0x03FFu;
+    uint16_t flags = (uint16_t)(cell[6] & 0x1F);
+    const uint8_t *t = (const uint8_t *)(uintptr_t)(dword_53A69 + 4 * tile);
+
+    *(uint16_t *)out     = tile;
+    *(uint16_t *)(out + 2) = flags;
+    out[4] = t[0]; out[5] = t[1]; out[6] = t[2]; out[7] = t[3];
 }

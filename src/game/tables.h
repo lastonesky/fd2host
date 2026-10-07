@@ -34,3 +34,6 @@ void *tbl_ptr(void *base, int stride, int index, int offset);
 uint32_t tbl_u32(const void *base, int index);
 
 #endif /* GAME_TABLES_H */
+
+/* 0x4EB48 - pointer table at 0x627D8 */
+void *tbl_off627D8(int i);

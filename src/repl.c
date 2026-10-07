@@ -41,6 +41,8 @@
 #include "game/fade.h"
 #include "game/kbd.h"
 #include "game/map.h"
+#include "game/anim.h"
+#include "game/tables.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -224,6 +226,10 @@ static const struct repl_entry g_repl[] = {
     { 0x11DF2, "pal_fade_add",       (void *)pal_fade_add,        REPL_FADE },
     { 0x16886, "res_blit6",          (void *)res_blit6,           REPL_RES },
     { 0x126F7, "map_blit_tile",      (void *)map_blit_tile,       REPL_MAP },
+    { 0x12E38, "map_cell_info",      (void *)map_cell_info,       REPL_MAP },
+    { 0x1297D, "anim_frame_step",    (void *)anim_frame_step,     REPL_MAP },
+    { 0x12C0D, "dlg_portrait_find",  (void *)dlg_portrait_find,   REPL_DLG },
+    { 0x4EB48, "tbl_off627D8",       (void *)tbl_off627D8,        REPL_UTIL },
 };
 
 unsigned repl_parse(const char *spec)

@@ -96,3 +96,6 @@ void dlg_portrait_glide(int idx);
 
 /* 0x134E4 - clear the "mouth open" byte of every portrait record + 20 ms */
 void dlg_portrait_clear(void);
+
+/* 0x12C0D - index of the portrait record at qword_53AB1 (or -1) */
+int dlg_portrait_find(void);

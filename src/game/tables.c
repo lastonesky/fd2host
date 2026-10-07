@@ -15,3 +15,9 @@ uint32_t tbl_u32(const void *base, int index)
 {
     return *(const uint32_t *)((const char *)base + 4u * (uint32_t)index);
 }
+
+/* 0x4EB48 - the pointer table at 0x627D8 (one entry per argument). */
+void *tbl_off627D8(int i)
+{
+    return *(void **)(uintptr_t)(0x000627D8u + 4u * (uint32_t)i);
+}
