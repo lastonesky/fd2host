@@ -7,6 +7,8 @@ addr,c_name,source_file,group,check,cases,status,note
 0x11D40,pal_fade_range,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x11DF2,pal_fade_add,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x11EB0,gfx_copy_rows,src/game/fade.c,gfx,leafcheck,72000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
+0x11EEE,map_render_view,src/game/fade.c,map,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
+0x122DC,map_reveal_cursor,src/game/fade.c,map,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x126F7,map_blit_tile,src/game/fade.c,map,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x127A9,dlg_portraits_refresh,src/game/dlg.c,dlg,mapcheck,500,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x127E0,dlg_portrait_draw,src/game/dlg.c,dlg,mapcheck,4000,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
@@ -36,6 +38,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x187D6,dlg_draw_number,src/game/fade.c,dlg,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x1956B,msg_open_portrait,src/game/msg.c,dlg,msgcheck,465,wired (repl.c),portrait compositor 0x1956B/0x1974C/0x26996; event log + screen pair compared
 0x1974C,msg_blit_band,src/game/msg.c,dlg,msgcheck,465,wired (repl.c),portrait compositor 0x1956B/0x1974C/0x26996; event log + screen pair compared
+0x1ACF3,map_draw_cursor,src/game/fade.c,map,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x1AEB1,dlg_draw_number_signed,src/game/fade.c,dlg,mapcheck,3000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x1B722,rec_field_byte,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x1B83D,rec_slot_find,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
@@ -53,6 +56,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x2389F,scene_state_12,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
 0x239BD,scene_state_14,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
 0x23E39,scene_state_18,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
+0x24D22,map_scroll_lines,src/game/fade.c,map,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
 0x25977,bgm_play,src/game/bgm.c,bgm,bgmcheck,6000,wired (repl.c),"play_bgm 0x25977; services hooked, event log compared"
 0x25A96,svc_play_sfx,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
 0x25B45,svc_play_sfx2,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)

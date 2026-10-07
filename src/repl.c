@@ -310,6 +310,10 @@ static const struct repl_entry g_repl[] = {
     { 0x1F183, "rec_skip",           (void *)rec_skip,             REPL_REC },
     { 0x12AC6, "map_blit_cell_sprite", (void *)map_blit_cell_sprite, REPL_MAP },
     { 0x129EC, "map_refresh_records", (void *)map_refresh_records,  REPL_MAP },
+    { 0x11EEE, "map_render_view",     (void *)map_render_view,      REPL_MAP },
+    { 0x24D22, "map_scroll_lines",    (void *)map_scroll_lines,     REPL_MAP },
+    { 0x122DC, "map_reveal_cursor",   (void *)map_reveal_cursor,    REPL_MAP },
+    { 0x1ACF3, "map_draw_cursor",     (void *)map_draw_cursor,      REPL_MAP },
 
     /* --- portrait icon draw chain (src/game/dlg.c) -----------------------
      * 0x127E0 draws one record's 24x24 icon (sprite24 plain/ramp24) and

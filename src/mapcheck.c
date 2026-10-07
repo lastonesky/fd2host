@@ -20,6 +20,7 @@
 #include "le.h"
 #include "platform.h"
 #include "game/map.h"
+#include "game/rec.h"
 #include "game/res.h"
 #include "game/dlg.h"
 #include "game/anim.h"
@@ -56,15 +57,25 @@ typedef void (*sign_fn)(void *, int, int);
 typedef int  (*skip_fn)(int);
 typedef void (*cellspr_fn)(void *, int, int);
 typedef void (*refresh_fn)(void);
+typedef void (*render_fn)(uint8_t *, int, int, int, int, int);
+typedef void (*scroll_fn)(int);
+typedef void (*reveal_fn)(void);
+typedef void (*dcursor_fn)(uint8_t *, int);
 #define ORIG_SKIP    ((skip_fn)    (uintptr_t)0x0001F183u)
 #define ORIG_CELLSPR ((cellspr_fn) (uintptr_t)0x00012AC6u)
 #define ORIG_REFRESH ((refresh_fn) (uintptr_t)0x000129ECu)
+#define ORIG_RENDER  ((render_fn)  (uintptr_t)0x00011EEEu)
+#define ORIG_SCROLL  ((scroll_fn)  (uintptr_t)0x00024D22u)
+#define ORIG_REVEAL  ((reveal_fn)  (uintptr_t)0x000122DCu)
+#define ORIG_DCURSOR ((dcursor_fn) (uintptr_t)0x0001ACF3u)
 typedef void (*draw_fn)(int);
 typedef void (*refreshall_fn)(void);
 #define ORIG_DRAW    ((draw_fn)       (uintptr_t)0x000127E0u)
 #define ORIG_ALLPORT ((refreshall_fn) (uintptr_t)0x000127A9u)
 
 #define BITMAP_SZ (400 * 1024)
+#define SCR_SZ    (256 * 1024)
+#define EXP_SZ    (128 * 1024)
 #define TILE_W    24
 #define TILE_H    24
 #define MIRROR    0x00070000u
@@ -75,6 +86,10 @@ static char g_why[256];
 static int  g_delays;
 
 static void __cdecl stub_delay(unsigned ms) { (void)ms; g_delays++; }
+static void *__cdecl stub_malloc(size_t n) { return malloc(n); }
+static void *__cdecl stub_memmove(void *d, const void *s, size_t n)
+{ return memmove(d, s, n); }
+static void  __cdecl stub_free(void *p) { free(p); }
 
 static void install_hook(uint32_t addr, const void *dest)
 {
@@ -153,6 +168,10 @@ int main(int argc, char **argv)
     uint8_t *lmi = (uint8_t *)malloc(64 * 1024);
     uint8_t *dstA = (uint8_t *)malloc(BITMAP_SZ);
     uint8_t *dstB = (uint8_t *)malloc(BITMAP_SZ);
+    uint8_t *scrA = (uint8_t *)malloc(SCR_SZ);
+    uint8_t *scrB = (uint8_t *)malloc(SCR_SZ);
+    uint8_t *expA = (uint8_t *)malloc(EXP_SZ);
+    uint8_t *expB = (uint8_t *)malloc(EXP_SZ);
     uint8_t *recs = (uint8_t *)malloc(80 * 16);
     uint8_t *cells = (uint8_t *)malloc(4 * 64 * 64);
     uint8_t *ctbl = (uint8_t *)malloc(4 * 1024);
@@ -160,6 +179,10 @@ int main(int argc, char **argv)
     uint8_t *sbank = (uint8_t *)malloc(0x0A + 4 * 2048 + 2048 * 600);
     uint8_t *pbank = (uint8_t *)malloc(6 + 4 * 256 + 256 * 256);
     uint8_t *ibank = (uint8_t *)malloc(64 * 1024);
+    uint8_t *cellA = (uint8_t *)malloc(4 * 64 * 64);
+    uint8_t *cellB = (uint8_t *)malloc(4 * 64 * 64);
+    uint8_t *recA  = (uint8_t *)malloc(80 * 16);
+    uint8_t *recB  = (uint8_t *)malloc(80 * 16);
 
     if (le_reserve_address_space() != 0) { printf("reserve failed\n"); return 2; }
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -168,17 +191,26 @@ int main(int argc, char **argv)
     printf("mapped: %u fixups applied, original code ready\n", (unsigned)applied);
 
     install_hook(0x3790A, stub_delay);
+    /* The map render core reaches the Watcom CRT heap (0x24D22 -> malloc /
+     * memmove / free); point them at the host libc so the original machine
+     * code and the C translation use the same heap, exactly like rescheck. */
+    install_hook(0x3706E, stub_malloc);
+    install_hook(0x3771C, stub_memmove);
+    install_hook(0x3776E, stub_free);
     printf("mapcheck: redirected %d low-memory references to 0x%X\n",
            patch_lowmem_refs(&le, MIRROR), MIRROR);
 
     if (!bitmap || !tileset || !lmi || !dstA || !dstB || !recs || !cells || !ctbl || !nres || !sbank || !pbank || !ibank)
         return 2;
+    if (!scrA || !scrB || !expA || !expB || !cellA || !cellB || !recA || !recB)
+        return 2;
 
-    /* ---- tileset layout: table at +6, 4 sub-images at +22 ---- */
+    /* ---- tileset layout: table at +6, 32 sub-images at +22 (indices 0..18
+     * are used by the map cursor reveal) ---- */
     {
-        uint32_t off = 6 + 4 * 4;
+        uint32_t off = 6 + 4 * 32;
         int i;
-        for (i = 0; i < 4; i++) {
+        for (i = 0; i < 32; i++) {
             *(uint32_t *)(tileset + 6 + 4 * i) = off;
             off += (uint32_t)fill_tile_stream(tileset + off, (uint8_t)(i * 17 + 1));
         }
@@ -662,6 +694,195 @@ int main(int argc, char **argv)
                     snprintf(g_why, sizeof g_why, "idx=%d %p/%p", idx, a, b);
                     fail("tbl_off627D8");
                 }
+            }
+        }
+
+        /* ---- map_scroll_lines (0x24D22) ------------------------------- */
+        for (i = 0; i < 6 && !g_fail; i++) {
+            int    lines = (int)(rnd() % 193);
+            int    n     = (rnd() & 1) ? (int)(rnd() % 300) : 0;
+            int    k;
+            uint8_t la, lb;
+
+            for (k = 0; k < SCR_SZ; k++) scrA[k] = (uint8_t)rnd();
+            memcpy(scrB, scrA, SCR_SZ);
+            B8(0x51A10) = (uint8_t)lines;
+            PTR(0x53AFF) = scrA;
+            ORIG_SCROLL(n);
+            la = B8(0x51A10);
+
+            B8(0x51A10) = (uint8_t)lines;
+            PTR(0x53AFF) = scrB;
+            map_scroll_lines(n);
+            lb = B8(0x51A10);
+            cases++;
+            if (memcmp(scrA, scrB, SCR_SZ) != 0 || la != lb) {
+                size_t q, where = 0;
+                for (q = 0; q < SCR_SZ; q++)
+                    if (scrA[q] != scrB[q]) { where = q; break; }
+                snprintf(g_why, sizeof g_why, "lines=%d n=%d byte %u/%u @%u",
+                         lines, n, la, lb, (unsigned)where);
+                fail("map_scroll_lines");
+            }
+        }
+
+        /* ---- map_render_view (0x11EEE) -------------------------------- */
+        for (i = 0; i < 8 && !g_fail; i++) {
+            static const int modes[12] = { 9, 17, 21, 22, 23, 24, 25, 27, 28,
+                                           29, 5, 3 };
+            int     mode  = modes[rnd() % 12];
+            int     pitch = (rnd() & 1) ? 456 : 320;
+            int     w     = 4 + (int)(rnd() % 9);
+            int     h     = 4 + (int)(rnd() % 5);
+            int     ox    = (int)(rnd() % 16);
+            int     oy    = (int)(rnd() % 8);
+            int32_t sv[6], pv[6];
+            int     k;
+            uint16_t tick = (uint16_t)rnd();
+
+            for (k = 0; k < 4 * 64 * 64; k++) cells[k] = (uint8_t)rnd();
+            for (k = 0; k < 1024; k++) ctbl[4 * k] = (uint8_t)rnd();
+            I32(0x53AC1) = 32;
+            PTR(0x53A51) = cells;
+            I32(0x53A69) = (int32_t)(uintptr_t)ctbl;
+            I32(0x53C03) = mode;
+            I32(0x53C0B) = (int32_t)(rnd() % 5);
+            I32(0x53B07) = (int32_t)(rnd() % 33);
+            I32(0x53B0B) = (int32_t)(rnd() % 12);
+            I32(0x53AF1) = (int32_t)(rnd() % 2);
+            I32(0x53AED) = (int32_t)(rnd() % 100);
+            I32(0x53AF5) = (int32_t)(rnd() % 100);
+            I32(0x51A93) = (rnd() & 1) ? -1 : (int32_t)(rnd() % 20);
+            I32(0x53A40) = (int32_t)(rnd() % 3);
+            I32(0x53C1F) = (int32_t)(rnd() % 20);
+            I32(0x53A00) = (int32_t)(int16_t)rnd();
+            I32(0x539F8) = (rnd() & 1) ? (int32_t)(int16_t)rnd() : (int32_t)tick;
+            I32(0x539FC) = (rnd() % 4 == 0) ? 15 : (int32_t)(rnd() % 16);
+            I32(0x539F4) = (int32_t)(int16_t)rnd();
+            B8(0x51A10)  = (uint8_t)(rnd() % 193);
+            *(volatile uint16_t *)(uintptr_t)G_TICK = tick;
+
+            sv[0] = I32(0x53A00); sv[1] = I32(0x53A40); sv[2] = I32(0x539F8);
+            sv[3] = I32(0x539FC); sv[4] = I32(0x539F4); sv[5] = I32(0x53C1F);
+
+            for (k = 0; k < SCR_SZ; k++) scrA[k] = (uint8_t)rnd();
+            memcpy(scrB, scrA, SCR_SZ);
+            for (k = 0; k < EXP_SZ; k++) expA[k] = (uint8_t)rnd();
+            memcpy(expB, expA, EXP_SZ);
+            memset(dstA, 0x5A, BITMAP_SZ);
+            memset(dstB, 0x5A, BITMAP_SZ);
+            PTR(0x53AFF) = scrA; PTR(0x53B03) = expA;
+            ORIG_RENDER(dstA, pitch, w, h, ox, oy);
+            pv[0] = I32(0x53A00); pv[1] = I32(0x53A40); pv[2] = I32(0x539F8);
+            pv[3] = I32(0x539FC); pv[4] = I32(0x539F4); pv[5] = I32(0x53C1F);
+
+            I32(0x53A00) = sv[0]; I32(0x53A40) = sv[1]; I32(0x539F8) = sv[2];
+            I32(0x539FC) = sv[3]; I32(0x539F4) = sv[4]; I32(0x53C1F) = sv[5];
+            PTR(0x53AFF) = scrB; PTR(0x53B03) = expB;
+            map_render_view(dstB, pitch, w, h, ox, oy);
+            cases++;
+            if (memcmp(dstA, dstB, BITMAP_SZ) != 0
+                || memcmp(scrA, scrB, SCR_SZ) != 0
+                || memcmp(expA, expB, EXP_SZ) != 0
+                || I32(0x53A00) != pv[0] || I32(0x53A40) != pv[1]
+                || I32(0x539F8) != pv[2] || I32(0x539FC) != pv[3]
+                || I32(0x539F4) != pv[4] || I32(0x53C1F) != pv[5]) {
+                snprintf(g_why, sizeof g_why,
+                         "mode=%d pitch=%d w=%d h=%d ox=%d oy=%d", mode,
+                         pitch, w, h, ox, oy);
+                fail("map_render_view");
+            }
+        }
+
+        /* ---- map_reveal_cursor (0x122DC) ------------------------------ */
+        for (i = 0; i < 8 && !g_fail; i++) {
+            int mode = (int)(rnd() % 8);
+            int x    = (int)(rnd() % 40) - 4;
+            int y    = (int)(rnd() % 40) - 4;
+            int k;
+
+            for (k = 0; k < 4 * 64 * 64; k++) cells[k] = (uint8_t)rnd();
+            for (k = 0; k < 1024; k++) ctbl[4 * k] = (uint8_t)rnd();
+            memcpy(cellA, cells, 4 * 64 * 64);
+            I32(0x51A83) = mode;
+            I32(0x53AB1) = x; I32(0x53AB5) = y;
+            I32(0x53AC1) = 32;
+            I32(0x53AA9) = 0; I32(0x53AAD) = 0;
+            I32(0x51A87) = 32; I32(0x51A8B) = 32;
+            I32(0x53A40) = (int32_t)(rnd() % 3);
+            I32(0x53C1F) = (int32_t)(rnd() % 20);
+            PTR(0x53A51) = cells; I32(0x53A69) = (int32_t)(uintptr_t)ctbl;
+
+            memset(bitmap, 0x3C, BITMAP_SZ);
+            ORIG_REVEAL();
+            memcpy(dstA, bitmap, BITMAP_SZ);
+            memcpy(cellB, cells, 4 * 64 * 64);
+
+            memcpy(cells, cellA, 4 * 64 * 64);
+            memset(bitmap, 0x3C, BITMAP_SZ);
+            map_reveal_cursor();
+            cases++;
+            if (memcmp(dstA, bitmap, BITMAP_SZ) != 0
+                || memcmp(cellB, cells, 4 * 64 * 64) != 0) {
+                snprintf(g_why, sizeof g_why, "mode=%d x=%d y=%d", mode, x, y);
+                fail("map_reveal_cursor");
+            }
+        }
+
+        /* ---- map_draw_cursor (0x1ACF3) -------------------------------- */
+        for (i = 0; i < 8 && !g_fail; i++) {
+            int pitch = 456;
+            int n     = 1 + (int)(rnd() % 8);
+            int want  = (int)(rnd() % (n + 1));
+            int k;
+
+            B8(0x51AAB) = (uint8_t)(rnd() & 1);
+            B8(0x51AAC) = (uint8_t)(rnd() & 1);
+            I32(0x53ABD) = (int32_t)(rnd() % 12);
+            I32(0x53AB9) = (int32_t)(rnd() % 12);
+            I32(0x51A0C) = (int32_t)(rnd() % 256);
+            I32(0x53C0B) = (int32_t)(rnd() % 5);
+            I32(0x53AC1) = 32;
+            PTR(0x53A51) = cells; I32(0x53A69) = (int32_t)(uintptr_t)ctbl;
+
+            I32(0x53BEB) = n;
+            for (k = 0; k < 80 * n; k++) recs[k] = (uint8_t)rnd();
+            for (k = 0; k < n; k++) {
+                recs[80 * k + 0] = (uint8_t)(rnd() % 32);
+                recs[80 * k + 1] = (uint8_t)(rnd() % 32);
+                recs[80 * k + 2] = (uint8_t)(rnd() % 4);
+                recs[80 * k + 5] = (uint8_t)(rnd() & 1);
+                recs[80 * k + 31] = (uint8_t)(rnd() & 0xFF);
+                recs[80 * k + 6] = (uint8_t)(rnd() & 0xFF);
+                recs[80 * k + 7] = (uint8_t)(rnd() & 0xFF);
+                *(uint16_t *)(recs + 80 * k + 64) = (uint16_t)rnd();
+                *(uint16_t *)(recs + 80 * k + 66) = (uint16_t)rnd();
+            }
+            if (want < n) {
+                I32(0x53AB1) = recs[80 * want + 0];
+                I32(0x53AB5) = recs[80 * want + 1];
+                recs[80 * want + 5] = 0;
+            } else {
+                I32(0x53AB1) = 0x1234;
+                I32(0x53AB5) = 0x5678;
+            }
+            PTR(0x53A45) = recs;
+            memcpy(recA, recs, 80 * 16);
+
+            memset(dstA, 0x77, BITMAP_SZ);
+            ORIG_DCURSOR(dstA, pitch);
+            memcpy(recB, recs, 80 * 16);
+
+            memcpy(recs, recA, 80 * 16);
+            memset(dstB, 0x77, BITMAP_SZ);
+            map_draw_cursor(dstB, pitch);
+            cases++;
+            if (memcmp(dstA, dstB, BITMAP_SZ) != 0 || memcmp(recB, recs, 80 * 16) != 0) {
+                size_t q, where = 0;
+                for (q = 0; q < BITMAP_SZ; q++)
+                    if (dstA[q] != dstB[q]) { where = q; break; }
+                snprintf(g_why, sizeof g_why, "n=%d want=%d @%u", n, want, (unsigned)where);
+                fail("map_draw_cursor");
             }
         }
     }

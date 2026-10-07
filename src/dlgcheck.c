@@ -14,6 +14,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include "le.h"
+/* dos_lowmem_base is normally defined by dos.c; map.c (linked in here for the
+ * bda tick) references it through DOS_LOWMEM_BASE. */
+uint32_t dos_lowmem_base = 0x00070000u;
+
 #include "game/dlg.h"
 
 typedef void (__cdecl *blit_fn)(int);

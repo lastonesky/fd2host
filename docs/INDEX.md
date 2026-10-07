@@ -63,6 +63,7 @@
 | `rounds/34-rec-leaves.md` | 明细 | 角色记录表七个数据叶子 `0x1B8A6`/`0x1B83D`/`0x1CA89`/`0x13512`/`0x32975`/`0x34D64`/`0x35009`（105–111 个；**6 个返回值语义只有 1 个是记录地址**、`0x1CA89` 16 位回绕）+ `repl_parse` 漏 `map` 组名（§8-77）+ 新跨模块调用只在链接期暴露（§8-78） | §64 |
 | `rounds/35-msg-portrait.md` | 明细 | 对话框/头像合成三件套 `0x1956B`/`0x1974C`/`0x26996`（112–114 个；新模块 `game/msg.c`，第 28 轮后置的 `guest_mem` 堆簇；`msgcheck` 465/0） | §65 |
 | `rounds/36-ev-handlers.md` | 明细 | `funcs_1199C` 事件 handler 闭包子集 `0x34738`…`0x35258`（115–125 个；新模块 `game/ev.c`，6 服务记录桩 + 记录表逐字节 + 归一化返回值，`evcheck` 2940/0）+ `_chkstk` 保持 EAX ⇒ 部分返回值无定义（§8-79） | §66 |
+| `rounds/37-map-view-core.md` | 明细 | 地图视图渲染核 `0x11EEE`/`0x24D22`/`0x122DC`/`0x1ACF3`（126–129 个；并入 `game/map.c`，CRT `malloc/memmove/free` 重定向 + 三块缓冲逐字节 + 6 相位全局，`mapcheck` 112000/0；关键手法 `apply_tinfo` 回写真 cdecl 原型再反编译，§8-80） | §67 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。

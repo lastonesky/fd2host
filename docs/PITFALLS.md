@@ -630,3 +630,16 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     **判据**：`evcheck` 只用 `cmp_read` 比 7 个有定义返回值（归一化 `ret-base`），4 个 `void`
     只比事件序列/记录表；故障注入把 `0x34CF1` 的 `dword_53AD5` 改成字节值立刻报 480 例失败。
     与 §8-75（栈探针把实参藏进“寄存器参数”）是同一探针的两面：那里是**入参**，这里是**返回**。
+
+80. **`ida_typeinf.parse_decl` 返回的是 `tinfo_t`（真值），不是错误码**（第 37 轮）：
+    本项目的 ida MCP / IDA 9.5 里 `ida_typeinf.parse_decl(tif, til, decl, flags)` **成功时返回
+    解析出的 `tinfo_t`**（`tif` 参数里也顺带写好了），失败时返回 falsy。若照 IDAPython 老习惯写
+    `if (ida_typeinf.parse_decl(tif, None, decl, 0)) { print("parse fail"); continue; }`，
+    会**把每一次成功都当成失败**——`apply_tinfo` 永远没执行，反编译出来的还是“10 个寄存器参数”
+    的伪像（`§8-75`），而且因为没报错，人会以为“IDA 就是这么难看”。
+    **做法**：`res = parse_decl(tif, None, decl, 0); if not res: <fail> else: apply_tinfo(ea, tif, TINFO_DEFINITE)`；
+    打完原型后 `ida_hexrays.clear_cached_cfuncs()` 再 `decompile(ea)`。
+    **判据**：给 `0x126F7` 打上 `void f(int x, int y, int index)` 后，`0x122DC` 里 41 个逻辑
+    `map_blit_tile` 调用点的参数序立刻变成 `(x, y, index)`（此前 Hex-Rays 把 `qword_53AB1`
+    的 64 位算术排得乱七八糟、参数序号和调用序对不上）；`0x11EEE`/`0x24D22`/`0x1ACF3` 同理。
+    这是转“回调密的渲染/业务函数”时的**第一步**，比逐条数 `push` 快且不易错。

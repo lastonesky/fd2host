@@ -16,8 +16,14 @@
 #include "map.h"
 #include "sprite24.h"
 #include "rec.h"
+#include "gfx.h"
+#include "rle.h"
+#include "dlg.h"
+#include "guest_mem.h"
+#include "../dos.h"
 
 #include <stdint.h>
+#include <string.h>
 
 #define dword_53A49 (*(uint8_t **)(uintptr_t)0x00053A49u) /* map bitmap     */
 #define dword_53A4D (*(uint8_t **)(uintptr_t)0x00053A4Du) /* tileset        */
@@ -26,7 +32,7 @@
 #define dword_53AA9 (*(int32_t  *)(uintptr_t)0x00053AA9u) /* view x origin  */
 #define dword_53AAD (*(int32_t  *)(uintptr_t)0x00053AADu) /* view y origin  */
 #define dword_53A51 (*(uint8_t **)(uintptr_t)0x00053A51u) /* cell table    */
-#define dword_53A69 (*(uint32_t  *)(uintptr_t)0x00053A69u) /* cell → 4 bytes */
+#define dword_53A69 (*(uint32_t  *)(uintptr_t)0x00053A69u) /* cell -> 4 bytes */
 #define dword_53AC1 (*(int32_t   *)(uintptr_t)0x00053AC1u) /* map width      */
 #define dword_53A5D (*(uint8_t  **)(uintptr_t)0x00053A5Du) /* sprite bank    */
 #define dword_53A6D (*(uint8_t  **)(uintptr_t)0x00053A6Du) /* palette bank   */
@@ -34,7 +40,37 @@
 #define dword_53C1F (*(int32_t   *)(uintptr_t)0x00053C1Fu)
 #define dword_53BEB (*(int32_t   *)(uintptr_t)0x00053BEBu) /* record count   */
 #define dword_53A45 (*(uint8_t  **)(uintptr_t)0x00053A45u) /* record table   */
+#define dword_53A61 (*(uint8_t  **)(uintptr_t)0x00053A61u) /* icon bank      */
 #define byte_51A97  ((const uint8_t *)(uintptr_t)0x00051A97u)
+
+/* --- map view rendering core (round 37) ------------------------------- */
+#define dword_53A00 (*(int32_t  *)(uintptr_t)0x00053A00u) /* last flip tick */
+#define dword_539F8 (*(int32_t  *)(uintptr_t)0x000539F8u) /* last scroll tick*/
+#define dword_539FC (*(int32_t  *)(uintptr_t)0x000539FCu) /* scanline phase */
+#define dword_539F4 (*(int32_t  *)(uintptr_t)0x000539F4u) /* last cursor tick*/
+#define dword_53AF1 (*(int32_t  *)(uintptr_t)0x00053AF1u) /* view tile y    */
+#define dword_53AED (*(int32_t  *)(uintptr_t)0x00053AEDu) /* view base      */
+#define dword_53AF5 (*(int32_t  *)(uintptr_t)0x00053AF5u) /* view base      */
+#define dword_53AFF (*(uint32_t *)(uintptr_t)0x00053AFFu) /* screen buffer  */
+#define dword_53B03 (*(uint32_t *)(uintptr_t)0x00053B03u) /* expanded scan  */
+#define dword_53B07 (*(int32_t  *)(uintptr_t)0x00053B07u)
+#define dword_53B0B (*(int32_t  *)(uintptr_t)0x00053B0Bu)
+#define dword_53C03 (*(int32_t  *)(uintptr_t)0x00053C03u) /* view mode      */
+#define dword_53C0B (*(int32_t  *)(uintptr_t)0x00053C0Bu) /* anim phase     */
+#define dword_51A93 (*(int32_t  *)(uintptr_t)0x00051A93u) /* cursor phase   */
+#define dword_51A83 (*(int32_t  *)(uintptr_t)0x00051A83u) /* reveal mode    */
+#define dword_53AB1 (*(int32_t  *)(uintptr_t)0x00053AB1u) /* cursor x       */
+#define dword_53AB5 (*(int32_t  *)(uintptr_t)0x00053AB5u) /* cursor y       */
+#define byte_51A10  (*(uint8_t   *)(uintptr_t)0x00051A10u) /* scroll lines   */
+#define byte_51AAB  (*(uint8_t   *)(uintptr_t)0x00051AABu) /* cursor on      */
+#define byte_51AAC  (*(uint8_t   *)(uintptr_t)0x00051AACu) /* cursor on      */
+#define dword_53ABD (*(int32_t  *)(uintptr_t)0x00053ABDu)
+#define dword_53AB9 (*(int32_t  *)(uintptr_t)0x00053AB9u)
+#define dword_51A0C (*(int32_t  *)(uintptr_t)0x00051A0Cu) /* cursor top     */
+#define dword_53A81 (*(uint8_t  **)(uintptr_t)0x00053A81u) /* icon resource  */
+#define dword_51A12 ((const int32_t *)(uintptr_t)0x00051A12u)
+#define dword_51A2A ((const int32_t *)(uintptr_t)0x00051A2Au)
+#define BDA_W(off)  (*(volatile uint16_t *)(uintptr_t)(DOS_LOWMEM_BASE + (off)))
 
 void map_blit_tile(int x, int y, int index)
 {
@@ -90,7 +126,7 @@ void map_blit_cell_sprite(void *dst, int x, int y)
 
     cell = dword_53A51 + 4 * (x + dword_53AC1 * y);
     tile = *(const uint16_t *)(cell + 4) & 0x03FFu;
-    v    = *(const uint8_t *)(dword_53A69 + 4 * tile);
+    v    = *(const uint8_t *)(uintptr_t)(dword_53A69 + 4 * tile);
     if (v & 8)
         tile = (uint16_t)(tile + 2 * dword_53A40);
     if (!(v & 0x80))
@@ -141,5 +177,264 @@ void map_refresh_records(void)
                 map_blit_cell_sprite(dword_53A49, x, y + 1);
             }
         }
+    }
+}
+
+/* 0x11EEE - render the visible map window into `dst`.
+ *
+ * `dst` is a strided surface (stride `pitch`); the actual drawing base is
+ * dst + 456*dword_53AF1 + dword_53AED + dword_53AF5 (dword_53AF5/dword_53AED
+ * are the bitmap origin offsets, 456 = 24 rows of the 456-stride bitmap).
+ *
+ * Per BIOS tick dword_53A40 (the sprite mirror bit) toggles once, and for
+ * the scanline modes the 16-phase expander advances. The view mode
+ * dword_53C03 selects which intermediate buffer is copied into dst:
+ *   9/24/25/28/29  expand dword_53AFF into dword_53B03, copy 320 -> pitch
+ *   17/21/22/27    copy a window of dword_53AFF with stride 462/408
+ *   23             scroll dword_53AFF one line, copy 312 -> pitch
+ *   other          no copy
+ * Then the w*h grid of 24x24 tiles (cell table dword_53A51, one 4-byte cell,
+ * tile in the low 10 bits at +4) is blitted with sprite24_plain, or through
+ * the cursor palette dword_53A6D[byte_51A97[dword_53C1F]] when cell[3] is
+ * not 0xFF. Cell flags dword_53A69[tile] bits 3/4/5 pick mirrored/ramp
+ * variants. */
+void map_render_view(uint8_t *dst, int pitch, int w, int h, int ox, int oy)
+{
+    const uint8_t *pal;
+    int32_t        tick;
+    uint8_t       *out;
+    int            i, row;
+
+    tick = (int16_t)BDA_W(0x46C);
+    if (tick != dword_53A00) {
+        dword_53A40 ^= 1;
+        dword_53A00 = tick;
+    }
+
+    out = dst + 456 * dword_53AF1 + dword_53AED + dword_53AF5;
+
+    switch (dword_53C03) {
+    case 9: case 24: case 25: case 28: case 29:
+        if (tick != dword_539F8) {
+            gfx_expand_scanlines((const void *)(uintptr_t)dword_53AFF,
+                                 (void *)(uintptr_t)dword_53B03, dword_539FC);
+            dword_539F8 = tick;
+            if (++dword_539FC == 16)
+                dword_539FC = 0;
+        }
+        gfx_copy_rows(out, pitch, (const void *)(uintptr_t)dword_53B03,
+                      320, 312, 192);
+        break;
+    case 17: case 21: case 22: case 27: {
+        int stride = (dword_53C03 == 17 || dword_53C03 == 27) ? 462 : 408;
+        const uint8_t *src = (const uint8_t *)(uintptr_t)
+            (dword_53AFF + 3 * ox + 2 * stride * oy + dword_53B07 / 2
+             + stride * (dword_53B0B / 3));
+        gfx_copy_rows(out, pitch, src, stride, 312, 192);
+        break;
+    }
+    case 23:
+        if (tick != dword_539F8) {
+            map_scroll_lines(0);
+            dword_539F8 = tick;
+        }
+        gfx_copy_rows(out, pitch, (const void *)(uintptr_t)dword_53AFF,
+                      312, 312, 192);
+        break;
+    default:
+        break;
+    }
+
+    if (dword_51A93 == -1) {
+        if (tick - dword_539F4 > 2 || tick < dword_539F4) {
+            if (++dword_53C1F == 20)
+                dword_53C1F = 0;
+            dword_539F4 = tick;
+        }
+    } else {
+        dword_53C1F = dword_51A93;
+    }
+
+    pal = dword_53A6D
+        + *(const uint32_t *)(dword_53A6D + 4 * byte_51A97[dword_53C1F] + 6);
+
+    for (row = 0; row < h; row++) {
+        const uint8_t *cell = dword_53A51
+            + 4 * (ox + dword_53AC1 * (oy + row)) + 4;
+        uint8_t *d = dst + 24 * pitch * row;
+
+        for (i = 0; i < w; i++) {
+            int            tile  = *(const uint16_t *)cell & 0x03FF;
+            uint8_t        flags = *(const uint8_t *)(uintptr_t)(dword_53A69 + 4 * tile);
+            const uint8_t *spr;
+
+            if (flags & 0x08)
+                tile += 2 * dword_53A40;
+            else if (flags & 0x10)
+                tile += dword_53C0B / 2;
+            else if (flags & 0x04)
+                tile += dword_53A40;
+
+            spr = dword_53A5D + *(const uint32_t *)(dword_53A5D + 4 * tile + 6);
+            if (cell[3] == 0xFF)
+                sprite24_plain(spr, d, pitch);
+            else
+                sprite24_pal_recolor(spr, d, pitch, pal);
+            cell += 4;
+            d += 24;
+        }
+    }
+}
+
+/* 0x24D22 - scroll the screen buffer dword_53AFF down by `n` lines.
+ *
+ * `n != 0` only latches the line count into byte_51A10; the actual scroll
+ * happens on the next call with n == 0, which moves the bottom `lines` rows
+ * into a temporary buffer, shifts the remaining rows down and puts the
+ * bottom rows on top (the classic wrap-around scroll). */
+void map_scroll_lines(int n)
+{
+    uint8_t *screen = (uint8_t *)(uintptr_t)dword_53AFF;
+    int      lines, i;
+    uint8_t *tmp;
+
+    if (n != 0) {
+        byte_51A10 = (uint8_t)n;
+        return;
+    }
+
+    lines = byte_51A10;
+    tmp   = (uint8_t *)guest_malloc(312u * (size_t)lines);
+    memmove(tmp, screen + 312 * (192 - lines), 312u * (size_t)lines);
+    for (i = 191 - lines; i >= 0; --i)
+        memmove(screen + 312 * lines + 312 * i, screen + 312 * i, 0x138);
+    memmove(screen, tmp, 312u * (size_t)lines);
+    guest_free(tmp);
+}
+
+/* 0x122DC - reveal the tiles around the map cursor (dword_53AB1 x / y).
+ *
+ * dword_51A83 selects the reveal radius (1..5 draw a diamond of 1..21 cells
+ * with the blink-frame indices of dword_53A4D; the centre is index 0/1), and
+ * mode 6 instead clears the cursor cell's visibility byte. */
+void map_reveal_cursor(void)
+{
+    int x = dword_53AB1;
+    int y = dword_53AB5;
+
+    switch (dword_51A83) {
+    case 1:
+        map_blit_tile(x, y, 0);
+        break;
+    case 2:
+        map_blit_tile(x, y, 1);
+        break;
+    case 3:
+        map_blit_tile(x, y, 14);
+        map_blit_tile(x, y - 1, 2);
+        map_blit_tile(x - 1, y, 3);
+        map_blit_tile(x + 1, y, 4);
+        map_blit_tile(x, y + 1, 5);
+        break;
+    case 4:
+        map_blit_tile(x, y, 1);
+        map_blit_tile(x, y - 2, 2);
+        map_blit_tile(x - 2, y, 3);
+        map_blit_tile(x + 2, y, 4);
+        map_blit_tile(x, y + 2, 5);
+        map_blit_tile(x - 1, y - 1, 6);
+        map_blit_tile(x + 1, y - 1, 7);
+        map_blit_tile(x - 1, y + 1, 8);
+        map_blit_tile(x + 1, y + 1, 9);
+        map_blit_tile(x, y - 1, 10);
+        map_blit_tile(x - 1, y, 11);
+        map_blit_tile(x + 1, y, 12);
+        map_blit_tile(x, y + 1, 13);
+        break;
+    case 5:
+        map_blit_tile(x, y, 1);
+        map_blit_tile(x, y - 3, 2);
+        map_blit_tile(x - 3, y, 3);
+        map_blit_tile(x + 3, y, 4);
+        map_blit_tile(x, y + 3, 5);
+        map_blit_tile(x - 1, y - 2, 6);
+        map_blit_tile(x - 2, y - 1, 6);
+        map_blit_tile(x + 1, y - 2, 7);
+        map_blit_tile(x + 2, y - 1, 7);
+        map_blit_tile(x - 1, y + 2, 8);
+        map_blit_tile(x - 2, y + 1, 8);
+        map_blit_tile(x + 1, y + 2, 9);
+        map_blit_tile(x + 2, y + 1, 9);
+        map_blit_tile(x, y - 2, 10);
+        map_blit_tile(x - 2, y, 11);
+        map_blit_tile(x + 2, y, 12);
+        map_blit_tile(x, y + 2, 13);
+        map_blit_tile(x - 1, y - 1, 15);
+        map_blit_tile(x + 1, y - 1, 16);
+        map_blit_tile(x - 1, y + 1, 17);
+        map_blit_tile(x + 1, y + 1, 18);
+        break;
+    case 6:
+        *(uint8_t *)(dword_53A51 + 4 * (x + dword_53AC1 * y) + 7) = 0;
+        break;
+    default:
+        break;
+    }
+}
+
+/* 0x1ACF3 - draw the selection cursor / record icon on the map view.
+ *
+ * byte_51AAB / byte_51AAC gate the cursor; dword_51A0C is the top scanline
+ * inside the 157-line map area. It blits the cursor frame (icon resource
+ * dword_53A81 sub-image 130), the cell's terrain sprite and its two numbers,
+ * then, when a portrait record sits under the cursor, the record's icon and
+ * a 3-digit HP bar. */
+void map_draw_cursor(uint8_t *dst, int pitch)
+{
+    uint8_t        info[8];
+    uint8_t       *p;
+    const uint8_t *rec;
+    int            idx;
+
+    if (!byte_51AAB || !byte_51AAC)
+        return;
+
+    if (dword_53ABD <= 5 || dword_53AB9 >= 3) {
+        if (dword_53ABD > 5 && dword_53AB9 > 9)
+            dword_51A0C = 1;
+    } else {
+        dword_51A0C = 242;
+    }
+
+    p = dst + 157 * pitch + dword_51A0C;
+    rle_decode((const void *)(uintptr_t)
+                   (dword_53A81 + *(const uint32_t *)(dword_53A81 + 526)),
+               0, 0, p, pitch, -1);
+
+    map_cell_info(dword_53AB1, dword_53AB5, info);
+    sprite24_plain(dword_53A5D
+                   + *(const uint32_t *)(dword_53A5D + 4 * *(const uint16_t *)info + 6),
+                   p + 5 * pitch + 6, pitch);
+    dlg_draw_number_signed(p + 8 * pitch + 43, pitch, dword_51A12[info[5]]);
+    dlg_draw_number_signed(p + 19 * pitch + 43, pitch, dword_51A2A[info[5]]);
+
+    idx = dlg_portrait_find();
+    if (idx == -1)
+        return;
+
+    rec = (const uint8_t *)(uintptr_t)dword_53A45 + 80 * idx;
+    if (rec[7] == 121 || (rec[31] == 10 && rec[6] == 1))
+        return;
+
+    {
+        int v = dword_53C0B;
+        if (v == 3)
+            v = 1;
+        sprite24_plain(dword_53A61
+                       + *(const uint32_t *)(dword_53A61 + 4 * (12 * rec[2] + v)),
+                       p + 5 * pitch + 6, pitch);
+        dlg_draw_number_pair(p + 21 * pitch + 9, pitch,
+                             *(const uint16_t *)(rec + 64),
+                             *(const uint16_t *)(rec + 66), 3);
     }
 }
