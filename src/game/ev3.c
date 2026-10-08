@@ -11,6 +11,7 @@
  */
 #include "ev3.h"
 
+#include <stddef.h>
 #include <stdint.h>
 
 /* --- service entry points (called at their original addresses) --------- */

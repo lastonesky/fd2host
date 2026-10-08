@@ -51,6 +51,7 @@ MODULE_INFO = {
     "ev.c":       ("evcheck",       "2940",  "funcs_1199C event handlers; record table + event log + normalised returns compared"),
     "ev2.c":      ("ev2check",      "6000",  "funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets"),
     "ev3.c":      ("ev2check",      "6000",  "funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets"),
+    "ev4.c":      ("ev2check",      "6000",  "scene move/map batch 4 (0x1366A + steppers + 0x196CB); obj1/obj2 + VGA + buffers"),
     "map.c":      ("mapcheck",     "122500", "map view render/reveal/cursor/scroller + view refresh"),
     "anim.c":     ("mapcheck",     "3000",  "BIOS-tick animation frame counter (also in mapcheck)"),
     "fx.c":       ("fxcheck",      "12884", "funcs_30469 effect-animation handlers; event log + globals compared"),

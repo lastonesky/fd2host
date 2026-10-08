@@ -50,6 +50,7 @@
 #include "game/ev.h"
 #include "game/ev2.h"
 #include "game/ev3.h"
+#include "game/ev4.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -288,6 +289,20 @@ static const struct repl_entry g_repl[] = {
     { 0x2AEDB, "ev3_2AEDB",           (void *)ev3_2AEDB,           REPL_EV3 },
     { 0x33F78, "ev3_33F78",           (void *)ev3_33F78,           REPL_EV3 },
 
+    /* Scene/map/animation helpers (src/game/ev4.c): the #1-usage 0x1366A
+     * move driver, the map-window steppers, the wait-key loop, the cell-count
+     * refresh and the scene portrait close. Separate group for bisection. */
+    { 0x1366A, "ev4_1366A",           (void *)ev4_1366A,           REPL_EV4 },
+    { 0x11AA8, "ev4_11AA8",           (void *)ev4_11AA8,           REPL_EV4 },
+    { 0x11B48, "ev4_11B48",           (void *)ev4_11B48,           REPL_EV4 },
+    { 0x11B9B, "ev4_11B9B",           (void *)ev4_11B9B,           REPL_EV4 },
+    { 0x11BFA, "ev4_11BFA",           (void *)ev4_11BFA,           REPL_EV4 },
+    { 0x11C59, "ev4_11C59",           (void *)ev4_11C59,           REPL_EV4 },
+    { 0x12263, "ev4_12263",           (void *)ev4_12263,           REPL_EV4 },
+    { 0x1E1DC, "ev4_1E1DC",           (void *)ev4_1E1DC,           REPL_EV4 },
+    { 0x24B4D, "ev4_24B4D",           (void *)ev4_24B4D,           REPL_EV4 },
+    { 0x196CB, "ev4_196CB",           (void *)ev4_196CB,           REPL_EV4 },
+
     /* The persistent party roster (src/game/unit.c): the three functions
      * that build/sync/recalc its 80-byte records. They call each other, so
      * they share one group and are enabled atomically. */
@@ -448,6 +463,7 @@ unsigned repl_parse(const char *spec)
             else if (!plat_stricmp(tok, "map"))      mask &= ~REPL_MAP;
             else if (!plat_stricmp(tok, "ev2"))      mask &= ~REPL_EV2;
             else if (!plat_stricmp(tok, "ev3"))      mask &= ~REPL_EV3;
+            else if (!plat_stricmp(tok, "ev4"))      mask &= ~REPL_EV4;
             else printf("repl: unknown group '%s'\n", tok);
             continue;
         }
@@ -468,6 +484,7 @@ unsigned repl_parse(const char *spec)
         else if (!plat_stricmp(tok, "map"))      mask |= REPL_MAP;
         else if (!plat_stricmp(tok, "ev2"))      mask |= REPL_EV2;
         else if (!plat_stricmp(tok, "ev3"))      mask |= REPL_EV3;
+        else if (!plat_stricmp(tok, "ev4"))      mask |= REPL_EV4;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

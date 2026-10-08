@@ -17,12 +17,12 @@
 **同一份源码也能在 Linux 上跑**（`build/fd2host-linux32`，X11/XWayland + sokol GLCORE）：
 与 Windows 同 guest tick 抓帧**逐像素 0 差异**（`rounds/16-entry-layer.md` §46.10）。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 191 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 201 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。转译已改按**批量节奏**（一次 ~30 个、
 每 3-5 个 `--only` 验证一次，见 `AGENTS.md` §2、`docs/TRANSLATION.md` §1）。
 
 > ⚠ **进度必须看清**：全量函数表 `re/funcmap.csv` 有 **1359** 个函数，已源码化的只有
-> **191 个 ≈ 14.1%**；**其余 ~86% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
+> **201 个 ≈ 14.8%**；**其余 ~85% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
 > 直接执行**。这正是宿主必须是 **32 位进程**的原因（x86-64 长模式不能执行 32 位代码，
 > 只有 `-m32`/WOW64 这类 32 位进程才行）；**等全部函数源码化后，这个 32 位门槛才会消失**。
 
@@ -121,6 +121,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
 | §68 | 10-08 | **调色板动画 + 地图视图刷新（第 130–133 个）** | 沿 `0x11CAC` 的**唯一剩余依赖**收全：`pal_tick_word`(0x4E310，BDA tick 零扩展)、`pal_anim_step`(0x4E31C，每 ≥2 tick 把 `0x60003` 起 48 B 按帧 `lodsb` 上传 DAC `0xE0..0xEF`；**内联 `out dx,al`**)、`map_unit_ping`(0x32230，记录 `+32`→29 B 表→`%6/%4/%9` 音效)、`map_view_update`(0x11CAC，帧/tick 动画 + w×h=13×8 视图合成 + 推回 `0xA0504` VGA)，共 **496 B / 104 个到达点**；`fade.c`+`map.c`，接入 `REPL_FADE`/`REPL_MAP`。**唯一新工程件=窄 VEH `out` 陷阱**（只认 `0x4E31C` 范围内 `EE` 这一条，与 C 侧 `stub_outp` 汇入同一 DAC 事件日志）。`mapcheck` **112000→122500/0**（故障注入 4/4）；闭环价值：全表 usage 前二 `0x135DD`(98)/`0x1366A`(110) 依赖闭合。`regress 8/8`、`repl: installed 129 → 133`、静态帧 A/B **0/64000 px**、Linux 构建 0 warning + `letest` exact match + `doscheck 49/49`。新蹈坑：非关键 VGA 块未提交导致 harness 间歇 AV（§8-83）、域外 `t[k-1]` 不可复现（§8-84） | `docs/rounds/38-palette-and-map-refresh.md`、`docs/TRANSLATION.md` §4/§5、`docs/PITFALLS.md` §8-83/84、`re/RE_MAP.md` |
 | §69 | 10-08 | **`funcs_1199C` 第二批 / 批量转译工作流（第 134–163 个）** | 发现该表是 **91 项**（上轮只读了 48）；把其中的**场景脚本簇 indices 38..90（`0x35298..0x3644E`）**里的 30 个 + 共享滚动 helper `0x135DD` 转成 `game/ev2.c`，接入新分组 `REPL_EV2`（133→**163**）。新对拍器 **`ev2check`**（9 服务记录桩 + 整块 obj1 + 3 缓冲，**支持 `--only=` 按地址选子集**）分 **6 批×1000 例全过**（全量 3600/0）；`regress` all/none 8/8、静态帧 A/B **0/64000 px**、Linux 0 warning + exact match + 49/49。工作流落地：`--replace` 支持 `-` 取反、`FD2_REPL_SKIP` 免重建二分 | `docs/rounds/39-funcs1199c-batch2.md`、`docs/TRANSLATION.md` §1/§4 |
 | §70 | 10-08 | **`funcs_1199C` 场景脚本簇收口（第 164–191 个）** | 批 3：剩余 **23 个表项 + 5 个 helper**（`0x35B78`/`0x35F10`/`0x361B0`/`0x2AEDB`/`0x33F78`）→ `game/ev3.c`，接入新分组 `REPL_EV3`（163→**191**）——**`funcs_1199C` 索引 38..90 全部源码化**。`ev2check` 扩 18 个服务桩 + **整个 obj2** 快照。**对拍抓到 2 个真问题**：① harness 未恢复 obj1/obj2 起点致假失败（§8-88）；② `0x35E5B` 漏尾部 `vm_run(6)`——它 `jmp` 的 `loc_35D55` 落在 `0x35D1E` 中间、后面还接着调用（§8-87）。判据：6 组×1000 例（G4 因事件量大 60/个）+ 全 28 个 560/0、ev2 重跑 1500/0、`regress` 8/8、A/B **0/64000 px**、Linux 0 warning + exact match + 49/49 | `docs/rounds/40-funcs1199c-batch3.md`、`docs/PITFALLS.md` §8-87/88、`re/RE_MAP.md` |
+| §71 | 10-08 | **场景移动/地图窗口/头像关闭（第 192–201 个）** | 批 4：全表 **usage #1 `0x1366A`**(110) + 地图窗口四向 stepper `0x11B48/9B/BFA/C59` + 等键 `0x11AA8` + 格子计数 `0x12263` + 光标入队 `0x1E1DC` + 滚动动画 `0x24B4D` + 头像关闭 `0x196CB` → `game/ev4.c`，新分组 `REPL_EV4`（191→**201**）。`ev2check` 扩 VGA 快照 + 低内存镜像 + INT16/等键/调色板钩子。**抓 2 个真 bug**：① `0x1366A` 两处漏 `wait(1)`（harness）；② **`0x11B9B` 有符号 `jle` 写成无符号比较**——harness 全过但宿主 A/B 差 **34.7%**，靠 `FD2_REPL_SKIP` 二分定位（§8-89，只有宿主 A/B 抓到）。判据：`ev2check` 2 组×1000 + 全量 1360/0、`regress` all/none 8/8、A/B **0/64000 px**、Linux 0 warning + exact match + 49/49 | `docs/rounds/41-scene-move-and-map.md`、`docs/PITFALLS.md` §8-89、`re/RE_MAP.md` |
 
 ## 4. 下一步计划（按优先级）
 
@@ -176,12 +177,15 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    第 39 轮把表读全（**91 项**）并收 30 个（`game/ev2.c`，`REPL_EV2`）；第 40 轮收剩余
    **23 个 + 5 个 helper**（`game/ev3.c`，`REPL_EV3`）⇒ **索引 38..90 全部源码化**，
    `ev2check` 支持 `--only` 子集、快照覆盖 obj1+obj2。
+   ~~`0x1366A`(110) 场景移动动画~~ **已完成（§71，接入 201）**——连同地图窗口 stepper、等键、
+   格子计数、光标入队、滚动动画、头像关闭共 10 个 → `game/ev4.c`（`REPL_EV4`）；
+   `ev2check` 扩 VGA 快照 + 低内存镜像 + INT16 缝。
    **下一步首选项（按 usage）**：
-   - `0x1366A`(110, 818 B) 场景移动动画——依赖除 `0x17AA9` 外已闭（本轮已接 `0x33F78` 等）；
+   - **解释器簇** `0x1AA1D`(726) + `0x197E5`(366) + `0x19953`(1188) + `0x1DB65`(857)——
+     harness 的 VGA/INT16/malloc 缝已就绪；
    - `0x10B4E`(58, 258 B) `FDICON.B24`+`FDFIELD.DAT` 载入 + `FD2.TMP` 重写（需 `0x10C50`+CRT 文件缝）；
-   - `0x196CB`(25)/`0x197E5`/`0x19953`/`0x1B932`——解锁 **`0x1AA1D` 脚本解释器**（726 B，本两轮已钉清分派）；
    - 之后回补 `funcs_1199C` 索引 0..37 未收的 25 个（`0x34xxx` 记录/状态 handler）。
-   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 129→133→163→**191**/1359）。
+   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 163→191→**201**/1359）。
 2. ~~**补 autokey 配方**~~ **已完成（§40，2026-10-06）**：标准配方 + `--shot-tick=326..334`
    即可落在“打字进行中”，抓到 3 张不同进度的逐字画面（框区差异 455→327→325→0），
    且 **15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽 ⇒ `vm_run`+`dlg_type_step`

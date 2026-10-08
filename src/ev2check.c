@@ -31,6 +31,7 @@
 #include "le.h"
 #include "game/ev2.h"
 #include "game/ev3.h"
+#include "game/ev4.h"
 
 #define W32(x)  (*(uint32_t *)(uintptr_t)(x))
 #define W8(x)   (*(uint8_t  *)(uintptr_t)(x))
@@ -123,6 +124,8 @@ static void install_hook(uint32_t addr, const void *dest)
 #define SNAP_N    0x000056B0u
 #define SNAP2_BASE 0x00060000u   /* obj2: util_rand's word_627B8 lives here */
 #define SNAP2_N    0x000034D2u
+#define VGA_BASE   0x000A0000u
+#define VGA_N      0x00010000u
 #define STATE_N   64
 #define STATUS_N  64
 #define STREAM_N  16
@@ -150,13 +153,13 @@ enum { EV_VM, EV_STATUS, EV_UNIT, EV_LOAD, EV_WAIT, EV_SEQ, EV_CLEAR,
        EV_VIEW, EV_FLUSH, EV_SCENE, EV_2E2B0, EV_1DB65, EV_12263,
        EV_MSGOPEN, EV_MSGCLOSE, EV_DLGBLIT, EV_DLGWAIT, EV_MAPCELL,
        EV_RESLOAD, EV_RESBLIT, EV_FREE, EV_DELAY, EV_PALADD, EV_1366A,
-       EV_134E4, EV_12CEA, EV_22253, EV_N };
+       EV_134E4, EV_12CEA, EV_22253, EV_EXT, EV_N };
 static const char *const kind_name[EV_N] = {
     "vm_run", "status", "unit_add", "load", "wait", "seq", "clear",
     "view", "flush", "scene", "2E2B0", "1DB65", "12263",
     "msg_open", "msg_close", "dlg_blit", "dlg_wait", "map_cell",
     "res_load", "res_blit", "free", "delay", "pal_add", "1366A",
-    "134E4", "12CEA", "22253"
+    "134E4", "12CEA", "22253", "ext"
 };
 #define MAXEV 8192
 struct event { int kind; int v[9]; };
@@ -291,11 +294,53 @@ static void __cdecl stub_22253(int a, int b, int c, int d, int e)
 {
     ev_log(EV_22253, a, b, c, d, e, 0, 0, 0, 0);
 }
+/* --- batch-4 services (src/game/ev4.c) -------------------------------- */
+uint32_t dos_lowmem_base = 0x00070000u;
+static int g_key = 0x1C, g_kbd_countdown = 0;
+static uint8_t g_script[20] = { 3, 2,2, 3,1, 4,2,  0x82,2, 3,1, 4,2,  0x80,2, 5,1, 6,2 };
+static uint8_t g_screen[64000];
+static void __cdecl stub_11d40(int s, int e, int a) { ev_log(EV_EXT, 1, s, e, a, 0, 0, 0, 0, 0); }
+static void __cdecl stub_11eb0(void *d, int dp, const void *s, int sp, int w, int h)
+{
+    (void)d; (void)s;
+    ev_log(EV_EXT, 2, dp, sp, w, h, 0, 0, 0, 0);
+}
+static void __cdecl stub_11eee(uint8_t *d, int p, int w, int h, int ox, int oy)
+{
+    (void)d;
+    ev_log(EV_EXT, 3, p, w, h, ox, oy, 0, 0, 0);
+}
+static void __cdecl stub_127e0(int i) { ev_log(EV_EXT, 4, i, 0, 0, 0, 0, 0, 0, 0); }
+static void __cdecl stub_129ec(void) { ev_log(EV_EXT, 5, 0, 0, 0, 0, 0, 0, 0, 0); }
+static void __cdecl stub_1297d(void) { ev_log(EV_EXT, 6, 0, 0, 0, 0, 0, 0, 0, 0); }
+static void __cdecl stub_127a9(void) { ev_log(EV_EXT, 7, 0, 0, 0, 0, 0, 0, 0, 0); }
+static void __cdecl stub_32230(int i) { ev_log(EV_EXT, 8, i, 0, 0, 0, 0, 0, 0, 0); }
+static void __cdecl stub_1974c(int y, void *d, void *s)
+{
+    (void)d; (void)s;
+    ev_log(EV_EXT, 9, y, 0, 0, 0, 0, 0, 0, 0);
+}
+static int __cdecl stub_int386(int no, const void *in, void *out)
+{
+    (void)in;
+    ev_log(EV_EXT, 10, no, 0, 0, 0, 0, 0, 0, 0);
+    if (out) ((uint8_t *)out)[1] = (uint8_t)g_key;
+    return 0;
+}
+static int __cdecl stub_10620(void)
+{
+    ev_log(EV_EXT, 11, 0, 0, 0, 0, 0, 0, 0, 0);
+    if (g_kbd_countdown > 0) { g_kbd_countdown--; return 0; }
+    return 1;
+}
+static void *__cdecl stub_4eb48(int sel) { (void)sel; return g_script; }
+static void __cdecl stub_4e31c(void) { ev_log(EV_EXT, 12, 0, 0, 0, 0, 0, 0, 0, 0); }
 
 /* --- world setup / capture --------------------------------------------- */
 struct cap {
     uint8_t obj1[SNAP_N];
     uint8_t obj2[SNAP2_N];
+    uint8_t vga[VGA_N];
     uint8_t rec[REC_BYTES];
     uint8_t state[STATE_N];
     uint8_t stat[STATUS_N];
@@ -342,9 +387,17 @@ static void setup_world(uint32_t s)
     W32(0x53AAD) = (uint32_t)((int)(rnd() % 9u) - 4);
     W32(0x53AB1) = rnd();
     W32(0x53AB5) = rnd();
+    W32(0x53AB9) = rnd();
+    W32(0x53ABD) = rnd();
     g_argx = (int)(rnd() % 9u) - 4;
     g_argy = (int)(rnd() % 9u) - 4;
     g_arg  = (int)(rnd() % 200u);
+    W32(0x53C5B) = (uint32_t)(uintptr_t)g_screen;
+    W32(0x53C5F) = (uint32_t)(uintptr_t)g_screen;
+    W32(0x53C63) = (uint32_t)(uintptr_t)g_screen;
+    *(volatile uint16_t *)(uintptr_t)(dos_lowmem_base + 0x46C) = (uint16_t)(rnd() & 0xFFFFu);
+    g_key  = (int)(rnd() % 256u);
+    g_kbd_countdown = (int)(rnd() % 3u);
     g_nev  = 0;
 }
 /* The C side reads the same globals but must point at the C buffers. */
@@ -361,6 +414,7 @@ static void capture(struct cap *c)
 {
     memcpy(c->obj1, (const void *)(uintptr_t)SNAP_BASE, SNAP_N);
     memcpy(c->obj2, (const void *)(uintptr_t)SNAP2_BASE, SNAP2_N);
+    memcpy(c->vga, (const void *)(uintptr_t)VGA_BASE, VGA_N);
     memcpy(c->rec, rec_o, REC_BYTES);
     memcpy(c->state, state_o, STATE_N);
     memcpy(c->stat, stat_o, STATUS_N);
@@ -380,6 +434,7 @@ static void capture_c(struct cap *c)
     W32(0x53A7D) = (uint32_t)(uintptr_t)strm_o;
     memcpy(c->obj1, (const void *)(uintptr_t)SNAP_BASE, SNAP_N);
     memcpy(c->obj2, (const void *)(uintptr_t)SNAP2_BASE, SNAP2_N);
+    memcpy(c->vga, (const void *)(uintptr_t)VGA_BASE, VGA_N);
     memcpy(c->rec, rec_c, REC_BYTES);
     memcpy(c->state, state_c, STATE_N);
     memcpy(c->stat, stat_c, STATUS_N);
@@ -448,6 +503,12 @@ static int cmp_cap(unsigned id, const char *name,
         if (o->obj2[i] != t->obj2[i]) {
             printf("FAIL case %u %s: obj2+%X orig=%02X ours=%02X\n", id, name,
                    i, o->obj2[i], t->obj2[i]);
+            failures++; bad = 1;
+        }
+    for (i = 0; i < VGA_N && !bad; i++)
+        if (o->vga[i] != t->vga[i]) {
+            printf("FAIL case %u %s: vga+%X orig=%02X ours=%02X\n", id, name,
+                   i, o->vga[i], t->vga[i]);
             failures++; bad = 1;
         }
     for (i = 0; i < REC_BYTES && !bad; i++)
@@ -558,6 +619,31 @@ static void c_36447(void) { ev2_36447(g_arg); }
 static void o_3644E(void) { O_3644E(g_arg); }
 static void c_3644E(void) { ev2_3644E(g_arg); }
 
+/* --- batch 4 (src/game/ev4.c) ----------------------------------------- */
+typedef int (*h0i_fn)(void);
+#define O_1366A ((h1_fn)(uintptr_t)0x0001366Au)
+#define O_11AA8 ((h0i_fn)(uintptr_t)0x00011AA8u)
+#define O_11B48 ((h0_fn)(uintptr_t)0x00011B48u)
+#define O_11B9B ((h0_fn)(uintptr_t)0x00011B9Bu)
+#define O_11BFA ((h0_fn)(uintptr_t)0x00011BFAu)
+#define O_11C59 ((h0_fn)(uintptr_t)0x00011C59u)
+#define O_12263 ((h0_fn)(uintptr_t)0x00012263u)
+#define O_1E1DC ((h1_fn)(uintptr_t)0x0001E1DCu)
+#define O_24B4D ((h1_fn)(uintptr_t)0x00024B4Du)
+#define O_196CB ((h0_fn)(uintptr_t)0x000196CBu)
+#define E4(a) \
+    static void o_##a(void) { O_##a(); } \
+    static void c_##a(void) { ev4_##a(); }
+E4(11B48) E4(11B9B) E4(11BFA) E4(11C59) E4(12263) E4(196CB)
+static void o_1366A(void) { O_1366A(g_arg % 4); }
+static void c_1366A(void) { ev4_1366A(g_arg % 4); }
+static void o_11AA8(void) { (void)O_11AA8(); }
+static void c_11AA8(void) { (void)ev4_11AA8(); }
+static void o_1E1DC(void) { O_1E1DC(g_arg % 64); }
+static void c_1E1DC(void) { ev4_1E1DC(g_arg % 64); }
+static void o_24B4D(void) { O_24B4D(g_arg % 4); }
+static void c_24B4D(void) { ev4_24B4D(g_arg % 4); }
+
 #define EV3_PAIR(a, name) \
     static void o_##name(void) { O_##name(g_arg); } \
     static void c_##name(void) { ev3_##name(g_arg); }
@@ -640,6 +726,17 @@ static const struct entry g_entries[] = {
     { 0x361B0, "361B0", o_361B0, c_361B0 },
     { 0x2AEDB, "2AEDB", o_2AEDB, c_2AEDB },
     { 0x33F78, "33F78", o_33F78, c_33F78 },
+    /* batch 4 (src/game/ev4.c) */
+    { 0x1366A, "1366A", o_1366A, c_1366A },
+    { 0x11AA8, "11AA8", o_11AA8, c_11AA8 },
+    { 0x11B48, "11B48", o_11B48, c_11B48 },
+    { 0x11B9B, "11B9B", o_11B9B, c_11B9B },
+    { 0x11BFA, "11BFA", o_11BFA, c_11BFA },
+    { 0x11C59, "11C59", o_11C59, c_11C59 },
+    { 0x12263, "12263", o_12263, c_12263 },
+    { 0x1E1DC, "1E1DC", o_1E1DC, c_1E1DC },
+    { 0x24B4D, "24B4D", o_24B4D, c_24B4D },
+    { 0x196CB, "196CB", o_196CB, c_196CB },
 };
 #define NENT (sizeof g_entries / sizeof g_entries[0])
 
@@ -667,6 +764,44 @@ static int parse_only(const char *s)
     return 0;
 }
 
+/* Redirect absolute low-memory operands (0x400..0x500) into the 0x70000
+ * mirror, exactly as dos.c does for the host - 0x11AA8 reads the BDA tick at
+ * 0x46C. Copied from src/leafcheck.c. */
+static int patch_lowmem_refs(le_image *le, uint32_t mirror)
+{
+    unsigned i, off;
+    int      n = 0;
+
+    for (i = 0; i < le->object_count; i++) {
+        uint8_t *base;
+        uint32_t size;
+
+        if (!(le->objects[i].flags & 0x04))
+            continue;
+        base = (uint8_t *)(uintptr_t)le->objects[i].base;
+        size = le->objects[i].vsize;
+        for (off = 0; off + 5 <= size; off++) {
+            uint8_t  op  = base[off];
+            uint32_t imm;
+            int      is_mov = (op >= 0xB8 && op <= 0xBF);
+
+            if (!is_mov && op != 0x68)
+                continue;
+            imm = (uint32_t)base[off + 1] | ((uint32_t)base[off + 2] << 8) |
+                  ((uint32_t)base[off + 3] << 16) | ((uint32_t)base[off + 4] << 24);
+            if (imm >= 0x400 && imm < 0x500) {
+                uint32_t fixed = mirror + imm;
+                base[off + 1] = (uint8_t)fixed;
+                base[off + 2] = (uint8_t)(fixed >> 8);
+                base[off + 3] = (uint8_t)(fixed >> 16);
+                base[off + 4] = (uint8_t)(fixed >> 24);
+                n++;
+            }
+        }
+    }
+    return n;
+}
+
 int main(int argc, char **argv)
 {
     le_image le;
@@ -690,6 +825,12 @@ int main(int argc, char **argv)
         return 1;
     }
     printf("mapped FD2.EXE, fixups applied=%d\n", applied);
+    printf("low-memory operands redirected: %d\n",
+           patch_lowmem_refs(&le, (uint32_t)dos_lowmem_base));
+    if (plat_commit((uintptr_t)VGA_BASE, VGA_N, PLAT_PROT_RWX) == NULL) {
+        printf("FAIL: VGA block 0xA0000 unavailable\n");
+        return 2;
+    }
     memcpy(obj1_p, (const void *)(uintptr_t)SNAP_BASE, SNAP_N);
     memcpy(obj2_p, (const void *)(uintptr_t)SNAP2_BASE, SNAP2_N);
 
@@ -705,9 +846,9 @@ int main(int argc, char **argv)
     HOOK(0x1AA1D, stub_scene);
     HOOK(0x2E2B0, stub_2e2b0);
     HOOK(0x1DB65, stub_1db65);
-    HOOK(0x12263, stub_12263);
+    /* 0x12263 / 0x196CB / 0x1366A are under test in batch 4 - do NOT hook. */
     HOOK(0x1956B, stub_msopen);
-    HOOK(0x196CB, stub_msclose);
+
     HOOK(0x16559, stub_dlgblit);
     HOOK(0x16C57, stub_dlgwait);
     HOOK(0x12E38, stub_mapcell);
@@ -716,10 +857,23 @@ int main(int argc, char **argv)
     HOOK(0x3776E, stub_free);
     HOOK(0x3790A, stub_delay);
     HOOK(0x11DF2, stub_paladd);
-    HOOK(0x1366A, stub_1366a);
+
     HOOK(0x134E4, stub_134e4);
     HOOK(0x12CEA, stub_12cea);
     HOOK(0x22253, stub_22253);
+    HOOK(0x11D40, stub_11d40);
+    HOOK(0x11EB0, stub_11eb0);
+    HOOK(0x11EEE, stub_11eee);
+    HOOK(0x127E0, stub_127e0);
+    HOOK(0x129EC, stub_129ec);
+    HOOK(0x1297D, stub_1297d);
+    HOOK(0x127A9, stub_127a9);
+    HOOK(0x32230, stub_32230);
+    HOOK(0x1974C, stub_1974c);
+    HOOK(0x370F0, stub_int386);
+    HOOK(0x10620, stub_10620);
+    HOOK(0x4E31C, stub_4e31c);
+    HOOK(0x4EB48, stub_4eb48);
 
     for (i = 0; i < NENT; i++) {
         if (!selected[i]) continue;

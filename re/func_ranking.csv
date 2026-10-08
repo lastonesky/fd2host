@@ -4,7 +4,7 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x111ba,235,sub_111BA,game,132,132,0,0,0,Y
 0x11eb0,62,sub_11EB0,game,115,115,0,0,0,Y
 0x25a96,175,sub_25A96,game,111,111,0,0,0,Y
-0x1366a,818,sub_1366A,game,110,110,0,0,0,-
+0x1366a,818,sub_1366A,game,110,110,0,0,0,Y
 0x135dd,141,sub_135DD,game,98,98,0,0,0,Y
 0x17aa9,68,sub_17AA9,game,96,96,0,0,0,Y
 0x11cac,148,sub_11CAC,game,84,84,0,0,0,Y
@@ -33,7 +33,7 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x11eee,885,sub_11EEE,game,27,27,0,0,0,Y
 0x1f525,51,sub_1F525,game,26,26,0,0,0,Y
 0x134e4,46,sub_134E4,game,25,25,0,0,0,Y
-0x196cb,129,sub_196CB,game,25,25,0,0,0,-
+0x196cb,129,sub_196CB,game,25,25,0,0,0,Y
 0x11506,176,sub_11506,game,24,24,0,0,0,Y
 0x4e8bc,23,sub_4E8BC,lib_nosym,23,23,0,0,0,Y
 0x16886,48,sub_16886,game,23,23,0,0,0,Y
@@ -52,7 +52,7 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x4e31c,101,sub_4E31C,lib_nosym,15,15,0,0,0,Y
 0x15f0e,118,sub_15F0E,game,15,15,0,0,0,-
 0x12cea,145,sub_12CEA,game,15,15,0,0,0,-
-0x24b4d,145,sub_24B4D,game,15,15,0,0,0,-
+0x24b4d,145,sub_24B4D,game,15,15,0,0,0,Y
 0x233c6,245,sub_233C6,game,15,15,0,0,0,-
 0x1e0db,257,sub_1E0DB,game,15,15,0,0,0,-
 0x2ce1a,278,sub_2CE1A,game,15,14,0,1,0,Y
@@ -75,7 +75,7 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x1297d,111,sub_1297D,game,13,13,0,0,0,Y
 0x4e22a,114,sub_4E22A,lib_nosym,13,13,0,0,0,Y
 0x311e5,129,sub_311E5,game,13,13,0,0,0,-
-0x1e1dc,182,sub_1E1DC,game,13,13,0,0,0,-
+0x1e1dc,182,sub_1E1DC,game,13,13,0,0,0,Y
 0x31bdf,106,sub_31BDF,game,12,12,0,0,0,-
 0x1b750,237,sub_1B750,game,12,12,0,0,0,-
 0x4e866,23,sub_4E866,lib_nosym,11,11,0,0,0,Y
@@ -230,7 +230,7 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x33219,100,sub_33219,game,6,5,0,1,0,-
 0x20aaf,101,sub_20AAF,game,6,5,0,1,0,-
 0x333f5,118,sub_333F5,game,6,5,0,1,0,-
-0x12263,121,sub_12263,game,6,6,0,0,0,-
+0x12263,121,sub_12263,game,6,6,0,0,0,Y
 0x20bf5,122,sub_20BF5,game,6,5,0,1,0,-
 0x33dba,130,sub_33DBA,game,6,5,0,1,0,-
 0x20b72,131,sub_20B72,game,6,5,0,1,0,-
@@ -372,11 +372,11 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x21ad9,63,sub_21AD9,game,3,2,0,1,0,-
 0x2e95b,77,sub_2E95B,game,3,3,0,0,0,-
 0x1e5c0,81,sub_1E5C0,game,3,3,0,0,0,-
-0x11b48,83,sub_11B48,game,3,3,0,0,0,-
-0x11c59,83,sub_11C59,game,3,3,0,0,0,-
+0x11b48,83,sub_11B48,game,3,3,0,0,0,Y
+0x11c59,83,sub_11C59,game,3,3,0,0,0,Y
 0x1a813,83,sub_1A813,game,3,3,0,0,0,-
-0x11b9b,95,sub_11B9B,game,3,3,0,0,0,-
-0x11bfa,95,sub_11BFA,game,3,3,0,0,0,-
+0x11b9b,95,sub_11B9B,game,3,3,0,0,0,Y
+0x11bfa,95,sub_11BFA,game,3,3,0,0,0,Y
 0x1b5f1,98,sub_1B5F1,game,3,3,0,0,0,-
 0x1f81e,100,sub_1F81E,game,3,3,0,0,0,-
 0x1839b,110,sub_1839B,game,3,3,0,0,0,-
@@ -834,7 +834,7 @@ addr,size,name,zone,usage,callers_game,callers_lib,data_xrefs,str_refs,wired
 0x1debe,154,sub_1DEBE,game,1,1,0,0,0,-
 0x22e5c,154,sub_22E5C,game,1,1,0,0,0,Y
 0x17d6f,156,sub_17D6F,game,1,1,0,0,0,-
-0x11aa8,160,sub_11AA8,game,1,1,0,0,0,-
+0x11aa8,160,sub_11AA8,game,1,1,0,0,0,Y
 0x1c9dd,172,sub_1C9DD,game,1,1,0,0,0,-
 0x1d80b,175,sub_1D80B,game,1,1,0,0,0,-
 0x2b67f,202,sub_2B67F,game,1,1,0,0,0,-

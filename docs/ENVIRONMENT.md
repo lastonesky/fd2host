@@ -46,7 +46,7 @@ Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -Wor
 | `--shot-time=<ms>` | 按**墙钟**触发（`host_init` 起的毫秒）。精度 = ±1 个帧周期（GDI ±31 ms / sokol ±6 ms） |
 | **`--shot-tick=<n>`** | 按**游戏自己的 BIOS tick**（`0x40:0x6C`，18.2 Hz 独立推进）触发。**跨后端对拍用这个**——同一 tick = 同一 guest 状态，与帧率无关（见 `BACKEND.md` §13.8） |
 | `--autokey=<延时ms:VK[,VK...];...>` | 无人值守按键序列（菜单路径回归） |
-| `--replace=none\|all\|rle,gfx,sprite24,util,path,dlg,rec,svc,vm,res,bgm,scene,fade,map,fx,ev2,ev3` | 是否把已对拍的转译函数接进游戏（默认 `all`）；`none` 用于 A/B（见 `TRANSLATION.md`）。分组名与 `src/repl.c` 的 `REPL_*` 一一对应。**token 可加 `-` 前缀取反**（后生效），如 `--replace=all,-ev2` = 全集去掉某一批 |
+| `--replace=none\|all\|rle,gfx,sprite24,util,path,dlg,rec,svc,vm,res,bgm,scene,fade,map,fx,ev2,ev3,ev4` | 是否把已对拍的转译函数接进游戏（默认 `all`）；`none` 用于 A/B（见 `TRANSLATION.md`）。分组名与 `src/repl.c` 的 `REPL_*` 一一对应。**token 可加 `-` 前缀取反**（后生效），如 `--replace=all,-ev2` = 全集去掉某一批 |
 | 环境变量 `FD2_REPL_SKIP=0x...,0x...` | 调试用：把列出的地址**留成机器码**（即使分组已选），用于**批量免重建二分**。正常跑不要设 |
 | `--no-user-input` | 忽略真实键鼠，避免测试机被使用时干扰 autokey |
 | `--cmdtail=<尾巴>` | 写进 `PSP:0x80` 的命令行；`INT 21h AH=4B` 拉起子进程时自动传递 |
