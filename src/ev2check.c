@@ -33,6 +33,7 @@
 #include "game/ev3.h"
 #include "game/ev4.h"
 #include "game/ev5.h"
+#include "game/ev6.h"
 
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(dos_lowmem_base + (off)))
 #define dword_53AC1 (*(uint32_t *)(uintptr_t)0x00053AC1u)
@@ -158,13 +159,13 @@ enum { EV_VM, EV_STATUS, EV_UNIT, EV_LOAD, EV_WAIT, EV_SEQ, EV_CLEAR,
        EV_VIEW, EV_FLUSH, EV_SCENE, EV_2E2B0, EV_1DB65, EV_12263,
        EV_MSGOPEN, EV_MSGCLOSE, EV_DLGBLIT, EV_DLGWAIT, EV_MAPCELL,
        EV_RESLOAD, EV_RESBLIT, EV_FREE, EV_DELAY, EV_PALADD, EV_1366A,
-       EV_134E4, EV_12CEA, EV_22253, EV_EXT, EV_N };
+       EV_134E4, EV_12CEA, EV_22253, EV_MAPR, EV_EXT, EV_N };
 static const char *const kind_name[EV_N] = {
     "vm_run", "status", "unit_add", "load", "wait", "seq", "clear",
     "view", "flush", "scene", "2E2B0", "1DB65", "12263",
     "msg_open", "msg_close", "dlg_blit", "dlg_wait", "map_cell",
     "res_load", "res_blit", "free", "delay", "pal_add", "1366A",
-    "134E4", "12CEA", "22253", "ext"
+    "134E4", "12CEA", "22253", "map_render", "ext"
 };
 #define MAXEV 8192
 struct event { int kind; int v[9]; };
@@ -299,6 +300,10 @@ static void __cdecl stub_12cea(int a, int b)
 static void __cdecl stub_22253(int a, int b, int c, int d, int e)
 {
     ev_log(EV_22253, a, b, c, d, e, 0, 0, 0, 0);
+}
+static void __cdecl stub_maprender(int idx)
+{
+    ev_log(EV_MAPR, idx, 0, 0, 0, 0, 0, 0, 0, 0);
 }
 /* --- batch-4 services (src/game/ev4.c) -------------------------------- */
 uint32_t dos_lowmem_base = 0x00070000u;
@@ -764,6 +769,40 @@ static void c_1F0DC(void) { (void)ev5_1F0DC(g_arg % 8, g_argx % 8); }
 static void o_1B653(void) { O_1B653(g_recbase + 16000); }
 static void c_1B653(void) { ev5_1B653(g_recbase + 16000); }
 
+/* --- batch 6 (src/game/ev6.c) ----------------------------------------- */
+#define O_34531 ((h1_fn)(uintptr_t)0x00034531u)
+#define O_3460B ((h1_fn)(uintptr_t)0x0003460Bu)
+#define O_34673 ((h1_fn)(uintptr_t)0x00034673u)
+#define O_346CD ((h1_fn)(uintptr_t)0x000346CDu)
+#define O_34778 ((h1_fn)(uintptr_t)0x00034778u)
+#define O_350BE ((h1_fn)(uintptr_t)0x000350BEu)
+#define O_350C8 ((h1_fn)(uintptr_t)0x000350C8u)
+#define O_34818 ((h1_fn)(uintptr_t)0x00034818u)
+#define O_348BB ((h1_fn)(uintptr_t)0x000348BBu)
+#define O_34940 ((h1_fn)(uintptr_t)0x00034940u)
+#define O_34984 ((h1_fn)(uintptr_t)0x00034984u)
+#define O_349EC ((h1_fn)(uintptr_t)0x000349ECu)
+#define O_34A1E ((h1_fn)(uintptr_t)0x00034A1Eu)
+#define O_34B07 ((h1_fn)(uintptr_t)0x00034B07u)
+#define O_34B6F ((h1_fn)(uintptr_t)0x00034B6Fu)
+#define O_34B9A ((h1_fn)(uintptr_t)0x00034B9Au)
+#define O_34C52 ((h1_fn)(uintptr_t)0x00034C52u)
+#define O_34C7A ((h1_fn)(uintptr_t)0x00034C7Au)
+#define O_34D2F ((h1_fn)(uintptr_t)0x00034D2Fu)
+#define O_34DD0 ((h1_fn)(uintptr_t)0x00034DD0u)
+#define O_34EB3 ((h1_fn)(uintptr_t)0x00034EB3u)
+#define O_34F38 ((h1_fn)(uintptr_t)0x00034F38u)
+#define O_34FC2 ((h1_fn)(uintptr_t)0x00034FC2u)
+#define O_34FCC ((h1_fn)(uintptr_t)0x00034FCCu)
+#define O_35022 ((h1_fn)(uintptr_t)0x00035022u)
+#define E6(a) \
+    static void o_##a(void) { O_##a(g_arg); } \
+    static void c_##a(void) { ev6_##a(g_arg); }
+E6(34531) E6(3460B) E6(34673) E6(346CD) E6(34778) E6(350BE) E6(350C8)
+E6(34818) E6(348BB) E6(34940) E6(34984) E6(349EC) E6(34A1E) E6(34B07)
+E6(34B6F) E6(34B9A) E6(34C52) E6(34C7A) E6(34D2F) E6(34DD0) E6(34EB3)
+E6(34F38) E6(34FC2) E6(34FCC) E6(35022)
+
 #define EV3_PAIR(a, name) \
     static void o_##name(void) { O_##name(g_arg); } \
     static void c_##name(void) { ev3_##name(g_arg); }
@@ -886,6 +925,32 @@ static const struct entry g_entries[] = {
     { 0x1F04A, "1F04A", o_1F04A, c_1F04A },
     { 0x1F0DC, "1F0DC", o_1F0DC, c_1F0DC },
     { 0x1B653, "1B653", o_1B653, c_1B653 },
+    /* batch 6 (src/game/ev6.c) */
+    { 0x34531, "34531", o_34531, c_34531 },
+    { 0x3460B, "3460B", o_3460B, c_3460B },
+    { 0x34673, "34673", o_34673, c_34673 },
+    { 0x346CD, "346CD", o_346CD, c_346CD },
+    { 0x34778, "34778", o_34778, c_34778 },
+    { 0x350BE, "350BE", o_350BE, c_350BE },
+    { 0x350C8, "350C8", o_350C8, c_350C8 },
+    { 0x34818, "34818", o_34818, c_34818 },
+    { 0x348BB, "348BB", o_348BB, c_348BB },
+    { 0x34940, "34940", o_34940, c_34940 },
+    { 0x34984, "34984", o_34984, c_34984 },
+    { 0x349EC, "349EC", o_349EC, c_349EC },
+    { 0x34A1E, "34A1E", o_34A1E, c_34A1E },
+    { 0x34B07, "34B07", o_34B07, c_34B07 },
+    { 0x34B6F, "34B6F", o_34B6F, c_34B6F },
+    { 0x34B9A, "34B9A", o_34B9A, c_34B9A },
+    { 0x34C52, "34C52", o_34C52, c_34C52 },
+    { 0x34C7A, "34C7A", o_34C7A, c_34C7A },
+    { 0x34D2F, "34D2F", o_34D2F, c_34D2F },
+    { 0x34DD0, "34DD0", o_34DD0, c_34DD0 },
+    { 0x34EB3, "34EB3", o_34EB3, c_34EB3 },
+    { 0x34F38, "34F38", o_34F38, c_34F38 },
+    { 0x34FC2, "34FC2", o_34FC2, c_34FC2 },
+    { 0x34FCC, "34FCC", o_34FCC, c_34FCC },
+    { 0x35022, "35022", o_35022, c_35022 },
 };
 #define NENT (sizeof g_entries / sizeof g_entries[0])
 
@@ -1025,6 +1090,7 @@ int main(int argc, char **argv)
     HOOK(0x4E31C, stub_4e31c);
     HOOK(0x4EB48, stub_4eb48);
     HOOK(0x37AE5, stub_outp);
+    HOOK(0x32999, stub_maprender);
 
     for (i = 0; i < NENT; i++) {
         if (!selected[i]) continue;

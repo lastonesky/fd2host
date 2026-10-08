@@ -69,6 +69,7 @@
 | `rounds/40-funcs1199c-batch3.md` | 明细 | **`funcs_1199C` 场景脚本簇收口**（164–191 个；剩余 23 表项 + 5 helper `0x35B78`/`0x35F10`/`0x361B0`/`0x2AEDB`/`0x33F78` → `game/ev3.c`、`REPL_EV3`；`ev2check` 扩 18 桩 + **整个 obj2** 快照；抓到 `0x35E5B` 漏尾部 `vm_run(6)`（共享尾落在函数中间，§8-87）与 harness 未恢复 obj1/obj2 起点（§8-88）） | §70 |
 | `rounds/41-scene-move-and-map.md` | 明细 | **场景移动/地图窗口/头像关闭 10 个**（192–201 个；全表 usage #1 `0x1366A` + `0x11B48/9B/BFA/C59` + `0x11AA8` + `0x12263` + `0x1E1DC` + `0x24B4D` + `0x196CB` → `game/ev4.c`、`REPL_EV4`；`ev2check` 扩 VGA 快照 + 低内存镜像 + INT16 缝；新蹈坑：**有符号 `jle` 写成无符号比较**，harness 全过但宿主 A/B 差 34.7%，靠 `FD2_REPL_SKIP` 二分（§8-89）） | §71 |
 | `rounds/42-leaf-batch5.md` | 明细 | **小叶子大批量 28 个**（202–229 个；`game/ev5.c`、`REPL_EV5`；harness scratch 指进快照区 + `outp` 钩子；抓到 `0x35A0D` 地址漏网与合成缓冲宽度问题，§8-90） | §72 |
+| `rounds/43-unit-load-and-funcs1199c-low.md` | 明细 | **单位精灵构建链 + `funcs_1199C` 低索引收口 32 个**（230–261 个；`game/unit_load.c`+`REPL_UNITLD`、`game/ev6.c`+`REPL_EV6`，**整表 0..90 全源码化**；新工具 `ev6check`（Watcom CRT 七入口重定向 + 合成 FDICON/FDFIELD）；FILE* 跨 C/机器码边界走游戏自身 CRT（§8-91）、`JUMPOUT` 共享尾块（§8-92）） | §73 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。

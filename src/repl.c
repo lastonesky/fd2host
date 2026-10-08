@@ -52,6 +52,8 @@
 #include "game/ev3.h"
 #include "game/ev4.h"
 #include "game/ev5.h"
+#include "game/ev6.h"
+#include "game/unit_load.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -334,6 +336,44 @@ static const struct repl_entry g_repl[] = {
     { 0x1F0DC, "ev5_1F0DC",           (void *)ev5_1F0DC,           REPL_EV5 },
     { 0x1B653, "ev5_1B653",           (void *)ev5_1B653,           REPL_EV5 },
 
+    /* funcs_1199C indices 0..37 (src/game/ev6.c), batch 6. */
+    { 0x34531, "ev6_34531",           (void *)ev6_34531,           REPL_EV6 },
+    { 0x3460B, "ev6_3460B",           (void *)ev6_3460B,           REPL_EV6 },
+    { 0x34673, "ev6_34673",           (void *)ev6_34673,           REPL_EV6 },
+    { 0x346CD, "ev6_346CD",           (void *)ev6_346CD,           REPL_EV6 },
+    { 0x34778, "ev6_34778",           (void *)ev6_34778,           REPL_EV6 },
+    { 0x350BE, "ev6_350BE",           (void *)ev6_350BE,           REPL_EV6 },
+    { 0x350C8, "ev6_350C8",           (void *)ev6_350C8,           REPL_EV6 },
+    { 0x34818, "ev6_34818",           (void *)ev6_34818,           REPL_EV6 },
+    { 0x348BB, "ev6_348BB",           (void *)ev6_348BB,           REPL_EV6 },
+    { 0x34940, "ev6_34940",           (void *)ev6_34940,           REPL_EV6 },
+    { 0x34984, "ev6_34984",           (void *)ev6_34984,           REPL_EV6 },
+    { 0x349EC, "ev6_349EC",           (void *)ev6_349EC,           REPL_EV6 },
+    { 0x34A1E, "ev6_34A1E",           (void *)ev6_34A1E,           REPL_EV6 },
+    { 0x34B07, "ev6_34B07",           (void *)ev6_34B07,           REPL_EV6 },
+    { 0x34B6F, "ev6_34B6F",           (void *)ev6_34B6F,           REPL_EV6 },
+    { 0x34B9A, "ev6_34B9A",           (void *)ev6_34B9A,           REPL_EV6 },
+    { 0x34C52, "ev6_34C52",           (void *)ev6_34C52,           REPL_EV6 },
+    { 0x34C7A, "ev6_34C7A",           (void *)ev6_34C7A,           REPL_EV6 },
+    { 0x34D2F, "ev6_34D2F",           (void *)ev6_34D2F,           REPL_EV6 },
+    { 0x34DD0, "ev6_34DD0",           (void *)ev6_34DD0,           REPL_EV6 },
+    { 0x34EB3, "ev6_34EB3",           (void *)ev6_34EB3,           REPL_EV6 },
+    { 0x34F38, "ev6_34F38",           (void *)ev6_34F38,           REPL_EV6 },
+    { 0x34FC2, "ev6_34FC2",           (void *)ev6_34FC2,           REPL_EV6 },
+    { 0x34FCC, "ev6_34FCC",           (void *)ev6_34FCC,           REPL_EV6 },
+    { 0x35022, "ev6_35022",           (void *)ev6_35022,           REPL_EV6 },
+
+    /* Unit sprite builder (src/game/unit_load.c): the 0x10B4E chain plus the
+     * 0x32999 reveal cut-scene. 0x10C50 is only reached from 0x10B4E, but the
+     * other five have machine-code callers, so they are wired individually. */
+    { 0x10B4E, "unit_sprites_build",  (void *)unit_sprites_build,  REPL_UNITLD },
+    { 0x10C50, "unit_entry_build",    (void *)unit_entry_build,    REPL_UNITLD },
+    { 0x11019, "unit_entry_data",     (void *)unit_entry_data,     REPL_UNITLD },
+    { 0x145CD, "unit_mark_nearby",    (void *)unit_mark_nearby,    REPL_UNITLD },
+    { 0x14625, "unit_reveal_around",  (void *)unit_reveal_around,  REPL_UNITLD },
+    { 0x1B750, "unit_metrics",        (void *)unit_metrics,        REPL_UNITLD },
+    { 0x32999, "unit_map_render",     (void *)unit_map_render,     REPL_UNITLD },
+
     /* The persistent party roster (src/game/unit.c): the three functions
      * that build/sync/recalc its 80-byte records. They call each other, so
      * they share one group and are enabled atomically. */
@@ -496,6 +536,8 @@ unsigned repl_parse(const char *spec)
             else if (!plat_stricmp(tok, "ev3"))      mask &= ~REPL_EV3;
             else if (!plat_stricmp(tok, "ev4"))      mask &= ~REPL_EV4;
             else if (!plat_stricmp(tok, "ev5"))      mask &= ~REPL_EV5;
+            else if (!plat_stricmp(tok, "ev6"))      mask &= ~REPL_EV6;
+            else if (!plat_stricmp(tok, "unitload")) mask &= ~REPL_UNITLD;
             else printf("repl: unknown group '%s'\n", tok);
             continue;
         }
@@ -518,6 +560,8 @@ unsigned repl_parse(const char *spec)
         else if (!plat_stricmp(tok, "ev3"))      mask |= REPL_EV3;
         else if (!plat_stricmp(tok, "ev4"))      mask |= REPL_EV4;
         else if (!plat_stricmp(tok, "ev5"))      mask |= REPL_EV5;
+        else if (!plat_stricmp(tok, "ev6"))      mask |= REPL_EV6;
+        else if (!plat_stricmp(tok, "unitload")) mask |= REPL_UNITLD;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

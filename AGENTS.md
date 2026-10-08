@@ -155,9 +155,11 @@ pwsh -File E:\FD2\port\build.ps1 -Target keyscheck; & E:\FD2\port\build\keyschec
 pwsh -File E:\FD2\port\build.ps1 -Target reccheck; & E:\FD2\port\build\reccheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target typecheck; & E:\FD2\port\build\typecheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target vmcheck; & E:\FD2\port\build\vmcheck.exe
-# 批量批次的对拍器（ev2+ev3+ev4+ev5，**支持按地址选子集**，一次验 3-5 个）：
+# 批量批次的对拍器（ev2+ev3+ev4+ev5+ev6，**支持按地址选子集**，一次验 3-5 个）：
 #   --only=0x35298,0x35321,...   --cases=N（默认 200）
 pwsh -File E:\FD2\port\build.ps1 -Target ev2check; & E:\FD2\port\build\ev2check.exe --only=0x135DD,0x35298,0x35321,0x353B5,0x353E7
+# 单位精灵构建链（0x10B4E 链 + 0x32999）的 CRT 重定向对拍器：
+pwsh -File E:\FD2\port\build.ps1 -Target ev6check; & E:\FD2\port\build\ev6check.exe --cases=200
 # DOS 层跨平台自检（低内存镜像 + INT 21h 文件服务 + 真 int 0x21 经故障入口分发）：
 # 两平台跑同一套 49 条断言，必须 49/49 + exit 0（docs/rounds/15-dos-and-faults.md）
 pwsh -File E:\FD2\port\build.ps1 -Target doscheck; & E:\FD2\port\build\doscheck.exe

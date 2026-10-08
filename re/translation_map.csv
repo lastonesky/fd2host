@@ -1,5 +1,8 @@
 addr,c_name,source_file,group,check,cases,status,note
 0x10620,kbd_pending,src/game/kbd.c,svc,leafcheck,72000,wired (repl.c),
+0x10B4E,unit_sprites_build,src/game/unit_load.c,unitld,?,?,wired (repl.c),
+0x10C50,unit_entry_build,src/game/unit_load.c,unitld,?,?,wired (repl.c),
+0x11019,unit_entry_data,src/game/unit_load.c,unitld,?,?,wired (repl.c),
 0x111BA,res_load,src/game/res.c,res,rescheck,160,wired (repl.c),LMI resource loader; heap via guest_mem
 0x112A5,unit_add,src/game/unit.c,rec,reccheck,36327,wired (repl.c),persistent party roster (0x1145A/0x11506/0x112A5)
 0x1145A,unit_recalc,src/game/unit.c,rec,reccheck,36327,wired (repl.c),persistent party roster (0x1145A/0x11506/0x112A5)
@@ -32,6 +35,8 @@ addr,c_name,source_file,group,check,cases,status,note
 0x13536,ev5_13536,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x135DD,ev2_135DD,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x1366A,ev4_1366A,src/game/ev4.c,ev4,ev2check,6000,wired (repl.c),scene move/map batch 4 (0x1366A + steppers + 0x196CB); obj1/obj2 + VGA + buffers
+0x145CD,unit_mark_nearby,src/game/unit_load.c,unitld,?,?,wired (repl.c),
+0x14625,unit_reveal_around,src/game/unit_load.c,unitld,?,?,wired (repl.c),
 0x146A7,ev5_146A7,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x14B16,ev5_14B16,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x15E71,dlg_snap_restore,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
@@ -58,6 +63,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x1B5F1,ev5_1B5F1,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x1B653,ev5_1B653,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x1B722,rec_field_byte,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x1B750,unit_metrics,src/game/unit_load.c,unitld,?,?,wired (repl.c),
 0x1B83D,rec_slot_find,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x1B8A6,rec_slot_free,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x1B8E7,rec_slot_remove,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
@@ -113,20 +119,46 @@ addr,c_name,source_file,group,check,cases,status,note
 0x314DE,ev5_314DE,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x32230,map_unit_ping,src/game/map.c,map,mapcheck,3000,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x32975,rec_flag_set1,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x32999,unit_map_render,src/game/unit_load.c,unitld,?,?,wired (repl.c),
 0x33499,unit_exists,src/game/unit.c,rec,reccheck,36327,wired (repl.c),persistent party roster (0x1145A/0x11506/0x112A5)
 0x33F78,ev3_33F78,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x34317,ev5_34317,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x344F2,rec_status_set,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x34531,ev6_34531,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x3460B,ev6_3460B,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x34673,ev6_34673,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x346CD,ev6_346CD,src/game/ev6.c,ev6,?,?,wired (repl.c),
 0x34738,ev_rec13_set1,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x34778,ev6_34778,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x34818,ev6_34818,src/game/ev6.c,ev6,?,?,wired (repl.c),
 0x34894,rec_flag,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x348BB,ev6_348BB,src/game/ev6.c,ev6,?,?,wired (repl.c),
 0x348EA,ev_status24_27,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x34940,ev6_34940,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x34984,ev6_34984,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x349EC,ev6_349EC,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x34A1E,ev6_34A1E,src/game/ev6.c,ev6,?,?,wired (repl.c),
 0x34A6C,ev_status7_36,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x34B07,ev6_34B07,src/game/ev6.c,ev6,?,?,wired (repl.c),
 0x34B2F,ev_flag8_gate,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x34B6F,ev6_34B6F,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x34B9A,ev6_34B9A,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x34C52,ev6_34C52,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x34C7A,ev6_34C7A,src/game/ev6.c,ev6,?,?,wired (repl.c),
 0x34CF1,ev_rec6_gate,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x34D2F,ev6_34D2F,src/game/ev6.c,ev6,?,?,wired (repl.c),
 0x34D64,rec_status_mask_records,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x34D92,ev_mask_records,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x34DD0,ev6_34DD0,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x34EB3,ev6_34EB3,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x34F38,ev6_34F38,src/game/ev6.c,ev6,?,?,wired (repl.c),
 0x34F74,ev_clear_status12_13,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
+0x34FC2,ev6_34FC2,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x34FCC,ev6_34FCC,src/game/ev6.c,ev6,?,?,wired (repl.c),
 0x35009,rec_status_set_record14,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x35022,ev6_35022,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x350BE,ev6_350BE,src/game/ev6.c,ev6,?,?,wired (repl.c),
+0x350C8,ev6_350C8,src/game/ev6.c,ev6,?,?,wired (repl.c),
 0x35123,ev_slot8_claim,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
 0x35191,ev_status16_71,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
 0x351E6,ev_clear64_73,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared

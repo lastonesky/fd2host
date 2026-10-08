@@ -42,7 +42,9 @@
 #define REPL_EV3      0x10000u  /* funcs_1199C batch 3 (src/game/ev3.c) */
 #define REPL_EV4      0x20000u  /* scene/map helpers batch 4 (src/game/ev4.c) */
 #define REPL_EV5      0x40000u  /* small leaves batch 5 (src/game/ev5.c) */
-#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG | REPL_REC | REPL_SVC | REPL_VM | REPL_RES | REPL_BGM | REPL_SCENE | REPL_FADE | REPL_MAP | REPL_FX | REPL_EV2 | REPL_EV3 | REPL_EV4 | REPL_EV5)
+#define REPL_EV6      0x80000u   /* funcs_1199C batch 6 (src/game/ev6.c) */
+#define REPL_UNITLD   0x100000u  /* unit sprite builder (src/game/unit_load.c) */
+#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG | REPL_REC | REPL_SVC | REPL_VM | REPL_RES | REPL_BGM | REPL_SCENE | REPL_FADE | REPL_MAP | REPL_FX | REPL_EV2 | REPL_EV3 | REPL_EV4 | REPL_EV5 | REPL_EV6 | REPL_UNITLD)
 
 /* "all" | "none" | comma-separated group names -> mask.
  * A token may be prefixed with '-' to clear that group after adding, so
