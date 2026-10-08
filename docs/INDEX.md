@@ -66,6 +66,7 @@
 | `rounds/37-map-view-core.md` | 明细 | 地图视图渲染核 `0x11EEE`/`0x24D22`/`0x122DC`/`0x1ACF3`（126–129 个；并入 `game/map.c`，CRT `malloc/memmove/free` 重定向 + 三块缓冲逐字节 + 6 相位全局，`mapcheck` 112000/0；关键手法 `apply_tinfo` 回写真 cdecl 原型再反编译，§8-80） | §67 |
 | `rounds/38-palette-and-map-refresh.md` | 明细 | 调色板动画 + 地图视图刷新 `0x4E310`/`0x4E31C`/`0x32230`/`0x11CAC`（130–133 个；`fade.c`/`map.c`，窄 VEH `out` 陷阱 + 事件序列/整块 VGA 逐字节，`mapcheck` 122500/0；新蹈坑：非关键 VGA 块未提交致间歇 AV（§8-83）、域外 `t[k-1]` 不可复现（§8-84）） | §68 |
 | `rounds/39-funcs1199c-batch2.md` | 明细 | **批量转译工作流 + `funcs_1199C` 第二批 30 个**（134–163 个；发现该表是 **91 项**，不是 48；`0x35298..0x3644E` 场景脚本簇 + `0x135DD` → 新模块 `game/ev2.c`、新分组 `REPL_EV2`；`ev2check` **支持 `--only=` 子集**、6 批×1000 例全过；`--replace` 取反 + `FD2_REPL_SKIP` 免重建二分；新蹈坑：内部 helper 撞 `vm_run` 使 `translation_map` 归属错（§8-86）、偶发 regress（§8-85）） | §69 |
+| `rounds/40-funcs1199c-batch3.md` | 明细 | **`funcs_1199C` 场景脚本簇收口**（164–191 个；剩余 23 表项 + 5 helper `0x35B78`/`0x35F10`/`0x361B0`/`0x2AEDB`/`0x33F78` → `game/ev3.c`、`REPL_EV3`；`ev2check` 扩 18 桩 + **整个 obj2** 快照；抓到 `0x35E5B` 漏尾部 `vm_run(6)`（共享尾落在函数中间，§8-87）与 harness 未恢复 obj1/obj2 起点（§8-88）） | §70 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。

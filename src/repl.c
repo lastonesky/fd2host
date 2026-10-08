@@ -49,6 +49,7 @@
 #include "game/msg.h"
 #include "game/ev.h"
 #include "game/ev2.h"
+#include "game/ev3.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -254,6 +255,39 @@ static const struct repl_entry g_repl[] = {
     { 0x36447, "ev2_36447",           (void *)ev2_36447,           REPL_EV2 },
     { 0x3644E, "ev2_3644E",           (void *)ev2_3644E,           REPL_EV2 },
 
+    /* funcs_1199C scene-script cluster, third batch (src/game/ev3.c): the
+     * remaining 23 table entries plus the five shared helpers they (and the
+     * batch-2 entries) call. Same ABI, same table - separate group so a
+     * regression can be bisected with --replace=all,-ev3. */
+    { 0x352CA, "ev3_352CA",           (void *)ev3_352CA,           REPL_EV3 },
+    { 0x35346, "ev3_35346",           (void *)ev3_35346,           REPL_EV3 },
+    { 0x35468, "ev3_35468",           (void *)ev3_35468,           REPL_EV3 },
+    { 0x355F0, "ev3_355F0",           (void *)ev3_355F0,           REPL_EV3 },
+    { 0x356B3, "ev3_356B3",           (void *)ev3_356B3,           REPL_EV3 },
+    { 0x35730, "ev3_35730",           (void *)ev3_35730,           REPL_EV3 },
+    { 0x357DD, "ev3_357DD",           (void *)ev3_357DD,           REPL_EV3 },
+    { 0x35833, "ev3_35833",           (void *)ev3_35833,           REPL_EV3 },
+    { 0x35854, "ev3_35854",           (void *)ev3_35854,           REPL_EV3 },
+    { 0x35A0D, "ev3_35A0D",           (void *)ev3_35A0D,           REPL_EV3 },
+    { 0x35C40, "ev3_35C40",           (void *)ev3_35C40,           REPL_EV3 },
+    { 0x35CF1, "ev3_35CF1",           (void *)ev3_35CF1,           REPL_EV3 },
+    { 0x35D1E, "ev3_35D1E",           (void *)ev3_35D1E,           REPL_EV3 },
+    { 0x35D9E, "ev3_35D9E",           (void *)ev3_35D9E,           REPL_EV3 },
+    { 0x35E0E, "ev3_35E0E",           (void *)ev3_35E0E,           REPL_EV3 },
+    { 0x35E5B, "ev3_35E5B",           (void *)ev3_35E5B,           REPL_EV3 },
+    { 0x35EC1, "ev3_35EC1",           (void *)ev3_35EC1,           REPL_EV3 },
+    { 0x35F48, "ev3_35F48",           (void *)ev3_35F48,           REPL_EV3 },
+    { 0x35F88, "ev3_35F88",           (void *)ev3_35F88,           REPL_EV3 },
+    { 0x35FCF, "ev3_35FCF",           (void *)ev3_35FCF,           REPL_EV3 },
+    { 0x360B6, "ev3_360B6",           (void *)ev3_360B6,           REPL_EV3 },
+    { 0x3623C, "ev3_3623C",           (void *)ev3_3623C,           REPL_EV3 },
+    { 0x362E8, "ev3_362E8",           (void *)ev3_362E8,           REPL_EV3 },
+    { 0x35B78, "ev3_35B78",           (void *)ev3_35B78,           REPL_EV3 },
+    { 0x35F10, "ev3_35F10",           (void *)ev3_35F10,           REPL_EV3 },
+    { 0x361B0, "ev3_361B0",           (void *)ev3_361B0,           REPL_EV3 },
+    { 0x2AEDB, "ev3_2AEDB",           (void *)ev3_2AEDB,           REPL_EV3 },
+    { 0x33F78, "ev3_33F78",           (void *)ev3_33F78,           REPL_EV3 },
+
     /* The persistent party roster (src/game/unit.c): the three functions
      * that build/sync/recalc its 80-byte records. They call each other, so
      * they share one group and are enabled atomically. */
@@ -413,6 +447,7 @@ unsigned repl_parse(const char *spec)
             else if (!plat_stricmp(tok, "fx"))       mask &= ~REPL_FX;
             else if (!plat_stricmp(tok, "map"))      mask &= ~REPL_MAP;
             else if (!plat_stricmp(tok, "ev2"))      mask &= ~REPL_EV2;
+            else if (!plat_stricmp(tok, "ev3"))      mask &= ~REPL_EV3;
             else printf("repl: unknown group '%s'\n", tok);
             continue;
         }
@@ -432,6 +467,7 @@ unsigned repl_parse(const char *spec)
         else if (!plat_stricmp(tok, "fx"))       mask |= REPL_FX;
         else if (!plat_stricmp(tok, "map"))      mask |= REPL_MAP;
         else if (!plat_stricmp(tok, "ev2"))      mask |= REPL_EV2;
+        else if (!plat_stricmp(tok, "ev3"))      mask |= REPL_EV3;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

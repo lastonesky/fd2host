@@ -114,12 +114,12 @@ $targets = @{
     # differential test: the funcs_1199C batch-2 scene-script handlers
     # (src/game/ev2.c, 0x35298..0x3644E + 0x135DD) - nine services hooked to
     # recording stubs; `--only=addr,..` runs a subset (see src/ev2check.c)
-    ev2check = @{ srcs = @("ev2check.c", "le.c", "game\ev2.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
+    ev2check = @{ srcs = @("ev2check.c", "le.c", "game\ev2.c", "game\ev3.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
     # cross-platform dos self-check: INT 21h file services, the 0x70000
     # low-memory mirror, the bios tick thread and a real `int 0x21` serviced
     # by the VEH - same expectations as the Linux build (src/doscheck.c)
     doscheck = @{ srcs = @("doscheck.c", "le.c", "dos.c", "dos_fault_win.c"); libs = @(); subsystem = "console"; link = "/BASE:0x60000000" }
-    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "dos_fault_win.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "audio_sokol.c", "keylog.c", "keys.c", "keys_win32.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c", "game\unit.c", "game\svc.c", "game\vm.c", "game\res.c", "game\bgm.c", "game\scene.c", "game\fade.c", "game\kbd.c", "game\map.c", "game\anim.c", "game\fx.c", "game\msg.c", "game\ev.c", "game\ev2.c", "game\guest_mem.c");
+    fd2host = @{ srcs = @("host.c", "entry.c", "winshot.c", "le.c", "dos.c", "dos_fault_win.c", "ail.c", "xmidi.c", "synth.c", "dls.c", "audio_sokol.c", "keylog.c", "keys.c", "keys_win32.c", "repl.c", "game\rle.c", "game\gfx.c", "game\sprite24.c", "game\util.c", "game\path.c", "game\tables.c", "game\rle2.c", "game\dlg.c", "game\rec.c", "game\unit.c", "game\svc.c", "game\vm.c", "game\res.c", "game\bgm.c", "game\scene.c", "game\fade.c", "game\kbd.c", "game\map.c", "game\anim.c", "game\fx.c", "game\msg.c", "game\ev.c", "game\ev2.c", "game\ev3.c", "game\guest_mem.c");
                  libs = @("user32.lib", "gdi32.lib", "winmm.lib");
                  subsystem = "windows";
                  # ASLR must stay on (with /DYNAMICBASE:NO Windows reserves the

@@ -63,6 +63,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x25A96,svc_play_sfx,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
 0x25B45,svc_play_sfx2,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
 0x26996,msg_close_portrait,src/game/msg.c,dlg,msgcheck,465,wired (repl.c),portrait compositor 0x1956B/0x1974C/0x26996; event log + screen pair compared
+0x2AEDB,ev3_2AEDB,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x2B996,fx_dots7,src/game/fx.c,fx,fxcheck,12884,wired (repl.c),funcs_30469 effect-animation handlers; event log + globals compared
 0x2BB33,fx_dots8,src/game/fx.c,fx,fxcheck,12884,wired (repl.c),funcs_30469 effect-animation handlers; event log + globals compared
 0x2BD6C,fx_blob,src/game/fx.c,fx,fxcheck,12884,wired (repl.c),funcs_30469 effect-animation handlers; event log + globals compared
@@ -76,6 +77,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x32230,map_unit_ping,src/game/map.c,map,mapcheck,3000,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x32975,rec_flag_set1,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x33499,unit_exists,src/game/unit.c,rec,reccheck,36327,wired (repl.c),persistent party roster (0x1145A/0x11506/0x112A5)
+0x33F78,ev3_33F78,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x344F2,rec_status_set,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x34738,ev_rec13_set1,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
 0x34894,rec_flag,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
@@ -92,27 +94,53 @@ addr,c_name,source_file,group,check,cases,status,note
 0x351E6,ev_clear64_73,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
 0x35258,ev_status16_34,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
 0x35298,ev2_35298,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
+0x352CA,ev3_352CA,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x35321,ev2_35321,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
+0x35346,ev3_35346,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x353B5,ev2_353B5,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x353E7,ev2_353E7,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x353FA,ev2_353FA,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x3540F,ev2_3540F,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x35422,ev2_35422,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
+0x35468,ev3_35468,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x3551C,ev2_3551C,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x3553F,ev2_3553F,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x355B7,ev2_355B7,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
+0x355F0,ev3_355F0,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x35638,ev2_35638,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x35677,ev2_35677,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
+0x356B3,ev3_356B3,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x35730,ev3_35730,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x357DD,ev3_357DD,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x35833,ev3_35833,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x35854,ev3_35854,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x35997,ev2_35997,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x359CB,ev2_359CB,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
+0x35A0D,ev3_35A0D,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x35B78,ev3_35B78,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x35BEE,ev2_35BEE,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x35C1D,ev2_35C1D,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
+0x35C40,ev3_35C40,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x35CF1,ev3_35CF1,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x35D1E,ev3_35D1E,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x35D85,ev2_35D85,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
+0x35D9E,ev3_35D9E,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x35E0E,ev3_35E0E,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x35E5B,ev3_35E5B,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x35EC1,ev3_35EC1,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x35F10,ev3_35F10,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x35F48,ev3_35F48,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x35F79,ev2_35F79,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
+0x35F88,ev3_35F88,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x35FCF,ev3_35FCF,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x360B6,ev3_360B6,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x361B0,ev3_361B0,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x36214,ev2_36214,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x36228,ev2_36228,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
+0x3623C,ev3_3623C,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x362B0,ev2_362B0,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x362C5,ev2_362C5,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
+0x362E8,ev3_362E8,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
 0x363DE,ev2_363DE,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x36416,ev2_36416,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x3642E,ev2_3642E,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets

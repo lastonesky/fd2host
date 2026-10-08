@@ -39,7 +39,8 @@
 #define REPL_MAP      0x2000u
 #define REPL_FX       0x4000u
 #define REPL_EV2      0x8000u   /* funcs_1199C batch 2 (src/game/ev2.c) */
-#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG | REPL_REC | REPL_SVC | REPL_VM | REPL_RES | REPL_BGM | REPL_SCENE | REPL_FADE | REPL_MAP | REPL_FX | REPL_EV2)
+#define REPL_EV3      0x10000u  /* funcs_1199C batch 3 (src/game/ev3.c) */
+#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG | REPL_REC | REPL_SVC | REPL_VM | REPL_RES | REPL_BGM | REPL_SCENE | REPL_FADE | REPL_MAP | REPL_FX | REPL_EV2 | REPL_EV3)
 
 /* "all" | "none" | comma-separated group names -> mask.
  * A token may be prefixed with '-' to clear that group after adding, so

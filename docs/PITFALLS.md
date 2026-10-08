@@ -718,3 +718,31 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     - **修法**：改名 `ev2_vm_run`；`translation_map.py` 重跑后 `0x15F84` 回到 `vm.c`。
     - **一般化**：转译新模块时，内部符号加模块前缀（`ev2_`/`fx_`…）；每次生成记录后
       `awk -F, '$3=="src/game/<新模块>.c" && $2 !~ /^<前缀>/' re/translation_map.csv` 应无输出。
+
+87. **共享尾部（tail-merge）不一定到 `retn` 就结束**（第 40 轮，`0x35E5B` 漏一次 `vm_run(6)`）：
+    `0x35E5B` 的尾部是 `jmp loc_35D55`，而 `0x35D55` 落在**另一个函数 `0x35D1E` 的中间**：
+    ```
+    35D55  call sub_35B78
+    35D5A  add  esp,0Ch
+    35D5D  push 1 ... push 6
+    35D76  call sub_15F84        ; <-- 还有一次 vm_run(6)！
+    35D84  retn
+    ```
+    我按“`loc_35D55` = 调 `35B78` 就返回”翻译，漏了 `vm_run(6)`。
+    - **判据**：`ev2check` 报 `FAIL 35E5B: event count orig=66 ours=65`，且 `EVCHECK_DUMP=1`
+      显示末条 diff 是 `orig vm_run,0,6,...  ours -`。
+    - **一般化**：转译时对每个 `jmp loc_XXXX` 都要**反汇编到那个地址之后的下一条 `retn`**，
+      不能假设“跳到别处一定是调用+返回”。共享尾可以只包含前半段（本例 `add esp,0Ch` 是给
+      `0x35F48` 的落空用的，`0x35D55` 进来时栈是另一回事——但代码照样往下走完 `vm_run(6)`）。
+    - 反例：`0x362E8` 也 `jmp loc_35F6B`，那段是 `add esp,0Ch; mov dword_51A83,1; retn`，
+      这里 `add esp` 正好扔掉 `0x362E8` 第三次 `call 33F78` 的 3 个参数——**同一个共享段，
+      两个入口的栈语义不同**，逐条反汇编才能处理。
+
+88. **对拍 harness 必须把“整段数据段”恢复到同一起点**（第 40 轮，`ev2check` 假失败）：
+    给 `funcs_1199C` 这批 handler 做差分时，只在两遍之间重置了 `dword_53A45` 指向的记录缓冲和
+    几个显式全局；但 handler 还会写任意 obj1/obj2 全局（`util_rand` 改 obj2 的 `word_627B8`）。
+    于是第二遍（C）跑在“第一遍（机器码）改过的种子”上，报出 `obj2+27B8 orig=.. ours=..`。
+    - **修法**：`main` 里拷一份 load 后的 `obj1_p`/`obj2_p`，`setup_world()` 先 `memcpy` 回去，
+      再设指针/随机全局；比较时对指针字段做归一化。
+    - **一般化**：只要被测函数会碰“指向别处缓冲的全局之外”的数据段字节（尤其是随机数种子、
+      tick 计数、状态块），就必须整段恢复，否则差分测的是“上一遍的残留”，不是翻译本身。
