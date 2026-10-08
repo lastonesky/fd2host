@@ -77,6 +77,9 @@ for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
     # fallback; with the early exit the host dumps its last frame instead.
     $argList = @(
         "--gamedir=$sb",
+        # The sandbox holds only data files, so name the guest EXE explicitly:
+        # the host's default is <gamedir>\FD2.EXE, which is not there.
+        "--exe=$GameDir\FD2.EXE",
         "--exit-after=$Seconds",
         "--exit-when-file=${sb}\FD2.TMP:207360",
         "--autokey=$schedule",

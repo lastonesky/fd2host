@@ -208,6 +208,34 @@ static const char *path_last_sep(const char *p)
     return (fwd > bck) ? fwd : bck;
 }
 
+/* `dir` + `name` with exactly one separator (both styles accepted on input).
+ * The result is always NUL-terminated; an over-long input is truncated. */
+static void path_join(char *out, size_t n, const char *dir, const char *name)
+{
+    size_t d = strlen(dir), m = strlen(name), pos = 0;
+
+    if (d > n - 1) d = n ? n - 1 : 0;
+    memcpy(out, dir, d);
+    pos = d;
+    if (d && dir[d - 1] != '/' && dir[d - 1] != '\\' && pos + 1 < n)
+        out[pos++] = '/';
+    if (m > n - 1 - pos) m = (n - 1 > pos) ? n - 1 - pos : 0;
+    memcpy(out + pos, name, m);
+    out[pos + m] = 0;
+}
+
+/* Directory part of `p`, no trailing separator (empty when p has none).
+ * Used to derive the game directory from --exe. */
+static void path_dirname(const char *p, char *out, size_t n)
+{
+    const char *sep = path_last_sep(p);
+    size_t len = sep ? (size_t)(sep - p) : 0;
+
+    if (len > n - 1) len = n ? n - 1 : 0;
+    memcpy(out, p, len);
+    out[len] = 0;
+}
+
 /* --------------------------------------------------------------- shutdown
  *
  * The watchdog thread ends a bounded run. Two triggers share one clean
@@ -546,11 +574,26 @@ int host_init(int argc, char **argv)
     static char  merged[48][512];
     static char *av[64];
     int fixups = 0, i, ac = 0;
-    const char *exe = "E:\\FD2\\FD2.EXE";
-    const char *gamedir = "E:\\FD2";
+    int exe_given = 0, gamedir_given = 0;
+    static char  selfdir[PLAT_MAX_PATH];   /* directory of this executable   */
+    static char  exebuf[PLAT_MAX_PATH];    /* <gamedir>/FD2.EXE              */
+    static char  dirbuf[PLAT_MAX_PATH];    /* dirname(--exe)                 */
+    const char *exe = NULL;
+    const char *gamedir = selfdir;
     char logpath[PLAT_MAX_PATH];
 
     g_start_tick = plat_now_ms();
+
+    /* Defaults live next to *this* binary, never at a hard-coded E:\FD2: the
+     * release ships one executable the user drops into the game directory, so
+     * the game directory is simply wherever the host was launched from. */
+    if (plat_module_path(selfdir, sizeof selfdir) != 0)
+        selfdir[0] = 0;
+    {
+        char *slash = (char *)path_last_sep(selfdir);
+        if (slash) *(slash + 1) = 0;       /* keep the separator: "dir/"     */
+        else strcpy(selfdir, "./");        /* no directory part -> the cwd   */
+    }
 
     /* Diagnostics first: this dumps everything to a file, never to a console
      * window. On failure the process exits silently so the user is not left
@@ -623,10 +666,10 @@ int host_init(int argc, char **argv)
         /* Both "--gamedir <dir>" and "--gamedir=<dir>" are accepted: an
          * "=" form that is silently ignored falls back to the default game
          * directory and the whole test run quietly tests the wrong thing. */
-        else if (!strcmp(argv[i], "--exe") && i + 1 < argc) exe = argv[++i];
-        else if (!strncmp(argv[i], "--exe=", 6)) exe = argv[i] + 6;
-        else if (!strcmp(argv[i], "--gamedir") && i + 1 < argc) gamedir = argv[++i];
-        else if (!strncmp(argv[i], "--gamedir=", 10)) gamedir = argv[i] + 10;
+        else if (!strcmp(argv[i], "--exe") && i + 1 < argc) { exe = argv[++i]; exe_given = 1; }
+        else if (!strncmp(argv[i], "--exe=", 6)) { exe = argv[i] + 6; exe_given = 1; }
+        else if (!strcmp(argv[i], "--gamedir") && i + 1 < argc) { gamedir = argv[++i]; gamedir_given = 1; }
+        else if (!strncmp(argv[i], "--gamedir=", 10)) { gamedir = argv[i] + 10; gamedir_given = 1; }
         else if (!strncmp(argv[i], "--exit-after=", 13)) {
             int secs = atoi(argv[i] + 13);
             if (secs > 0)
@@ -745,6 +788,19 @@ int host_init(int argc, char **argv)
         }
     }
 
+    /* Only one of the pair has to be given: --gamedir alone finds
+     * <gamedir>/FD2.EXE, --exe alone uses that file's directory as the game
+     * directory (the game opens its data by bare name from the cwd). With
+     * neither, both default to the host's own directory. */
+    if (!exe_given) {
+        path_join(exebuf, sizeof exebuf, gamedir, "FD2.EXE");
+        exe = exebuf;
+    } else if (!gamedir_given) {
+        path_dirname(exe, dirbuf, sizeof dirbuf);
+        if (dirbuf[0])                     /* relative name -> keep default  */
+            gamedir = dirbuf;
+    }
+
     /* Must be the very first allocation: the CRT heap grows from 0x10000. */
     if (le_reserve_address_space() != 0) {
         printf("host: fixed address space unavailable - the object window "
@@ -788,7 +844,9 @@ int host_init(int argc, char **argv)
     }
 
     if (g_use_image) {
-        if (le_map_flat(&g_le, "E:\\FD2\\port\\build\\objects.bin") != 0)
+        char imgpath[PLAT_MAX_PATH];
+        path_join(imgpath, sizeof imgpath, selfdir, "objects.bin");
+        if (le_map_flat(&g_le, imgpath) != 0)
             return 1;
     } else if (le_map_and_relocate(&g_le, &fixups) != 0) {
         return 1;

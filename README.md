@@ -66,19 +66,24 @@ make -f Makefile.linux host32   # 真正能跑的宿主（-m32，默认用 GL �
 
 ## 运行
 
-游戏按**裸文件名**读资源，所以**工作目录必须是游戏目录**：
+游戏按**裸文件名**读资源，所以**工作目录必须是游戏目录**。两个路径参数都不给时，
+默认值就取**宿主 EXE 自身所在的目录**（不是任何写死的盘符）：把 `fd2host.exe` 丢进
+游戏目录直接运行即可；宿主放在别处时，`--gamedir` / `--exe` 只要给一个，另一个会自动推出。
 
 ```powershell
-# 宿主是 WINDOWS 子系统，日志恒写 port/build/host.log
-Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -WorkingDirectory 'E:\FD2'
+# 默认：游戏目录 = 宿主 EXE 所在目录，加载其中的 FD2.EXE
+E:\FD2\fd2host.exe                                  # 直接运行
+
+# 宿主放在别处时，只给一个就够：
+E:\tools\fd2host.exe --gamedir=E:\FD2               # 游戏目录 E:\FD2 -> 加载 E:\FD2\FD2.EXE
+E:\tools\fd2host.exe --exe=E:\FD2\FD2.EXE           # 游戏目录 = 该 EXE 所在目录
 
 # 抓一帧画面（--screenshot 必须是绝对路径，且配合“抓完即退”）
-Start-Process E:\FD2\port\build\fd2host.exe `
-  -ArgumentList '--exit-after=30','--screenshot=E:\FD2\port\build\frame.bmp','--shot-frame=700' `
-  -WorkingDirectory 'E:\FD2'
+E:\FD2\fd2host.exe --exit-after=30 --screenshot=E:\FD2\frame.bmp --shot-frame=700
 ```
 
-⚠ 跑完先看日志里的 `host: working directory = …`：参数没被识别时是**静默回退**到 `E:\FD2`，不报错。
+日志默认写在**宿主 EXE 旁边**的 `host.log`。⚠ 跑完先看 `host: working directory = …`：
+`--gamedir`/`--exe` 都没给时它就是宿主 EXE 所在目录，不是游戏目录就说明参数写错了。
 
 ### 命令行参数
 
@@ -86,8 +91,8 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 
 | 参数 | 说明 |
 |---|---|
-| `--gamedir <dir>` | 游戏目录（工作目录），默认 `E:\FD2` |
-| `--exe <path>` | 要加载的 EXE，默认 `E:\FD2\FD2.EXE` |
+| `--gamedir <dir>` | 游戏目录（工作目录），默认 = 宿主 EXE 所在目录 |
+| `--exe <path>` | 要加载的 EXE，默认 `<gamedir>/FD2.EXE`；只给 `--exe` 时反向推出游戏目录 |
 | `--exit-after <秒>` | 运行上限，到点干净退出 |
 | `--exit-when-file=<路径>:<字节数>` | 某文件写满后（+autokey 跑完）提前干净退出 |
 | `--log <路径>` | 日志文件，默认 `build/host.log` |
