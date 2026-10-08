@@ -42,6 +42,16 @@
 
 ## 2. 工作流约定（**必须遵守**）
 
+0. **批量转译节奏（2026-10-08 起，操作者要求）**：一次转译 **~30 个**函数（优先同表/同族的依赖闭合簇），
+   **然后每 3-5 个做一次差分验证**（`*check --only=addr,...`），全过后再下一批；
+   **假设转译没问题、以批量提速**。若某批 3-5 个里出现失败：
+   - 缩到 **1-2 个**重跑 → 定位到具体函数；
+   - 改完再回到 3-5 的节奏。
+   落地要点：① 对拍 harness 必须支持**按地址选子集**（新批次照 `src/ev2check.c` 的 `--only=` 写）；
+   ② 新批次给一个**独立 `REPL_*` 分组**，便于整块 A/B；③ 宿主集成若挂、但对拍全过，
+   用 **`FD2_REPL_SKIP=0x...,0x...`**（不需要重建）二分是哪几个在真实运行里出问题；
+   ④ 批量写完后 `repl: installed N` 递增应等于批量大小。细则见 `docs/TRANSLATION.md` §1。
+
 1. **随改随写文档**：任何代码/结论/选型一改，**同一轮**就更新对应文档——
    - 行为、命令、对外约定变了 → `README.md`（只放卡片级信息，细节写 `docs/`）
    - 进度（新轮次、下一步计划）→ `PROGRESS.md` 的时间线；**轮次完整病历**写 `docs/rounds/*.md`
@@ -145,6 +155,9 @@ pwsh -File E:\FD2\port\build.ps1 -Target keyscheck; & E:\FD2\port\build\keyschec
 pwsh -File E:\FD2\port\build.ps1 -Target reccheck; & E:\FD2\port\build\reccheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target typecheck; & E:\FD2\port\build\typecheck.exe
 pwsh -File E:\FD2\port\build.ps1 -Target vmcheck; & E:\FD2\port\build\vmcheck.exe
+# 批量批次的对拍器（**支持按地址选子集**，一次验 3-5 个）：
+#   --only=0x35298,0x35321,...   --cases=N（默认 200）
+pwsh -File E:\FD2\port\build.ps1 -Target ev2check; & E:\FD2\port\build\ev2check.exe --only=0x135DD,0x35298,0x35321,0x353B5,0x353E7
 # DOS 层跨平台自检（低内存镜像 + INT 21h 文件服务 + 真 int 0x21 经故障入口分发）：
 # 两平台跑同一套 49 条断言，必须 49/49 + exit 0（docs/rounds/15-dos-and-faults.md）
 pwsh -File E:\FD2\port\build.ps1 -Target doscheck; & E:\FD2\port\build\doscheck.exe

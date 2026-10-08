@@ -38,9 +38,12 @@
 #define REPL_FADE     0x1000u
 #define REPL_MAP      0x2000u
 #define REPL_FX       0x4000u
-#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG | REPL_REC | REPL_SVC | REPL_VM | REPL_RES | REPL_BGM | REPL_SCENE | REPL_FADE | REPL_MAP | REPL_FX)
+#define REPL_EV2      0x8000u   /* funcs_1199C batch 2 (src/game/ev2.c) */
+#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG | REPL_REC | REPL_SVC | REPL_VM | REPL_RES | REPL_BGM | REPL_SCENE | REPL_FADE | REPL_MAP | REPL_FX | REPL_EV2)
 
-/* "all" | "none" | comma-separated group names -> mask */
+/* "all" | "none" | comma-separated group names -> mask.
+ * A token may be prefixed with '-' to clear that group after adding, so
+ * `all,-ev2` is the full set minus one batch. */
 unsigned repl_parse(const char *spec);
 
 /* Patch the selected entries. Returns the number of functions replaced. */

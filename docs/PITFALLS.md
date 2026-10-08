@@ -700,3 +700,21 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
       引用，是 29 字节 1-based 表）；用表层值 0/1/2 循环把三个音效分支都覆盖。
     - **一般化**：凡机器码先把全局 `memcpy` 到局部再索引，越界就落到栈布局，与 C 的
       局部数组布局**不可能一致**；这类输入的“行为”本就未定义，harness 必须限定在真域内。
+
+85. **`regress.ps1` 偶发“没到退出条件”失败**（第 39 轮，批量接入 30 个函数后的一次首跑）：
+    默认 `all` 首跑 60 s watchdog、9546 帧、`FD2.TMP` 未生成；`all,-ev2`对拍全过、静态帧 0 px，
+    随后 `all`/`ev2`/`none` 各 3 连跑**全部 8/8**。签名与 §50 记过的那次一致。
+    - **判据**：失败时 `host.log` 尾巴是 `watchdog fired after 60 s`，`autokey schedule finished`
+      已出现，但 4 个文件断言（AH=3C create/FD2.TMP created/non-empty）失败；崩溃/异常断言仍 PASS。
+    - **判断**：与转译正确性无关的**启动竞争/按键时序偶发**（`--exit-when-file` 没等到即被上限掐断）。
+      遇到时先**重跑 1-2 次**，不要立刻回退代码；连续失败才是真回归。
+    - **仍未根除**：根因（键事件与 18.2 Hz tick 的竞争）待单独排查；当前只记录不改。
+
+86. **新模块里的内部 helper 不要与已转译的公共函数同名**（第 39 轮，`ev2.c`）：
+    `ev2.c` 把“固定参数调 `vm_run`”的包装起名 `vm_run`（`static`，链接无冲突），
+    但 `tools/translation_map.py` 按“`src/game/*.c` 里谁定义了该符号”归属源文件，
+    于是 `0x15F84 vm_run` 被错标成 `src/game/ev2.c`（假记录）。
+    - **判据**：`re/translation_map.csv` 里出现 `0x15F84,vm_run,src/game/ev2.c`。
+    - **修法**：改名 `ev2_vm_run`；`translation_map.py` 重跑后 `0x15F84` 回到 `vm.c`。
+    - **一般化**：转译新模块时，内部符号加模块前缀（`ev2_`/`fx_`…）；每次生成记录后
+      `awk -F, '$3=="src/game/<新模块>.c" && $2 !~ /^<前缀>/' re/translation_map.csv` 应无输出。

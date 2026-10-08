@@ -20,6 +20,7 @@
  */
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "platform.h"
@@ -47,6 +48,7 @@
 #include "game/fx.h"
 #include "game/msg.h"
 #include "game/ev.h"
+#include "game/ev2.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -217,6 +219,41 @@ static const struct repl_entry g_repl[] = {
     { 0x351E6, "ev_clear64_73",       (void *)ev_clear64_73,       REPL_REC },
     { 0x35258, "ev_status16_34",      (void *)ev_status16_34,      REPL_REC },
 
+    /* The funcs_1199C scene-script handlers, second batch (src/game/ev2.c):
+     * table indices 38..90 (0x35298..0x3644E) plus the shared map-scroll
+     * stepper 0x135DD. Same group as the first batch - they run the same VM
+     * streams and touch the same record/status globals. */
+    { 0x135DD, "ev2_135DD",           (void *)ev2_135DD,           REPL_EV2 },
+    { 0x35298, "ev2_35298",           (void *)ev2_35298,           REPL_EV2 },
+    { 0x35321, "ev2_35321",           (void *)ev2_35321,           REPL_EV2 },
+    { 0x353B5, "ev2_353B5",           (void *)ev2_353B5,           REPL_EV2 },
+    { 0x353E7, "ev2_353E7",           (void *)ev2_353E7,           REPL_EV2 },
+    { 0x353FA, "ev2_353FA",           (void *)ev2_353FA,           REPL_EV2 },
+    { 0x3540F, "ev2_3540F",           (void *)ev2_3540F,           REPL_EV2 },
+    { 0x35422, "ev2_35422",           (void *)ev2_35422,           REPL_EV2 },
+    { 0x3551C, "ev2_3551C",           (void *)ev2_3551C,           REPL_EV2 },
+    { 0x3553F, "ev2_3553F",           (void *)ev2_3553F,           REPL_EV2 },
+    { 0x355B7, "ev2_355B7",           (void *)ev2_355B7,           REPL_EV2 },
+    { 0x35638, "ev2_35638",           (void *)ev2_35638,           REPL_EV2 },
+    { 0x35677, "ev2_35677",           (void *)ev2_35677,           REPL_EV2 },
+    { 0x35997, "ev2_35997",           (void *)ev2_35997,           REPL_EV2 },
+    { 0x359CB, "ev2_359CB",           (void *)ev2_359CB,           REPL_EV2 },
+    { 0x35BEE, "ev2_35BEE",           (void *)ev2_35BEE,           REPL_EV2 },
+    { 0x35C1D, "ev2_35C1D",           (void *)ev2_35C1D,           REPL_EV2 },
+    { 0x35D85, "ev2_35D85",           (void *)ev2_35D85,           REPL_EV2 },
+    { 0x35F79, "ev2_35F79",           (void *)ev2_35F79,           REPL_EV2 },
+    { 0x36214, "ev2_36214",           (void *)ev2_36214,           REPL_EV2 },
+    { 0x36228, "ev2_36228",           (void *)ev2_36228,           REPL_EV2 },
+    { 0x362B0, "ev2_362B0",           (void *)ev2_362B0,           REPL_EV2 },
+    { 0x362C5, "ev2_362C5",           (void *)ev2_362C5,           REPL_EV2 },
+    { 0x363DE, "ev2_363DE",           (void *)ev2_363DE,           REPL_EV2 },
+    { 0x36416, "ev2_36416",           (void *)ev2_36416,           REPL_EV2 },
+    { 0x3642E, "ev2_3642E",           (void *)ev2_3642E,           REPL_EV2 },
+    { 0x36439, "ev2_36439",           (void *)ev2_36439,           REPL_EV2 },
+    { 0x36440, "ev2_36440",           (void *)ev2_36440,           REPL_EV2 },
+    { 0x36447, "ev2_36447",           (void *)ev2_36447,           REPL_EV2 },
+    { 0x3644E, "ev2_3644E",           (void *)ev2_3644E,           REPL_EV2 },
+
     /* The persistent party roster (src/game/unit.c): the three functions
      * that build/sync/recalc its 80-byte records. They call each other, so
      * they share one group and are enabled atomically. */
@@ -357,6 +394,28 @@ unsigned repl_parse(const char *spec)
     strncpy(buf, spec, sizeof buf - 1);
     buf[sizeof buf - 1] = '\0';
     for (tok = strtok(buf, ", "); tok; tok = strtok(NULL, ", ")) {
+        int clear = (tok[0] == '-');
+        if (clear) tok++;
+        if (clear) {
+            if      (!plat_stricmp(tok, "rle"))      mask &= ~REPL_RLE;
+            else if (!plat_stricmp(tok, "gfx"))      mask &= ~REPL_GFX;
+            else if (!plat_stricmp(tok, "sprite24")) mask &= ~REPL_SPRITE24;
+            else if (!plat_stricmp(tok, "util"))     mask &= ~REPL_UTIL;
+            else if (!plat_stricmp(tok, "path"))     mask &= ~REPL_PATH;
+            else if (!plat_stricmp(tok, "dlg"))      mask &= ~REPL_DLG;
+            else if (!plat_stricmp(tok, "rec"))      mask &= ~REPL_REC;
+            else if (!plat_stricmp(tok, "svc"))      mask &= ~REPL_SVC;
+            else if (!plat_stricmp(tok, "vm"))       mask &= ~REPL_VM;
+            else if (!plat_stricmp(tok, "res"))      mask &= ~REPL_RES;
+            else if (!plat_stricmp(tok, "bgm"))      mask &= ~REPL_BGM;
+            else if (!plat_stricmp(tok, "scene"))    mask &= ~REPL_SCENE;
+            else if (!plat_stricmp(tok, "fade"))     mask &= ~REPL_FADE;
+            else if (!plat_stricmp(tok, "fx"))       mask &= ~REPL_FX;
+            else if (!plat_stricmp(tok, "map"))      mask &= ~REPL_MAP;
+            else if (!plat_stricmp(tok, "ev2"))      mask &= ~REPL_EV2;
+            else printf("repl: unknown group '%s'\n", tok);
+            continue;
+        }
         if      (!plat_stricmp(tok, "rle"))      mask |= REPL_RLE;
         else if (!plat_stricmp(tok, "gfx"))      mask |= REPL_GFX;
         else if (!plat_stricmp(tok, "sprite24")) mask |= REPL_SPRITE24;
@@ -372,9 +431,28 @@ unsigned repl_parse(const char *spec)
         else if (!plat_stricmp(tok, "fade"))     mask |= REPL_FADE;
         else if (!plat_stricmp(tok, "fx"))       mask |= REPL_FX;
         else if (!plat_stricmp(tok, "map"))      mask |= REPL_MAP;
+        else if (!plat_stricmp(tok, "ev2"))      mask |= REPL_EV2;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;
+}
+
+/* Debug escape hatch for bisecting a large batch without a rebuild:
+ * FD2_REPL_SKIP=0x35321,0x135DD leaves those addresses as machine code even
+ * when their group is selected. Unset in normal runs. */
+static int repl_is_skipped(uint32_t addr)
+{
+    static char buf[512];
+    const char *s = getenv("FD2_REPL_SKIP");
+    char *tok;
+
+    if (!s || !s[0] || strlen(s) >= sizeof buf)
+        return 0;
+    strcpy(buf, s);
+    for (tok = strtok(buf, ", "); tok; tok = strtok(NULL, ", "))
+        if ((uint32_t)strtoul(tok, NULL, 16) == addr)
+            return 1;
+    return 0;
 }
 
 unsigned repl_install(uint8_t *obj0_base, unsigned mask)
@@ -386,7 +464,7 @@ unsigned repl_install(uint8_t *obj0_base, unsigned mask)
         uint8_t *p;
         intptr_t rel;
 
-        if (!(mask & e->group))
+        if (!(mask & e->group) || repl_is_skipped(e->addr))
             continue;
         p = obj0_base + (e->addr - OBJ0_BASE);
         rel = (intptr_t)e->impl - (intptr_t)(p + 5);
