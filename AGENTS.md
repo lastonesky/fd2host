@@ -248,7 +248,7 @@ Start-Process E:\FD2\port\build\fd2host.exe `
 | `docs/HOST-DESIGN.md` | 地址空间硬约束、源文件职责、VEH 四类异常、服务返回值语义（旧 §4） |
 | `docs/PITFALLS.md` | **踩坑清单（动手前必读）** + 历史卡点（旧 §8 §6） |
 | `docs/DEBUG-MANUAL.md` | 诊断手段与自检/对拍工具清单（旧 §9） |
-| `docs/AUDIO.md` | AIL 替换层、XMIDI、合成器、gm.dls、已知杂音 bug（旧 §11） |
+| `docs/AUDIO.md` | AIL 替换层、XMIDI、合成器、gm.dls、Linux/WSLg 输出链与音色库可移植性、已知杂音 bug（旧 §11） |
 | `docs/BACKEND.md` | sokol 选型实测、git 策略、跨平台抽取顺序（旧 §13） |
 | `docs/TRANSLATION.md` | 源码转译方法 + 模块/对拍/接入清单 + 下一步（旧 §19–§33 提炼） |
 | `docs/ASSETS.md` | 资产导出：`tools/fd2assets.py`（容器解包 / 图像→PNG / XMIDI→MID）+ 已覆盖与待接格式清单 |

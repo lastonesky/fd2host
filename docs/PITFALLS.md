@@ -808,3 +808,49 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
     否则会拿两块不同的未初始化内存做 `memcmp`、假失败（与 §8-88 同一教训的另一面）。
     - **一般化**：写合成数据前先按反汇编算清**实际读/写范围**（含重叠、含“多读一个 dword”），
       缓冲要容得下；比较时只比“两边都确定写过”的字节。
+
+94. **Linux/WSL2 无声：32 位 ALSA 客户端打不开 WSLg 的 PulseAudio（缺 i386 pulse 插件）**（WSL 音频排查）：
+    症状：`fd2host-linux32` 能跑能画，但完全没声音，`host.log` 只有
+    `audio: saudio_setup(...) failed - no sound this run`。
+    - 链路：`src/audio_sokol.c` → sokol_audio 的 **ALSA** 后端，**硬编码打开 `"default"`**
+      （`vendor/sokol/sokol_audio.h` ALSA 后端 `snd_pcm_open(..., "default", ...)`）。WSL2 里
+      **没有硬件声卡**（`/dev/snd` 只有 `timer`，没有 `pcmC*D*`），声音只能经 **WSLg 的
+      PulseAudio** 中转（`PULSE_SERVER=unix:/mnt/wslg/PulseServer`，`~/.asoundrc` 里
+      `pcm.!default { type pulse }`）。
+    - 根因：宿主是 **32 位**（`ldd` = `/lib/i386-linux-gnu/libasound.so.2`），而系统只装了
+      **64 位 `libasound2-plugins`**（`/usr/lib/x86_64-linux-gnu/alsa-lib/libasound_module_pcm_pulse.so`
+      在，i386 的 `alsa-lib` 目录不存在）⇒ 32 位 ALSA 加载不了 pulse 插件 ⇒ `default` 打不开。
+    - 修法：`sudo apt-get install -y libasound2-plugins:i386`（i386 架构先 `dpkg --add-architecture i386`）。
+    - 判据：日志从 `saudio_setup(...) failed` 变成 `audio: device up ...`，且每 10 s 的
+      `audio: mixed <N> frames ... peak > 0`（帧数前进 = 设备在消费、峰值非零 = 非静音）。
+    - 附注：`audio_init` 成功时那行 `WASAPI via sokol_audio` 是硬编码文案，Linux 上实际走
+      ALSA→PulseAudio，不要被它误导。
+
+95. **WSLg 音频延迟：RDP 音频重定向 + 宿主 2048 帧缓冲**（WSL 音频排查）：
+    症状：Linux 下音效/音乐有可感延迟，Windows 直连 WASAPI 没有。
+    - 链路：WSLg 默认 sink 是 `module-rdp-sink`（`RDPSink`）——音频要从 guest 经 **RDP 音频
+      通道**送回 Windows 再播，这一跳就是延迟主因（WSLg 架构决定，改不了）。
+    - 叠加项：宿主 `desc.buffer_frames = 2048`；`pactl list sink-inputs` 实测宿主流
+      `float32le 1ch 22050Hz`、`Buffer Latency: 93263 usec`（≈2048/22050=93 ms），而 `RDPSink`
+      是 `s16le 2ch 44100Hz`、`Resample method: ffmpeg`。
+    - 缓解（不改代码）：`--audio-rate=44100` —— 宿主流变 `44100Hz`、`Resample method: copy`
+      （不再重采样）、`Buffer Latency` 降到 **41315 usec**；合成器插值混叠也更少。
+    - 判据：`pactl list sink-inputs` 的 `Sample Specification` / `Resample method` /
+      `Buffer Latency` 三行前后对比（22050 时 `ffmpeg`/93 ms，44100 时 `copy`/41 ms）。
+
+96. **DLS 音色库默认路径硬编码 `C:\` ⇒ Linux 下所有乐器退回同一个兜底波形（"音色全变"）**：
+    症状：Linux 下音乐能响但"乐器都不对"，像电子琴；Windows 下是正常 GM 音色。**极易误判成
+    "高频被截/重采样变闷"**，实际是整个音色库没加载。
+    - 根因：合成是**波表（DLS Level 1 采样回放）不是 FM**；`src/dls.c` 默认路径是
+      `"C:\Windows\System32\drivers\gm.dls"`，Linux 上不存在 ⇒ `dls_load()` 失败、
+      `g_bank.ninsts == 0`、每个音都走 `synth.c` 的兜底波形（`wave_init()` 的 3 谐波加性波表）
+      ⇒ 所有乐器同一种电子音色。
+    - 判据：`host.log` 里 `dls: cannot open C:\Windows\System32\drivers\gm.dls` +
+      `synth: no GM sound bank available - waveform synthesis only`。
+    - 修法（不改代码）：`--gm-bank=<gm.dls 路径>`；WSL 可直接
+      `--gm-bank=/mnt/c/Windows/System32/drivers/gm.dls`。验证 `dls: ... loaded - 235 instruments,
+      495 waves` + `synth: using General MIDI samples from ...`。
+    - **可移植性缺口（dev 待办）**：`dls.c` 应提供跨平台默认查找（exe 同目录 `gm.dls` /
+      环境变量 / 常见 soundfont 路径），而不是硬编码 `C:\`；README 说"默认用系统 gm.dls"在
+      Linux 上是误导。与 §8-25 同类：**不能把"听起来像"当判据，要看 `dls:`/`synth:` 行**。
+

@@ -354,3 +354,38 @@ Windows 专用（跨平台绕不开）。现在：
 判据数字不变；起播闸门、`ms` 渐变、3 ms 斜坡、`(cut)` 计数全部保留语义，只换了承载点。
 **新坑**：watchdog 的 `--exit-after` 路径直接 `ExitProcess`（不跑 `host_shutdown`）⇒
 `--audio-dump` 的 WAV 头要在那条路径上补（`PITFALLS` §8-56）。
+
+### 11.11 Linux/WSLg 音频链与音色库可移植性（2026-10-09 运行时诊断，无代码改动）
+
+Linux 宿主的输出链与 Windows 完全不同，排查时先把链路摆出来（下面每步都有 `pactl` / `host.log`
+判据）：
+
+```
+audio_sokol.c (sokol_audio) → ALSA "default"（硬编码）→ pulse 插件 → WSLg PulseAudio
+                            → RDPSink（RDP 音频通道）→ Windows 声卡
+```
+
+| 环节 | 事实 / 判据 | 备注 |
+|---|---|---|
+| sokol 后端 | Linux = ALSA，`snd_pcm_open(..., "default", ...)` 写死 | `vendor/sokol/sokol_audio.h` |
+| WSL2 设备 | `/dev/snd` 只有 `timer`，无 `pcmC*D*` | 必须走 WSLg PulseAudio |
+| pulse 桥 | 32 位宿主需 `libasound2-plugins:i386` | 缺了则 `snd_pcm_open("default")` 失败、静音（§8-94） |
+| 采样率 | RDPSink = `s16le 2ch 44100Hz`，宿主流默认 `22050Hz` | 22050 会被 `ffmpeg` 重采样（§8-95） |
+| 缓冲 | 宿主流 `Buffer Latency` = 2048/rate | 22050→93 ms，44100→41 ms |
+| 音色库 | 默认 `C:\Windows\...\gm.dls`，Linux 无此路径 | 缺库 ⇒ 所有乐器退回兜底波形（§8-96） |
+
+**两条不改代码的改善命令**（WSL 上直接可用）：
+
+```bash
+# 44100 = RDPSink 原生率 ⇒ 不再被 Pulse 重采样，缓冲从 93 ms 降到 41 ms
+./fd2host-linux32 --gamedir=/mnt/e/FD2 --audio-rate=44100 \
+  --gm-bank=/mnt/c/Windows/System32/drivers/gm.dls
+```
+
+- `--gm-bank` 后 `host.log` 应出现 `dls: ... loaded - 235 instruments, 495 waves` 与
+  `synth: using General MIDI samples from ...`；没有这两行＝仍在用兜底波形，音色必然不对。
+- 完整判据与坑见 `docs/PITFALLS.md` §8-94（无声）、§8-95（延迟）、§8-96（音色）。
+- **待办（可移植性缺口）**：`src/dls.c` 的默认 bank 路径仍是 Windows 专用，Linux/macOS 上
+  必然失败却只打一行日志；应按平台查找（exe 同目录 `gm.dls`、`$FD2_GM_BANK`、常见 soundfont
+  路径）。音频后端同样应支持选设备/放宽 `FLOAT_LE`+精确 buffer 的硬约束（不是本轮重点）。
+
