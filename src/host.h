@@ -1,0 +1,98 @@
+/* host.h - seam between the process entry/input layer and the host kernel.
+ *
+ *   host.c        kernel: argument parsing, LE load, DOS/AIL bring-up, the
+ *                 game thread, palette -> BGRA conversion, screenshots,
+ *                 watchdog/autokey.  Backend and OS independent (as far as
+ *                 Win32 threads/stdio go; the POSIX port replaces those).
+ *   main_sokol.c  entry layer: process entry point, window + render loop
+ *                 driven by sokol_app callbacks, keyboard translation.
+ *
+ * The contract an entry layer must fulfil:
+ *   1. host_init()            - everything up to "ready for a window"
+ *   2. create the window, call render_init(host_render_desc() + native handle)
+ *   3. host_start()           - starts the game thread (+ autokey)
+ *   4. pump frames            - call host_frame() on every tick/paint
+ *   5. feed input             - host_key(scan, ascii) for each keystroke
+ *   6. host_shutdown()        - statistics
+ * and it must provide input_post_key() so --autokey can inject keys.
+ */
+#ifndef FD2_HOST_H
+#define FD2_HOST_H
+
+#include <stdint.h>
+#include "render.h"
+#include "keys.h"
+
+/* ---- kernel (host.c) ---- */
+
+/* Parses argv, redirects the log, reserves the address space, loads the LE
+ * image, brings up DOS/AIL.  Returns 0 when a window can be created. */
+int host_init(int argc, char **argv);
+
+/* Logical framebuffer size and scale for window creation. */
+render_desc host_render_desc(void);
+
+/* Starts the game thread and the optional --autokey thread. */
+int host_start(void);
+
+/* Renders one frame: VGA buffer + palette -> BGRA -> render_present(),
+ * then the --screenshot dump.  Safe to call from the timer, WM_PAINT and
+ * sokol's frame callback.  Returns non-zero on the shot frame, i.e. the one
+ * frame for which the entry layer should also capture the window content
+ * (--wshot), so both images describe the same instant. */
+int host_frame(void);
+
+/* --wshot=<file.bmp>: where the entry layer should write the window capture
+ * (NULL when not requested). */
+const char *host_window_shot_path(void);
+
+/* 0 in --headless mode: the entry layer may skip timer-driven frames. */
+int host_wants_frames(void);
+
+/* One keystroke for the BIOS keyboard buffer.  `scan` already carries the
+ * 0x80 break bit for key releases, `ascii` is 0xE0 for extended keys. */
+void host_key(uint8_t scan, uint8_t ascii);
+
+/* Platforms where the character arrives *after* the key event (sokol_app on
+ * X11: KEY_DOWN then CHAR) patch the ascii byte of the just-written make code
+ * through this. It only takes effect while the guest has not consumed the
+ * entry, so a late CHAR can never overwrite a different key's byte. */
+void host_key_set_last_ascii(uint8_t ascii);
+
+/* The game asked to stop (window close / Ctrl+Esc). */
+void host_request_quit(void);
+
+/* 1 = ignore the real keyboard (only --autokey delivers keystrokes). Tests
+ * run on a machine somebody is also typing at; a focused game window eats
+ * those keys. See PROGRESS.md S31.6. */
+int  host_no_user_input(void);
+
+/* Logs the frame count and the interrupt statistics. */
+void host_shutdown(void);
+
+/* Seconds left on --exit-after (0 = unlimited). INT 21h AH=4B passes this to
+ * a spawned child host so a bounded run stays bounded process-tree wide. */
+int host_exit_after_remaining(void);
+
+/* Milliseconds since host_init began.  This is the *shared* clock: the guest
+ * BIOS tick (0x40:0x6C) is advanced by an independent 18.2 Hz thread and
+ * --autokey schedules on Sleep(ms), so wall clock - not frame count - is the
+ * axis two render backends and two runs have in common.  --shot-time uses it,
+ * and so should any cross-backend comparison (docs/BACKEND.md 13.7). */
+unsigned long host_age_ms(void);
+
+/* The guest's own clock: the BIOS tick counter at 0x40:0x6C. Frame-rate
+ * independent, so it is the most exact trigger for a cross-backend frame
+ * comparison (--shot-tick=<n>); see docs/BACKEND.md 13.7. */
+uint32_t host_guest_tick(void);
+
+/* ---- entry/input layer (main_sokol.c) ---- */
+
+/* Injects one keystroke (used by --autokey and --keyplay).  The key is a
+ * portable fr_key, not a Windows VK: the entry layer owns the window, so it
+ * is also the only one that can translate and deliver it (Win32 via
+ * fr_key_vk() + MapVirtualKeyA/ToAscii; POSIX via the scan table in keys.c).
+ * See src/keys.h and docs/rounds/16-entry-layer.md. */
+void input_post_key(fr_key key);
+
+#endif /* FD2_HOST_H */

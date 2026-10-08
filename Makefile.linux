@@ -1,0 +1,99 @@
+# Makefile.linux - POSIX build of the FD2 native loader host.
+#
+#   make -f Makefile.linux        -> the self-checks + a 64-bit link proof
+#   make -f Makefile.linux run    -> build letest-linux and run it on the game
+#   make -f Makefile.linux host32 -> build/fd2host-linux32, the runnable host
+#
+# Targets:
+#   letest-linux, platprobe-linux, doscheck-linux, faultprobe32/64
+#     the cross-platform self checks (same assertions as the Windows tools)
+#   fd2host-linux
+#     64-bit link proof: every POSIX host file compiles and links. It cannot
+#     run the game (the guest is 32-bit x86); use host32 for that.
+#   host32 (fd2host-linux32)
+#     the real host, -m32. Needs gcc-multilib + libc6-dev-i386 + the i386
+#     X11/GL/ALSA dev packages.
+#
+# Host files: le.c / dos.c / platform_posix.c (loader, DOS services, OS seam),
+# host.c / keylog.c / keys.c (kernel + key vocabulary), main_sokol.c /
+# render_sokol.c (entry layer + GLCORE backend), and the AIL/audio stack
+# (ail/xmidi/synth/dls/audio_sokol). The render backend is GL
+# (SOKOL_GLCORE); windowing is sokol_app's X11 backend.
+#
+# Flags:
+#   -std=gnu11      plain -c11 hides POSIX.1-2008 declarations the seam needs;
+#                   gnu11 turns on _DEFAULT_SOURCE.
+#   -D_FILE_OFFSET_BITS=64   off_t must be 64-bit for pread/pwrite offsets.
+#   -pthread         platform_posix.c's plat_thread
+# faultprobe32 is freestanding (-m32 -nostdlib): it measures the i386 compat
+# fault model *without* needing gcc-multilib installed.
+
+CC      ?= cc
+CFLAGS  ?= -O2 -g -std=gnu11 -Wall -D_FILE_OFFSET_BITS=64 -pthread
+SRC     := src
+OUT     := build
+GAME    ?= /mnt/e/FD2/FD2.EXE
+REFDIR  ?= /mnt/e/FD2/port/build
+
+DOS_SRCS   := $(SRC)/dos.c $(SRC)/dos_fault_posix.c $(SRC)/le.c $(SRC)/platform_posix.c
+PROBE32_CFLAGS := -m32 -O2 -g -ffreestanding -nostdlib -static -fno-pie -no-pie -Wall -Wextra
+
+SOKOL      := vendor/sokol
+HOST_SRCS  := $(SRC)/host.c $(SRC)/main_sokol.c $(SRC)/render_sokol.c \
+              $(SRC)/sokol_impl.c $(SRC)/keylog.c $(SRC)/keys.c \
+              $(SRC)/ail.c $(SRC)/xmidi.c $(SRC)/synth.c $(SRC)/dls.c \
+              $(SRC)/audio_sokol.c $(DOS_SRCS)
+HOST_CFLAGS := $(CFLAGS) -DSOKOL_GLCORE -I$(SRC) -I$(SOKOL)
+HOST_LIBS  := -lX11 -lXi -lXcursor -lGL -lasound -ldl -lm
+
+all: $(OUT)/letest-linux $(OUT)/platprobe-linux $(OUT)/doscheck-linux \
+     $(OUT)/faultprobe32 $(OUT)/faultprobe64 \
+     $(OUT)/fd2host-linux
+
+$(OUT)/platprobe-linux: $(SRC)/platprobe.c $(SRC)/le.c $(SRC)/platform_posix.c $(SRC)/le.h $(SRC)/platform.h
+	@mkdir -p $(OUT)
+	$(CC) $(CFLAGS) -I$(SRC) -o $@ $(SRC)/platprobe.c $(SRC)/le.c $(SRC)/platform_posix.c
+
+$(OUT)/letest-linux: $(SRC)/letest.c $(SRC)/le.c $(SRC)/platform_posix.c $(SRC)/le.h $(SRC)/platform.h
+	@mkdir -p $(OUT)
+	$(CC) $(CFLAGS) -I$(SRC) -o $@ $(SRC)/letest.c $(SRC)/le.c $(SRC)/platform_posix.c
+
+# INT 21h services + low memory + a real `int 0x21` through sigaction.
+# host_exit_after_remaining is stubbed in doscheck.c, so host.c stays out.
+$(OUT)/doscheck-linux: $(SRC)/doscheck.c $(DOS_SRCS) $(SRC)/dos.h $(SRC)/dos_fault.h $(SRC)/le.h $(SRC)/platform.h
+	@mkdir -p $(OUT)
+	$(CC) $(CFLAGS) -I$(SRC) -o $@ $(SRC)/doscheck.c $(DOS_SRCS)
+
+# Fault-model probes:
+#   faultprobe32 - freestanding i386 (compat mode, the game's real mode)
+#   faultprobe64 - glibc x86-64 (compile/smoke architecture)
+$(OUT)/faultprobe32: $(SRC)/faultprobe32.c
+	@mkdir -p $(OUT)
+	$(CC) $(PROBE32_CFLAGS) -o $@ $(SRC)/faultprobe32.c
+
+$(OUT)/faultprobe64: $(SRC)/faultprobe64.c
+	@mkdir -p $(OUT)
+	$(CC) -O0 -g -Wall -o $@ $(SRC)/faultprobe64.c
+
+$(OUT)/fd2host-linux: $(HOST_SRCS) $(SRC)/host.h $(SRC)/le.h $(SRC)/dos.h $(SRC)/platform.h $(SRC)/keys.h
+	@mkdir -p $(OUT)
+	$(CC) $(HOST_CFLAGS) -o $@ $(HOST_SRCS) $(HOST_LIBS)
+
+# The real host: 32-bit, so it can execute the guest. Needs the i386 toolchain
+# and 32-bit dev libraries, which do not ship by default:
+#   sudo apt-get install gcc-multilib libc6-dev-i386 \
+#     libx11-dev:i386 libxi-dev:i386 libxcursor-dev:i386 \
+#     libgl1-mesa-dev:i386 libasound2-dev:i386
+host32: $(HOST_SRCS) $(SRC)/host.h $(SRC)/le.h $(SRC)/dos.h $(SRC)/platform.h $(SRC)/keys.h
+	@mkdir -p $(OUT)
+	$(CC) $(HOST_CFLAGS) -m32 -o $(OUT)/fd2host-linux32 $(HOST_SRCS) $(HOST_LIBS)
+
+run: $(OUT)/letest-linux
+	$(OUT)/letest-linux $(GAME) $(REFDIR)
+
+clean:
+	rm -f $(OUT)/letest-linux $(OUT)/platprobe-linux $(OUT)/doscheck-linux \
+	      $(OUT)/faultprobe32 $(OUT)/faultprobe64 $(OUT)/fd2host-linux \
+	      $(OUT)/fd2host-linux32
+
+.PHONY: all run clean

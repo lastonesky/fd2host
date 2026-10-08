@@ -1,0 +1,64 @@
+# === Build artifacts ===
+build/
+dosbox/
+fd2host.map
+
+# === Compiled objects ===
+*.obj
+*.o
+*.a
+*.so
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.idb
+
+# === Executables ===
+*.exe
+*.out
+*.bin
+
+# === MSVC / Visual Studio ===
+*.suo
+*.user
+*.ncb
+*.sdf
+*.opensdf
+*.opendb
+*.VC.db
+*.VC.VC.opendb
+.vs/
+Debug/
+Release/
+x64/
+x86/
+ipch/
+*.tlog
+
+# === IDE files ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.cproject
+.settings/
+
+# === OS generated ===
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# === Temporary files ===
+*.tmp
+*.bak
+*.log
+*.cache
+
+# === Python tooling ===
+__pycache__/
+*.pyc
