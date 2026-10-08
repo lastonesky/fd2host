@@ -68,6 +68,7 @@
 | `rounds/39-funcs1199c-batch2.md` | 明细 | **批量转译工作流 + `funcs_1199C` 第二批 30 个**（134–163 个；发现该表是 **91 项**，不是 48；`0x35298..0x3644E` 场景脚本簇 + `0x135DD` → 新模块 `game/ev2.c`、新分组 `REPL_EV2`；`ev2check` **支持 `--only=` 子集**、6 批×1000 例全过；`--replace` 取反 + `FD2_REPL_SKIP` 免重建二分；新蹈坑：内部 helper 撞 `vm_run` 使 `translation_map` 归属错（§8-86）、偶发 regress（§8-85）） | §69 |
 | `rounds/40-funcs1199c-batch3.md` | 明细 | **`funcs_1199C` 场景脚本簇收口**（164–191 个；剩余 23 表项 + 5 helper `0x35B78`/`0x35F10`/`0x361B0`/`0x2AEDB`/`0x33F78` → `game/ev3.c`、`REPL_EV3`；`ev2check` 扩 18 桩 + **整个 obj2** 快照；抓到 `0x35E5B` 漏尾部 `vm_run(6)`（共享尾落在函数中间，§8-87）与 harness 未恢复 obj1/obj2 起点（§8-88）） | §70 |
 | `rounds/41-scene-move-and-map.md` | 明细 | **场景移动/地图窗口/头像关闭 10 个**（192–201 个；全表 usage #1 `0x1366A` + `0x11B48/9B/BFA/C59` + `0x11AA8` + `0x12263` + `0x1E1DC` + `0x24B4D` + `0x196CB` → `game/ev4.c`、`REPL_EV4`；`ev2check` 扩 VGA 快照 + 低内存镜像 + INT16 缝；新蹈坑：**有符号 `jle` 写成无符号比较**，harness 全过但宿主 A/B 差 34.7%，靠 `FD2_REPL_SKIP` 二分（§8-89）） | §71 |
+| `rounds/42-leaf-batch5.md` | 明细 | **小叶子大批量 28 个**（202–229 个；`game/ev5.c`、`REPL_EV5`；harness scratch 指进快照区 + `outp` 钩子；抓到 `0x35A0D` 地址漏网与合成缓冲宽度问题，§8-90） | §72 |
 
 逆向侧另有两份：**`re/RE_MAP.md`**（FD2 测绘/函数分区/转译路线）、
 **`re/FDPS_MAP.md`**（FDPS 测绘，随 FDPS 一并冻结）。

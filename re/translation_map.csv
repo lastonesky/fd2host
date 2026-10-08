@@ -26,10 +26,14 @@ addr,c_name,source_file,group,check,cases,status,note
 0x12C60,rec_find,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x12D7B,dlg_portrait_glide,src/game/dlg.c,dlg,leafcheck,72000,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x12E38,map_cell_info,src/game/map.c,map,mapcheck,3000,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
+0x13460,ev5_13460,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x134E4,dlg_portrait_clear,src/game/dlg.c,dlg,mapcheck,3000,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x13512,rec_flag_or80,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x13536,ev5_13536,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x135DD,ev2_135DD,src/game/ev2.c,ev2,ev2check,6000,wired (repl.c),funcs_1199C batch 2 (0x35298..0x3644E + 0x135DD); event log + whole obj1 + buffers; --only= subsets
 0x1366A,ev4_1366A,src/game/ev4.c,ev4,ev2check,6000,wired (repl.c),scene move/map batch 4 (0x1366A + steppers + 0x196CB); obj1/obj2 + VGA + buffers
+0x146A7,ev5_146A7,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x14B16,ev5_14B16,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x15E71,dlg_snap_restore,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x15E9E,dlg_snap_save,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x15F84,vm_run,src/game/vm.c,vm,vmcheck,5512,wired (repl.c),script/text VM 0x15F84
@@ -42,6 +46,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x16B43,dlg_close_box,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x16C57,dlg_wait_key,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x16E24,dlg_scroll_text,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x173E7,ev5_173E7,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x17AA9,svc_wait_ticks,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
 0x1875D,dlg_draw_number_pair,src/game/dlg.c,dlg,mapcheck,3000,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x187D6,dlg_draw_number,src/game/dlg.c,dlg,mapcheck,3000,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
@@ -50,16 +55,31 @@ addr,c_name,source_file,group,check,cases,status,note
 0x1974C,msg_blit_band,src/game/msg.c,dlg,msgcheck,465,wired (repl.c),portrait compositor 0x1956B/0x1974C/0x26996; event log + screen pair compared
 0x1ACF3,map_draw_cursor,src/game/map.c,map,mapcheck,4000,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x1AEB1,dlg_draw_number_signed,src/game/dlg.c,dlg,mapcheck,3000,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x1B5F1,ev5_1B5F1,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x1B653,ev5_1B653,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x1B722,rec_field_byte,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x1B83D,rec_slot_find,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x1B8A6,rec_slot_free,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x1B8E7,rec_slot_remove,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x1BB8C,rec_slot_claim,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x1C220,ev5_1C220,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x1CA89,rec_sub_table5,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x1D4CB,ev5_1D4CB,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x1E1DC,ev4_1E1DC,src/game/ev4.c,ev4,ev2check,6000,wired (repl.c),scene move/map batch 4 (0x1366A + steppers + 0x196CB); obj1/obj2 + VGA + buffers
+0x1E5C0,ev5_1E5C0,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x1F04A,ev5_1F04A,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x1F0DC,ev5_1F0DC,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x1F183,rec_skip,src/game/rec.c,rec,mapcheck,3000,wired (repl.c),character record table (incl. round-34 leaves)
 0x1F525,pal_fade_in,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
+0x1F6EF,ev5_1F6EF,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x1F882,pal_fade_out,src/game/fade.c,fade,fadecheck,4000,wired (repl.c),palette fades 0x11D40/0x1F882/0x1F525; DAC writes compared
+0x203BD,ev5_203BD,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x205B4,ev5_205B4,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x205BE,ev5_205BE,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x208CF,ev5_208CF,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x20AAF,ev5_20AAF,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x20B72,ev5_20B72,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x20BF5,ev5_20BF5,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x22E5C,scene_card,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
 0x22EF6,scene_state_00,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
 0x231BC,scene_state_03,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
@@ -67,13 +87,19 @@ addr,c_name,source_file,group,check,cases,status,note
 0x2389F,scene_state_12,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
 0x239BD,scene_state_14,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
 0x23E39,scene_state_18,src/game/scene.c,scene,scenecheck,100,wired (repl.c),scene_card 0x22E5C; service sequence compared
+0x24B14,ev5_24B14,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x24B4D,ev4_24B4D,src/game/ev4.c,ev4,ev2check,6000,wired (repl.c),scene move/map batch 4 (0x1366A + steppers + 0x196CB); obj1/obj2 + VGA + buffers
 0x24D22,map_scroll_lines,src/game/map.c,map,mapcheck,3000,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
+0x25052,ev5_25052,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x25089,ev5_25089,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x25977,bgm_play,src/game/bgm.c,bgm,bgmcheck,6000,wired (repl.c),"play_bgm 0x25977; services hooked, event log compared"
 0x25A96,svc_play_sfx,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
 0x25B45,svc_play_sfx2,src/game/svc.c,svc,typecheck,1176,wired (repl.c),BIOS tick wait + PCM SFX (also in typecheck)
 0x26996,msg_close_portrait,src/game/msg.c,dlg,msgcheck,465,wired (repl.c),portrait compositor 0x1956B/0x1974C/0x26996; event log + screen pair compared
+0x26C9B,ev5_26C9B,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x2860A,ev5_2860A,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x2AEDB,ev3_2AEDB,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x2B749,ev5_2B749,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x2B996,fx_dots7,src/game/fx.c,fx,fxcheck,12884,wired (repl.c),funcs_30469 effect-animation handlers; event log + globals compared
 0x2BB33,fx_dots8,src/game/fx.c,fx,fxcheck,12884,wired (repl.c),funcs_30469 effect-animation handlers; event log + globals compared
 0x2BD6C,fx_blob,src/game/fx.c,fx,fxcheck,12884,wired (repl.c),funcs_30469 effect-animation handlers; event log + globals compared
@@ -84,10 +110,12 @@ addr,c_name,source_file,group,check,cases,status,note
 0x2CCF4,fx_dots16,src/game/fx.c,fx,fxcheck,12884,wired (repl.c),funcs_30469 effect-animation handlers; event log + globals compared
 0x2CE1A,fx_toggle,src/game/fx.c,fx,fxcheck,12884,wired (repl.c),funcs_30469 effect-animation handlers; event log + globals compared
 0x2EB9F,res_blit,src/game/res.c,res,leafcheck,72000,wired (repl.c),LMI resource loader; heap via guest_mem
+0x314DE,ev5_314DE,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x32230,map_unit_ping,src/game/map.c,map,mapcheck,3000,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x32975,rec_flag_set1,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x33499,unit_exists,src/game/unit.c,rec,reccheck,36327,wired (repl.c),persistent party roster (0x1145A/0x11506/0x112A5)
 0x33F78,ev3_33F78,src/game/ev3.c,ev3,ev2check,6000,wired (repl.c),funcs_1199C batch 3 (cluster close); event log + obj1/obj2 + buffers; --only= subsets
+0x34317,ev5_34317,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x344F2,rec_status_set,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x34738,ev_rec13_set1,src/game/ev.c,rec,evcheck,2940,wired (repl.c),funcs_1199C event handlers; record table + event log + normalised returns compared
 0x34894,rec_flag,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)

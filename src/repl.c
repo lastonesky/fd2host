@@ -51,6 +51,7 @@
 #include "game/ev2.h"
 #include "game/ev3.h"
 #include "game/ev4.h"
+#include "game/ev5.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -303,6 +304,36 @@ static const struct repl_entry g_repl[] = {
     { 0x24B4D, "ev4_24B4D",           (void *)ev4_24B4D,           REPL_EV4 },
     { 0x196CB, "ev4_196CB",           (void *)ev4_196CB,           REPL_EV4 },
 
+    /* Small scene/map/record leaves (src/game/ev5.c), batch 5. */
+    { 0x2860A, "ev5_2860A",           (void *)ev5_2860A,           REPL_EV5 },
+    { 0x146A7, "ev5_146A7",           (void *)ev5_146A7,           REPL_EV5 },
+    { 0x13460, "ev5_13460",           (void *)ev5_13460,           REPL_EV5 },
+    { 0x13536, "ev5_13536",           (void *)ev5_13536,           REPL_EV5 },
+    { 0x1D4CB, "ev5_1D4CB",           (void *)ev5_1D4CB,           REPL_EV5 },
+    { 0x173E7, "ev5_173E7",           (void *)ev5_173E7,           REPL_EV5 },
+    { 0x24B14, "ev5_24B14",           (void *)ev5_24B14,           REPL_EV5 },
+    { 0x25052, "ev5_25052",           (void *)ev5_25052,           REPL_EV5 },
+    { 0x25089, "ev5_25089",           (void *)ev5_25089,           REPL_EV5 },
+    { 0x34317, "ev5_34317",           (void *)ev5_34317,           REPL_EV5 },
+    { 0x1F6EF, "ev5_1F6EF",           (void *)ev5_1F6EF,           REPL_EV5 },
+    { 0x1C220, "ev5_1C220",           (void *)ev5_1C220,           REPL_EV5 },
+    { 0x1E5C0, "ev5_1E5C0",           (void *)ev5_1E5C0,           REPL_EV5 },
+    { 0x2B749, "ev5_2B749",           (void *)ev5_2B749,           REPL_EV5 },
+    { 0x26C9B, "ev5_26C9B",           (void *)ev5_26C9B,           REPL_EV5 },
+    { 0x314DE, "ev5_314DE",           (void *)ev5_314DE,           REPL_EV5 },
+    { 0x1B5F1, "ev5_1B5F1",           (void *)ev5_1B5F1,           REPL_EV5 },
+    { 0x14B16, "ev5_14B16",           (void *)ev5_14B16,           REPL_EV5 },
+    { 0x203BD, "ev5_203BD",           (void *)ev5_203BD,           REPL_EV5 },
+    { 0x208CF, "ev5_208CF",           (void *)ev5_208CF,           REPL_EV5 },
+    { 0x20AAF, "ev5_20AAF",           (void *)ev5_20AAF,           REPL_EV5 },
+    { 0x20BF5, "ev5_20BF5",           (void *)ev5_20BF5,           REPL_EV5 },
+    { 0x20B72, "ev5_20B72",           (void *)ev5_20B72,           REPL_EV5 },
+    { 0x205B4, "ev5_205B4",           (void *)ev5_205B4,           REPL_EV5 },
+    { 0x205BE, "ev5_205BE",           (void *)ev5_205BE,           REPL_EV5 },
+    { 0x1F04A, "ev5_1F04A",           (void *)ev5_1F04A,           REPL_EV5 },
+    { 0x1F0DC, "ev5_1F0DC",           (void *)ev5_1F0DC,           REPL_EV5 },
+    { 0x1B653, "ev5_1B653",           (void *)ev5_1B653,           REPL_EV5 },
+
     /* The persistent party roster (src/game/unit.c): the three functions
      * that build/sync/recalc its 80-byte records. They call each other, so
      * they share one group and are enabled atomically. */
@@ -464,6 +495,7 @@ unsigned repl_parse(const char *spec)
             else if (!plat_stricmp(tok, "ev2"))      mask &= ~REPL_EV2;
             else if (!plat_stricmp(tok, "ev3"))      mask &= ~REPL_EV3;
             else if (!plat_stricmp(tok, "ev4"))      mask &= ~REPL_EV4;
+            else if (!plat_stricmp(tok, "ev5"))      mask &= ~REPL_EV5;
             else printf("repl: unknown group '%s'\n", tok);
             continue;
         }
@@ -485,6 +517,7 @@ unsigned repl_parse(const char *spec)
         else if (!plat_stricmp(tok, "ev2"))      mask |= REPL_EV2;
         else if (!plat_stricmp(tok, "ev3"))      mask |= REPL_EV3;
         else if (!plat_stricmp(tok, "ev4"))      mask |= REPL_EV4;
+        else if (!plat_stricmp(tok, "ev5"))      mask |= REPL_EV5;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

@@ -1,0 +1,678 @@
+
+===== 34B07  size=40 =====
+34B07  push    28h ; '('
+34B0C  call    sub_3702F
+34B11  push    1
+34B13  push    13h
+34B15  push    4Ah ; 'J'
+34B17  push    4Ch ; 'L'
+34B19  push    0CDh
+34B1E  push    140h
+34B23  push    0A0000h
+34B28  push    1
+34B2A  jmp     loc_34885
+
+===== 34C52  size=40 =====
+34C52  push    28h ; '('
+34C57  call    sub_3702F
+34C5C  push    1
+34C5E  push    13h
+34C60  push    4Ah ; 'J'
+34C62  push    4Ch ; 'L'
+34C64  push    0CDh
+34C69  push    140h
+34C6E  push    0A0000h
+34C73  push    3
+34C75  jmp     loc_34F65
+
+===== 34940  size=68 =====
+34940  push    28h ; '('
+34945  call    sub_3702F
+3494A  push    0
+3494C  push    28h ; '('
+3494E  push    25h ; '%'
+34950  call    sub_344F2
+34955  add     esp, 0Ch
+34958  push    0
+3495A  push    18h
+3495C  push    0Dh
+3495E  call    sub_344F2
+34963  add     esp, 0Ch
+34966  push    1
+34968  push    13h
+3496A  push    4Ah ; 'J'
+3496C  push    4Ch ; 'L'
+3496E  push    0CDh
+34973  push    140h
+34978  push    0A0000h
+3497D  push    3
+3497F  jmp     loc_34885
+
+===== 34A1E  size=78 =====
+34A1E  push    28h ; '('
+34A23  call    sub_3702F
+34A28  push    7
+34A2A  push    33h ; '3'
+34A2C  push    30h ; '0'
+34A2E  call    sub_344F2
+34A33  add     esp, 0Ch
+34A36  push    1
+34A38  push    13h
+34A3A  push    4Ah ; 'J'
+34A3C  push    4Ch ; 'L'
+34A3E  push    0CDh
+34A43  push    140h
+34A48  push    0A0000h
+34A4D  push    6
+34A4F  push    dword_53A79
+34A55  call    sub_15F84
+34A5A  add     esp, 24h
+34A5D  push    18h
+34A5F  call    sub_1366A
+34A64  add     esp, 4
+34A67  jmp     loc_34750
+
+===== 34FC2  size=10 =====
+34FC2  push    28h ; '('
+34FC7  jmp     loc_34C57
+
+===== 350BE  size=10 =====
+350BE  push    28h ; '('
+350C3  jmp     loc_34F3D
+
+===== 205BE  size=28 =====
+205BE  push    8
+205C3  call    sub_3702F
+205C8  push    ebx
+205C9  mov     dword_53ECC, 2
+205D3  xor     edx, edx
+205D5  jmp     loc_2067E
+2067D  inc     edx
+2067E  cmp     edx, dword_53BEB
+20684  jge     short loc_206AE
+20686  mov     eax, edx
+20688  shl     eax, 2
+2068B  add     eax, edx
+2068D  shl     eax, 4
+20690  mov     ebx, dword_53A45
+20696  add     eax, ebx
+20698  movzx   ebx, byte ptr [eax+6]
+2069C  test    ebx, ebx
+2069E  jnz     short loc_2067D
+206A0  test    byte ptr [eax+5], 1
+206A4  jnz     short loc_2067D
+206A6  mov     dword_53ECC, ebx
+206AC  jmp     short loc_2067D
+206AE  mov     eax, dword_53A45
+206B3  test    byte ptr [eax+5], 1
+206B7  jz      short loc_206C3
+206B9  mov     dword_53ECC, 1
+206C3  pop     ebx
+206C4  retn
+
+===== 12CEA  size=145 =====
+12CEA  push    14h
+12CEF  call    sub_3702F
+12CF4  push    ebx
+12CF5  push    esi
+12CF6  push    edi
+12CF7  mov     esi, [esp+0Ch+arg_0]
+12CFB  mov     edi, [esp+0Ch+arg_4]
+12CFF  push    0
+12D01  call    sub_11CAC
+12D06  add     esp, 4
+12D09  cmp     esi, dword ptr qword_53AB1
+12D0F  jz      short loc_12D42
+12D11  jge     short loc_12D1A
+12D13  call    sub_11C59
+12D18  jmp     short loc_12D1F
+12D1A  call    sub_11BFA
+12D1F  cmp     dword_51A83, 0
+12D26  jz      short loc_12D3B
+12D28  cmp     dword_51A83, 6
+12D2F  jz      short loc_12D3B
+12D31  push    1
+12D33  call    sub_17AA9
+12D38  add     esp, 4
+12D3B  call    sub_4E381
+12D40  jmp     short loc_12D09
+12D42  cmp     edi, dword ptr qword_53AB1+4
+12D48  jz      short loc_12CE6
+12D4A  jge     short loc_12D53
+12D4C  call    sub_11B48
+12D51  jmp     short loc_12D58
+12D53  call    sub_11B9B
+12D58  cmp     dword_51A83, 0
+12D5F  jz      short loc_12D74
+12D61  cmp     dword_51A83, 6
+12D68  jz      short loc_12D74
+12D6A  push    1
+12D6C  call    sub_17AA9
+12D71  add     esp, 4
+12D74  call    sub_4E381
+12D79  jmp     short loc_12D42
+
+===== 34531  size=218 =====
+34531  push    2Ch ; ','
+34536  call    sub_3702F
+3453B  push    ebx
+3453C  push    1
+3453E  call    sub_112A5
+34543  add     esp, 4
+34546  push    3
+34548  call    sub_10B4E
+3454D  add     esp, 4
+34550  push    8
+34552  push    5
+34554  call    sub_135DD
+34559  add     esp, 8
+3455C  push    1
+3455E  call    sub_11CAC
+34563  add     esp, 4
+34566  push    64h ; 'd'
+34568  call    j___delay
+3456D  add     esp, 4
+34570  push    7
+34572  call    sub_1366A
+34577  add     esp, 4
+3457A  call    sub_4E381
+3457F  push    1
+34581  push    13h
+34583  push    4Ah ; 'J'
+34585  push    4Ch ; 'L'
+34587  push    0CDh
+3458C  push    140h
+34591  push    0A0000h
+34596  push    0Bh
+34598  push    dword_53A79
+3459E  call    sub_15F84
+345A3  add     esp, 24h
+345A6  mov     dword_51A83, 0
+345B0  push    7
+345B2  call    sub_10B4E
+345B7  add     esp, 4
+345BA  push    1
+345BC  call    sub_11CAC
+345C1  add     esp, 4
+345C4  push    64h ; 'd'
+345C6  call    j___delay
+345CB  add     esp, 4
+345CE  push    8
+345D0  call    sub_1366A
+345D5  add     esp, 4
+345D8  call    sub_4E381
+345DD  push    1
+345DF  push    13h
+345E1  push    4Ah ; 'J'
+345E3  push    4Ch ; 'L'
+345E5  push    0CDh
+345EA  push    140h
+345EF  push    0A0000h
+345F4  push    3
+345F6  push    dword_53A79
+345FC  call    sub_15F84
+34601  add     esp, 24h
+34604  call    sub_134E4
+34609  pop     ebx
+3460A  retn
+
+===== 3460B  size=104 =====
+3460B  push    2Ch ; ','
+34610  call    sub_3702F
+34615  push    ebx
+34616  push    10h
+34618  push    0Bh
+3461A  call    sub_135DD
+3461F  add     esp, 8
+34622  push    4
+34624  call    sub_32999
+34629  add     esp, 4
+3462C  call    sub_4E381
+34631  push    1
+34633  call    sub_11CAC
+34638  add     esp, 4
+3463B  push    3
+3463D  call    sub_1366A
+34642  add     esp, 4
+34645  call    sub_134E4
+3464A  push    1
+3464C  push    13h
+3464E  push    4Ah ; 'J'
+34650  push    4Ch ; 'L'
+34652  push    0CDh
+34657  push    140h
+3465C  push    0A0000h
+34661  push    4
+34663  push    dword_53A79
+34669  call    sub_15F84
+3466E  add     esp, 24h
+34671  pop     ebx
+34672  retn
+
+===== 34673  size=90 =====
+34673  push    2Ch ; ','
+34678  call    sub_3702F
+3467D  push    ebx
+3467E  push    10h
+34680  push    0
+34682  call    sub_135DD
+34687  add     esp, 8
+3468A  push    5
+3468C  call    sub_32999
+34691  add     esp, 4
+34694  call    sub_4E381
+34699  push    1
+3469B  call    sub_11CAC
+346A0  add     esp, 4
+346A3  push    4
+346A5  call    sub_1366A
+346AA  add     esp, 4
+346AD  call    sub_134E4
+346B2  push    1
+346B4  push    13h
+346B6  push    4Ah ; 'J'
+346B8  push    4Ch ; 'L'
+346BA  push    0CDh
+346BF  push    140h
+346C4  push    0A0000h
+346C9  push    5
+346CB  jmp     short loc_34663
+
+===== 346CD  size=107 =====
+346CD  push    2Ch ; ','
+346D2  call    sub_3702F
+346D7  push    ebx
+346D8  push    0Bh
+346DA  push    0Bh
+346DC  call    sub_135DD
+346E1  add     esp, 8
+346E4  mov     byte_53AFA, 1
+346EB  push    6
+346ED  call    sub_10B4E
+346F2  add     esp, 4
+346F5  mov     byte_53AFA, 0
+346FC  push    1
+346FE  call    sub_11CAC
+34703  add     esp, 4
+34706  push    6
+34708  call    sub_1366A
+3470D  add     esp, 4
+34710  call    sub_134E4
+34715  call    sub_4E381
+3471A  push    1
+3471C  push    13h
+3471E  push    4Ah ; 'J'
+34720  push    4Ch ; 'L'
+34722  push    0CDh
+34727  push    140h
+3472C  push    0A0000h
+34731  push    6
+34733  jmp     loc_34663
+
+===== 34778  size=160 =====
+34778  push    2Ch ; ','
+3477D  call    sub_3702F
+34782  push    ebx
+34783  push    1
+34785  push    9
+34787  call    sub_135DD
+3478C  add     esp, 8
+3478F  push    64h ; 'd'
+34791  call    j___delay
+34796  add     esp, 4
+34799  mov     byte_53AFA, 1
+347A0  push    3
+347A2  call    sub_10B4E
+347A7  add     esp, 4
+347AA  mov     byte_53AFA, 0
+347B1  push    0Dh
+347B3  call    sub_1366A
+347B8  add     esp, 4
+347BB  push    0C8h
+347C0  call    j___delay
+347C5  add     esp, 4
+347C8  push    1
+347CA  push    13h
+347CC  push    4Ah ; 'J'
+347CE  push    4Ch ; 'L'
+347D0  push    0CDh
+347D5  push    140h
+347DA  push    0A0000h
+347DF  push    4
+347E1  push    dword_53A79
+347E7  call    sub_15F84
+347EC  add     esp, 24h
+347EF  mov     edx, 5
+347F4  jmp     short loc_34811
+347F6  mov     eax, edx
+347F8  shl     eax, 2
+347FB  lea     ebx, [edx+eax]
+347FE  shl     ebx, 4
+34801  mov     eax, dword_53A45
+34806  mov     byte ptr [ebx+eax+35h], 1Ah
+3480B  mov     byte ptr [ebx+eax+36h], 0Fh
+34810  inc     edx
+34811  cmp     edx, 0Bh
+34814  jl      short loc_347F6
+34816  pop     ebx
+34817  retn
+
+===== 348BB  size=47 =====
+348BB  push    28h ; '('
+348C0  call    sub_3702F
+348C5  push    2
+348C7  call    sub_10B4E
+348CC  add     esp, 4
+348CF  push    1
+348D1  push    13h
+348D3  push    4Ah ; 'J'
+348D5  push    4Ch ; 'L'
+348D7  push    0CDh
+348DC  push    140h
+348E1  push    0A0000h
+348E6  push    2
+348E8  jmp     short loc_34885
+
+===== 34984  size=104 =====
+34984  push    28h ; '('
+34989  call    sub_3702F
+3498E  mov     dword_51A83, 0
+34998  mov     byte_53AFA, 1
+3499F  push    2
+349A1  call    sub_10B4E
+349A6  add     esp, 4
+349A9  mov     byte_53AFA, 0
+349B0  push    0
+349B2  push    0Eh
+349B4  call    sub_135DD
+349B9  add     esp, 8
+349BC  push    17h
+349BE  call    sub_1366A
+349C3  add     esp, 4
+349C6  call    sub_134E4
+349CB  push    0
+349CD  push    0Ch
+349CF  push    7
+349D1  call    sub_344F2
+349D6  add     esp, 0Ch
+349D9  push    0
+349DB  push    23h ; '#'
+349DD  push    21h ; '!'
+349DF  call    sub_344F2
+349E4  add     esp, 0Ch
+349E7  jmp     loc_3486C
+
+===== 349EC  size=50 =====
+349EC  push    28h ; '('
+349F1  call    sub_3702F
+349F6  push    3
+349F8  call    sub_10B4E
+349FD  add     esp, 4
+34A00  push    1
+34A02  push    13h
+34A04  push    4Ah ; 'J'
+34A06  push    4Ch ; 'L'
+34A08  push    0CDh
+34A0D  push    140h
+34A12  push    0A0000h
+34A17  push    5
+34A19  jmp     loc_34885
+
+===== 34B6F  size=43 =====
+34B6F  push    28h ; '('
+34B74  call    sub_3702F
+34B79  push    8
+34B7B  call    sub_34894
+34B80  add     esp, 4
+34B83  test    eax, eax
+34B85  jnz     locret_34F73
+34B8B  push    1
+34B8D  call    sub_10B4E
+34B92  add     esp, 4
+34B95  jmp     loc_34C5C
+
+===== 34B9A  size=184 =====
+34B9A  push    28h ; '('
+34B9F  call    sub_3702F
+34BA4  push    0
+34BA6  push    1Ch
+34BA8  push    8
+34BAA  call    sub_344F2
+34BAF  add     esp, 0Ch
+34BB2  push    1
+34BB4  push    13h
+34BB6  push    4Ah ; 'J'
+34BB8  push    4Ch ; 'L'
+34BBA  push    0CDh
+34BBF  push    140h
+34BC4  push    0A0000h
+34BC9  push    4
+34BCB  push    dword_53A79
+34BD1  call    sub_15F84
+34BD6  add     esp, 24h
+34BD9  cmp     dword_53BEF, 0Fh
+34BE0  jge     locret_35F78
+34BE6  push    2
+34BE8  call    sub_10B4E
+34BED  add     esp, 4
+34BF0  push    11h
+34BF2  push    5
+34BF4  call    sub_135DD
+34BF9  add     esp, 8
+34BFC  push    19h
+34BFE  call    sub_1366A
+34C03  add     esp, 4
+34C06  push    1
+34C08  push    13h
+34C0A  push    4Ah ; 'J'
+34C0C  push    4Ch ; 'L'
+34C0E  push    0CDh
+34C13  push    140h
+34C18  push    0A0000h
+34C1D  push    5
+34C1F  push    dword_53A79
+34C25  call    sub_15F84
+34C2A  add     esp, 24h
+34C2D  push    11h
+34C2F  push    5
+34C31  call    sub_135DD
+34C36  add     esp, 8
+34C39  push    1Ah
+34C3B  call    sub_1366A
+34C40  add     esp, 4
+34C43  push    21h ; '!'
+34C45  call    sub_32975
+34C4A  add     esp, 4
+34C4D  jmp     loc_35F6E
+
+===== 34C7A  size=119 =====
+34C7A  push    28h ; '('
+34C7F  call    sub_3702F
+34C84  mov     eax, dword_53AD5
+34C89  movzx   eax, byte ptr [eax+10h]
+34C8D  cmp     eax, 1
+34C90  jnz     short locret_34CF0
+34C92  mov     byte_53AFA, 1
+34C99  push    2
+34C9B  call    sub_10B4E
+34CA0  add     esp, 4
+34CA3  mov     byte_53AFA, 0
+34CAA  push    0Ah
+34CAC  push    10h
+34CAE  call    sub_135DD
+34CB3  add     esp, 8
+34CB6  push    1Eh
+34CB8  call    sub_1366A
+34CBD  add     esp, 4
+34CC0  push    1
+34CC2  push    13h
+34CC4  push    4Ah ; 'J'
+34CC6  push    4Ch ; 'L'
+34CC8  push    0CDh
+34CCD  push    140h
+34CD2  push    0A0000h
+34CD7  push    2
+34CD9  push    dword_53A79
+34CDF  call    sub_15F84
+34CE4  add     esp, 24h
+34CE7  mov     eax, dword_53AD5
+34CEC  mov     byte ptr [eax+11h], 1
+34CF0  retn
+
+===== 34D2F  size=53 =====
+34D2F  push    0Ch
+34D34  call    sub_3702F
+34D39  push    2
+34D3B  push    8
+34D3D  call    sub_135DD
+34D42  add     esp, 8
+34D45  push    64h ; 'd'
+34D47  call    j___delay
+34D4C  add     esp, 4
+34D4F  push    dword_53BEF
+34D55  call    sub_10B4E
+34D5A  add     esp, 4
+34D5D  push    64h ; 'd'
+34D5F  jmp     loc_35727
+
+===== 34F38  size=60 =====
+34F38  push    28h ; '('
+34F3D  call    sub_3702F
+34F42  push    1
+34F44  call    sub_10B4E
+34F49  add     esp, 4
+34F4C  push    1
+34F4E  push    13h
+34F50  push    4Ah ; 'J'
+34F52  push    4Ch ; 'L'
+34F54  push    0CDh
+34F59  push    140h
+34F5E  push    0A0000h
+34F63  push    1
+34F65  push    dword_53A79
+34F6B  call    sub_15F84
+34F70  add     esp, 24h
+34F73  retn
+
+===== 34FCC  size=61 =====
+34FCC  push    0Ch
+34FD1  call    sub_3702F
+34FD6  push    5
+34FD8  push    0Ch
+34FDA  call    sub_135DD
+34FDF  add     esp, 8
+34FE2  mov     byte_53AFA, 1
+34FE9  push    2
+34FEB  call    sub_10B4E
+34FF0  add     esp, 4
+34FF3  mov     byte_53AFA, 0
+34FFA  push    2Ah ; '*'
+34FFC  call    sub_1366A
+35001  add     esp, 4
+35004  jmp     sub_134E4
+
+===== 35022  size=156 =====
+35022  push    28h ; '('
+35027  call    sub_3702F
+3502C  push    1
+3502E  push    13h
+35030  push    4Ah ; 'J'
+35032  push    4Ch ; 'L'
+35034  push    0CDh
+35039  push    140h
+3503E  push    0A0000h
+35043  push    1
+35045  push    dword_53A79
+3504B  call    sub_15F84
+35050  add     esp, 24h
+35053  push    22h ; '"'
+35055  push    0Fh
+35057  call    sub_135DD
+3505C  add     esp, 8
+3505F  mov     byte_53AFA, 1
+35066  push    3
+35068  call    sub_10B4E
+3506D  add     esp, 4
+35070  mov     byte_53AFA, 0
+35077  push    2Bh ; '+'
+35079  call    sub_1366A
+3507E  add     esp, 4
+35081  call    sub_134E4
+35086  push    1Ah
+35088  push    0
+3508A  call    sub_135DD
+3508F  add     esp, 8
+35092  mov     byte_53AFA, 1
+35099  push    4
+3509B  call    sub_10B4E
+350A0  add     esp, 4
+350A3  mov     byte_53AFA, 0
+350AA  push    2Ch ; ','
+350AC  call    sub_1366A
+350B1  add     esp, 4
+350B4  call    sub_134E4
+350B9  jmp     loc_35F6E
+
+===== 350C8  size=91 =====
+350C8  push    28h ; '('
+350CD  call    sub_3702F
+350D2  push    5
+350D4  push    1Bh
+350D6  call    sub_135DD
+350DB  add     esp, 8
+350DE  mov     byte_53AFA, 1
+350E5  push    2
+350E7  call    sub_10B4E
+350EC  add     esp, 4
+350EF  mov     byte_53AFA, 0
+350F6  push    2Eh ; '.'
+350F8  call    sub_1366A
+350FD  add     esp, 4
+35100  call    sub_134E4
+35105  push    1
+35107  push    13h
+35109  push    4Ah ; 'J'
+3510B  push    4Ch ; 'L'
+3510D  push    0CDh
+35112  push    140h
+35117  push    0A0000h
+3511C  push    8
+3511E  jmp     loc_34F65
+
+===== 34818  size=124 =====
+34818  push    28h ; '('
+3481D  call    sub_3702F
+34822  push    6
+34824  call    sub_34894
+34829  add     esp, 4
+3482C  test    eax, eax
+3482E  jnz     short locret_34893
+34830  push    2
+34832  call    sub_10B4E
+34837  add     esp, 4
+3483A  push    0
+3483C  push    3
+3483E  call    sub_135DD
+34843  add     esp, 8
+34846  push    320h
+3484B  call    j___delay
+34850  add     esp, 4
+34853  push    11h
+34855  push    3
+34857  call    sub_135DD
+3485C  add     esp, 8
+3485F  push    0C8h
+34864  call    j___delay
+34869  add     esp, 4
+3486C  push    1
+3486E  push    13h
+34870  push    4Ah ; 'J'
+34872  push    4Ch ; 'L'
+34874  push    0CDh
+34879  push    140h
+3487E  push    0A0000h
+34883  push    4
+34885  push    dword_53A79
+3488B  call    sub_15F84
+34890  add     esp, 24h
+34893  retn

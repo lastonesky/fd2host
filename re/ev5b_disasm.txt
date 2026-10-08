@@ -1,0 +1,905 @@
+
+===== 10B4E  size=258 =====
+10B4E  push    20h ; ' '
+10B53  call    sub_3702F
+10B58  push    ebx
+10B59  push    esi
+10B5A  push    edi
+10B5B  mov     edi, [esp+0Ch+arg_0]
+10B5F  push    offset aRb_11; "rb"
+10B64  push    offset aFdiconB24_0; "FDICON.B24"
+10B69  call    fopen
+10B6E  add     esp, 8
+10B71  mov     esi, eax
+10B73  test    eax, eax
+10B75  jnz     short loc_10B9E
+10B77  mov     word_53A8D, 3
+10B80  push    offset word_53A8D
+10B85  push    offset word_53A8D
+10B8A  push    10h
+10B8C  call    int386
+10B91  add     esp, 0Ch
+10B94  push    offset aFileFdiconB24E; "File 'FDICON.B24' error !!\n"
+10B99  jmp     loc_10056
+10B9E  mov     edx, dword_53C03
+10BA4  mov     eax, edx
+10BA6  shl     eax, 2
+10BA9  sub     eax, edx
+10BAB  add     eax, 2
+10BAE  push    eax
+10BAF  push    dword_53A59
+10BB5  push    offset aFdfieldDat; "FDFIELD.DAT"
+10BBA  call    sub_111BA
+10BBF  add     esp, 0Ch
+10BC2  mov     dword_53A59, eax
+10BC7  xor     ebx, ebx
+10BC9  jmp     short loc_10BCC
+10BCB  inc     ebx
+10BCC  cmp     ebx, dword_53BE3
+10BD2  jge     short loc_10BF8
+10BD4  imul    eax, ebx, 1Ah
+10BD7  mov     edx, dword_53A55
+10BDD  add     eax, edx
+10BDF  add     eax, 83h
+10BE4  movzx   eax, byte ptr [eax+15h]
+10BE8  cmp     eax, edi
+10BEA  jnz     short loc_10BCB
+10BEC  push    esi
+10BED  push    ebx
+10BEE  call    sub_10C50
+10BF3  add     esp, 8
+10BF6  jmp     short loc_10BCB
+10BF8  push    esi
+10BF9  call    fclose
+10BFE  add     esp, 4
+10C01  push    dword_53A59
+10C07  call    free
+10C0C  add     esp, 4
+10C0F  mov     dword_53A59, 0
+10C19  push    offset aWb_1; "wb"
+10C1E  push    offset aFd2Tmp_0; "FD2.TMP"
+10C23  call    fopen
+10C28  mov     ebx, eax
+10C2A  add     esp, 8
+10C2D  push    eax
+10C2E  push    (offset loc_329FE+2)
+10C33  push    1
+10C35  push    dword_53A61
+10C3B  call    fwrite
+10C40  add     esp, 10h
+10C43  push    ebx
+10C44  call    fclose
+10C49  add     esp, 4
+10C4C  pop     edi
+10C4D  pop     esi
+10C4E  pop     ebx
+10C4F  retn
+
+===== 10C50  size=969 =====
+10C50  push    54h ; 'T'
+10C55  call    sub_3702F
+10C5A  push    ebx
+10C5B  push    esi
+10C5C  push    edi
+10C5D  push    ebp
+10C5E  sub     esp, 34h
+10C61  mov     [esp+44h+var_14], 0FFh
+10C69  mov     ebx, dword_53BEB
+10C6F  mov     eax, ebx
+10C71  shl     eax, 2
+10C74  add     eax, ebx
+10C76  shl     eax, 4
+10C79  mov     ebx, dword_53A45
+10C7F  add     ebx, eax
+10C81  mov     [esp+44h+var_28], ebx
+10C85  imul    edx, [esp+44h+arg_0], 6
+10C8A  mov     eax, dword_53A59
+10C8F  add     eax, edx
+10C91  add     eax, 2
+10C94  movzx   edx, byte ptr [eax]
+10C97  mov     [esp+44h+var_20], edx
+10C9B  movzx   eax, byte ptr [eax+2]
+10C9F  mov     [esp+44h+var_18], eax
+10CA3  push    0
+10CA5  call    sub_145CD
+10CAA  add     esp, 4
+10CAD  push    1
+10CAF  call    sub_145CD
+10CB4  add     esp, 4
+10CB7  movzx   eax, byte_53AFA
+10CBE  test    eax, eax
+10CC0  jnz     loc_10D4E
+10CC6  xor     esi, esi
+10CC8  jmp     short loc_10CCB
+10CCA  inc     esi
+10CCB  cmp     esi, dword_53AC5
+10CD1  jge     loc_10D5E
+10CD7  xor     ebx, ebx
+10CD9  jmp     short loc_10CDC
+10CDB  inc     ebx
+10CDC  cmp     ebx, dword_53AC1
+10CE2  jge     short loc_10CCA
+10CE4  mov     edi, dword_53AC1
+10CEA  imul    edi, esi
+10CED  add     edi, ebx
+10CEF  shl     edi, 2
+10CF2  mov     eax, dword_53A51
+10CF7  test    byte ptr [edi+eax+6], 40h
+10CFC  jnz     short loc_10CDB
+10CFE  mov     edi, ebx
+10D00  sub     edi, [esp+44h+var_20]
+10D04  push    edi
+10D05  call    abs
+10D0A  mov     [esp+48h+var_40], eax
+10D0E  add     esp, 4
+10D11  mov     ebp, esi
+10D13  sub     ebp, [esp+44h+var_18]
+10D17  push    ebp
+10D18  call    abs
+10D1D  add     esp, 4
+10D20  add     eax, [esp+44h+var_40]
+10D24  cmp     eax, [esp+44h+var_14]
+10D28  jg      short loc_10CDB
+10D2A  push    edi
+10D2B  call    abs
+10D30  mov     edi, eax
+10D32  add     esp, 4
+10D35  push    ebp
+10D36  call    abs
+10D3B  add     esp, 4
+10D3E  add     edi, eax
+10D40  mov     [esp+44h+var_14], edi
+10D44  mov     [esp+44h+var_24], ebx
+10D48  mov     [esp+44h+var_1C], esi
+10D4C  jmp     short loc_10CDB
+10D4E  mov     eax, [esp+44h+var_20]
+10D52  mov     [esp+44h+var_24], eax
+10D56  mov     eax, [esp+44h+var_18]
+10D5A  mov     [esp+44h+var_1C], eax
+10D5E  push    dword_53A51
+10D64  call    sub_4DF4C
+10D69  add     esp, 4
+10D6C  imul    eax, [esp+44h+arg_0], 1Ah
+10D71  mov     ebx, dword_53A55
+10D77  add     eax, ebx
+10D79  lea     esi, [eax+83h]
+10D7F  movzx   eax, byte ptr [eax+84h]
+10D86  mov     [esp+44h+var_3C], eax
+10D8A  movzx   eax, byte ptr [esi+4]
+10D8E  mov     [esp+44h+var_2C], eax
+10D92  movzx   eax, byte ptr [esi]
+10D95  mov     [esp+44h+var_38], eax
+10D99  cmp     [esp+44h+var_3C], 44h ; 'D'
+10D9E  jl      loc_10E28
+10DA4  movzx   eax, byte ptr [esi+1]
+10DA8  sub     eax, 44h ; 'D'
+10DAB  push    eax
+10DAC  call    sub_4E84F
+10DB1  add     esp, 4
+10DB4  movzx   edx, word ptr [eax+2]
+10DB8  mov     ebx, [esp+44h+var_2C]
+10DBC  imul    ebx, edx
+10DBF  mov     [esp+44h+var_30], ebx
+10DC3  movzx   edx, byte ptr [eax+4]
+10DC7  mov     ebx, [esp+44h+var_2C]
+10DCB  imul    ebx, edx
+10DCE  mov     [esp+44h+var_34], ebx
+10DD2  mov     dl, [eax]
+10DD4  mov     ebx, [esp+44h+var_28]
+10DD8  mov     [ebx+1Fh], dl
+10DDB  mov     dl, [eax+1]
+10DDE  mov     [ebx+20h], dl
+10DE1  movzx   dx, byte ptr [eax+5]
+10DE6  mov     ebx, [esp+44h+var_2C]
+10DEA  imul    ebx, edx
+10DED  mov     edx, [esp+44h+var_28]
+10DF1  mov     [edx+37h], bx
+10DF5  movzx   dx, byte ptr [eax+6]
+10DFA  mov     ebx, [esp+44h+var_2C]
+10DFE  imul    ebx, edx
+10E01  mov     edx, [esp+44h+var_28]
+10E05  mov     [edx+39h], bx
+10E09  movzx   dx, byte ptr [eax+7]
+10E0E  mov     ebx, [esp+44h+var_2C]
+10E12  imul    ebx, edx
+10E15  mov     edx, [esp+44h+var_28]
+10E19  mov     [edx+3Eh], bx
+10E1D  mov     al, [eax+8]
+10E20  mov     [edx+3Bh], al
+10E23  jmp     loc_10EBD
+10E28  push    [esp+44h+var_3C]
+10E2C  call    sub_4E838
+10E31  mov     edi, eax
+10E33  add     esp, 4
+10E36  push    [esp+44h+var_3C]
+10E3A  call    sub_4E821
+10E3F  add     esp, 4
+10E42  movzx   ebp, byte ptr [eax+6]
+10E46  mov     ebx, [esp+44h+var_2C]
+10E4A  dec     ebx
+10E4B  imul    ebp, ebx
+10E4E  movzx   edx, word ptr [edi+3]
+10E52  add     edx, ebp
+10E54  mov     [esp+44h+var_30], edx
+10E58  movzx   ebp, byte ptr [eax+8]
+10E5C  imul    ebx, ebp
+10E5F  movzx   edx, word ptr [edi+5]
+10E63  add     edx, ebx
+10E65  mov     [esp+44h+var_34], edx
+10E69  movzx   edx, word ptr [edi+12h]
+10E6D  mov     [esp+44h+var_44], edx
+10E70  movzx   edx, word ptr [edi+14h]
+10E74  movzx   ebx, word ptr [edi+16h]
+10E78  mov     cl, [edi]
+10E7A  mov     ebp, [esp+44h+var_28]
+10E7E  mov     [ebp+1Fh], cl
+10E81  mov     cl, [edi+1]
+10E84  mov     [ebp+20h], cl
+10E87  movzx   cx, byte ptr [eax]
+10E8B  imul    ecx, [esp+44h+var_2C]
+10E90  add     ecx, [esp+44h+var_44]
+10E93  mov     [ebp+37h], cx
+10E97  movzx   cx, byte ptr [eax+2]
+10E9C  imul    ecx, [esp+44h+var_2C]
+10EA1  add     ecx, edx
+10EA3  mov     [ebp+39h], cx
+10EA7  mov     dl, [edi+7]
+10EAA  mov     [ebp+3Bh], dl
+10EAD  movzx   ax, byte ptr [eax+4]
+10EB2  imul    eax, [esp+44h+var_2C]
+10EB7  add     eax, ebx
+10EB9  mov     [ebp+3Eh], ax
+10EBD  mov     al, byte ptr [esp+44h+var_24]
+10EC1  mov     edx, [esp+44h+var_28]
+10EC5  mov     [edx], al
+10EC7  mov     al, byte ptr [esp+44h+var_1C]
+10ECB  mov     [edx+1], al
+10ECE  push    [esp+44h+arg_4]
+10ED2  push    [esp+48h+var_3C]
+10ED6  call    sub_11019
+10EDB  add     esp, 8
+10EDE  mov     edx, [esp+44h+var_28]
+10EE2  mov     [edx+2], al
+10EE5  mov     byte ptr [edx+3], 0
+10EE9  mov     byte ptr [edx+4], 0
+10EED  mov     byte ptr [edx+5], 0
+10EF1  mov     al, byte ptr [esp+44h+var_38]
+10EF5  mov     [edx+6], al
+10EF8  mov     al, byte ptr [esp+44h+var_3C]
+10EFC  mov     [edx+7], al
+10EFF  mov     [edx+8], al
+10F02  mov     byte ptr [edx+9], 0
+10F06  movzx   eax, byte ptr [esi+5]
+10F0A  cmp     eax, 0FFh
+10F0F  jz      short loc_10F27
+10F11  mov     byte ptr [edx+0Ah], 40h ; '@'
+10F15  mov     al, [esi+5]
+10F18  mov     [edx+0Bh], al
+10F1B  mov     byte ptr [edx+0Ch], 40h ; '@'
+10F1F  mov     al, [esi+6]
+10F22  mov     [edx+0Dh], al
+10F25  jmp     short loc_10F35
+10F27  mov     byte ptr [edx+0Ah], 40h ; '@'
+10F2B  mov     al, [esi+6]
+10F2E  mov     [edx+0Bh], al
+10F31  mov     byte ptr [edx+0Ch], 80h
+10F35  xor     eax, eax
+10F37  jmp     short loc_10F4C
+10F39  mov     byte ptr [ebx+0Eh], 80h
+10F3D  lea     edi, [eax+eax]
+10F40  add     edi, [esp+44h+var_28]
+10F44  mov     bl, [esi+eax+7]
+10F48  mov     [edi+0Fh], bl
+10F4B  inc     eax
+10F4C  cmp     eax, 6
+10F4F  jge     short loc_10F6B
+10F51  movzx   edi, byte ptr [esi+eax+7]
+10F56  lea     ebx, [eax+eax]
+10F59  add     ebx, [esp+44h+var_28]
+10F5D  cmp     edi, 0FFh
+10F63  jz      short loc_10F39
+10F65  mov     byte ptr [ebx+0Eh], 0
+10F69  jmp     short loc_10F3D
+10F6B  push    6
+10F6D  push    0
+10F6F  mov     eax, [esp+4Ch+var_28]
+10F73  add     eax, 22h ; '"'
+10F76  push    eax
+10F77  call    memset
+10F7C  add     esp, 0Ch
+10F7F  push    4
+10F81  lea     eax, [esi+0Dh]
+10F84  push    eax
+10F85  mov     eax, [esp+4Ch+var_28]
+10F89  add     eax, 1Ah
+10F8C  push    eax
+10F8D  call    memmove
+10F92  add     esp, 0Ch
+10F95  mov     eax, [esp+44h+var_28]
+10F99  mov     byte ptr [eax+1Eh], 0
+10F9D  mov     al, byte ptr [esp+44h+var_2C]
+10FA1  mov     edx, [esp+44h+var_28]
+10FA5  mov     [edx+21h], al
+10FA8  mov     al, [esi+16h]
+10FAB  mov     [edx+31h], al
+10FAE  mov     ax, [esi+17h]
+10FB2  mov     [edx+32h], ax
+10FB6  mov     al, [esi+11h]
+10FB9  mov     [edx+34h], al
+10FBC  mov     al, [esi+12h]
+10FBF  mov     [edx+35h], al
+10FC2  mov     al, [esi+13h]
+10FC5  mov     [edx+36h], al
+10FC8  mov     al, [esi+2]
+10FCB  mov     [edx+3Dh], al
+10FCE  movzx   eax, byte ptr [edx+6]
+10FD2  cmp     eax, 2
+10FD5  jnz     short loc_10FDD
+10FD7  mov     byte ptr [edx+3Ch], 0
+10FDB  jmp     short loc_10FE1
+10FDD  mov     byte ptr [edx+3Ch], 0FFh
+10FE1  mov     eax, [esp+44h+var_30]
+10FE5  mov     edx, [esp+44h+var_28]
+10FE9  mov     [edx+40h], ax
+10FED  mov     [edx+42h], ax
+10FF1  mov     eax, [esp+44h+var_34]
+10FF5  mov     [edx+44h], ax
+10FF9  mov     [edx+46h], ax
+10FFD  push    dword_53BEB
+11003  call    sub_1B750
+11008  add     esp, 4
+1100B  inc     dword_53BEB
+11011  add     esp, 34h
+11014  pop     ebp
+11015  pop     edi
+11016  pop     esi
+11017  pop     ebx
+11018  retn
+
+===== 11019  size=417 =====
+11019  push    5Ch ; '\'
+1101E  call    sub_3702F
+11023  push    ebx
+11024  push    esi
+11025  push    edi
+11026  push    ebp
+11027  sub     esp, 38h
+1102A  mov     esi, [esp+48h+arg_0]
+1102E  mov     edi, 780h
+11033  push    0
+11035  push    6
+11037  push    [esp+50h+arg_4]
+1103B  call    fseek
+11040  add     esp, 0Ch
+11043  push    1A40h
+11048  call    malloc
+1104D  add     esp, 4
+11050  mov     ebp, eax
+11052  push    [esp+48h+arg_4]
+11056  push    1A40h
+1105B  push    1
+1105D  push    eax
+1105E  call    sub_373CA
+11063  add     esp, 10h
+11066  xor     eax, eax
+11068  jmp     short loc_11077
+1106A  imul    edx, esi, 0Ch
+1106D  add     edx, eax
+1106F  mov     edx, [ebp+edx*4+0]
+11073  mov     [esp+eax*4+48h+var_48], edx
+11076  inc     eax
+11077  cmp     eax, 0Dh
+1107A  jl      short loc_1106A
+1107C  mov     eax, [esp+48h+var_18]
+11080  sub     eax, [esp+48h+var_48]
+11083  mov     [esp+48h+var_14], eax
+11087  push    ebp
+11088  call    free
+1108D  add     esp, 4
+11090  cmp     dword_53BDF, 0
+11097  jnz     loc_11117
+1109D  mov     dword_53B17, esi
+110A3  push    (offset loc_329FE+2)
+110A8  call    malloc
+110AD  add     esp, 4
+110B0  mov     dword_53A61, eax
+110B5  push    0
+110B7  push    [esp+4Ch+var_48]
+110BB  push    [esp+50h+arg_4]
+110BF  call    fseek
+110C4  add     esp, 0Ch
+110C7  push    [esp+48h+arg_4]
+110CB  push    [esp+4Ch+var_14]
+110CF  push    1
+110D1  mov     eax, dword_53A61
+110D6  add     eax, edi
+110D8  push    eax
+110D9  call    sub_373CA
+110DE  add     esp, 10h
+110E1  xor     eax, eax
+110E3  jmp     short loc_110FA
+110E5  mov     edx, [esp+eax*4+48h+var_48]
+110E8  sub     edx, [esp+48h+var_48]
+110EB  lea     ecx, [edx+edi]
+110EE  mov     edx, eax
+110F0  mov     ebx, dword_53A61
+110F6  mov     [ebx+edx*4], ecx
+110F9  inc     eax
+110FA  cmp     eax, 0Ch
+110FD  jl      short loc_110E5
+110FF  inc     dword_53BDF
+11105  mov     eax, [esp+48h+var_14]
+11109  add     eax, edi
+1110B  mov     dword_539EC, eax
+11110  xor     edx, edx
+11112  jmp     loc_111B0
+11117  xor     eax, eax
+11119  jmp     short loc_1111C
+1111B  inc     eax
+1111C  mov     edx, eax
+1111E  shl     edx, 2
+11121  cmp     eax, dword_53BDF
+11127  jge     short loc_11138
+11129  cmp     esi, dword_53B17[edx]
+1112F  jnz     short loc_1111B
+11131  mov     edx, eax
+11133  jmp     loc_111B0
+11138  mov     dword_53B17[edx], esi
+1113E  push    0
+11140  push    [esp+4Ch+var_48]
+11144  push    [esp+50h+arg_4]
+11148  call    fseek
+1114D  add     esp, 0Ch
+11150  push    [esp+48h+arg_4]
+11154  push    [esp+4Ch+var_14]
+11158  push    1
+1115A  mov     eax, dword_53A61
+1115F  add     eax, dword_539EC
+11165  push    eax
+11166  call    sub_373CA
+1116B  add     esp, 10h
+1116E  xor     eax, eax
+11170  jmp     short loc_11193
+11172  mov     edx, [esp+eax*4+48h+var_48]
+11175  sub     edx, [esp+48h+var_48]
+11178  mov     ebx, dword_539EC
+1117E  add     ebx, edx
+11180  imul    edx, dword_53BDF, 0Ch
+11187  add     edx, eax
+11189  mov     ecx, dword_53A61
+1118F  mov     [ecx+edx*4], ebx
+11192  inc     eax
+11193  cmp     eax, 0Ch
+11196  jl      short loc_11172
+11198  mov     eax, [esp+48h+var_14]
+1119C  add     dword_539EC, eax
+111A2  mov     edx, dword_53BDF
+111A8  lea     eax, [edx+1]
+111AB  mov     dword_53BDF, eax
+111B0  mov     eax, edx
+111B2  add     esp, 38h
+111B5  pop     ebp
+111B6  pop     edi
+111B7  pop     esi
+111B8  pop     ebx
+111B9  retn
+
+===== 145CD  size=88 =====
+145CD  push    18h
+145D2  call    sub_3702F
+145D7  push    ebx
+145D8  push    esi
+145D9  push    edi
+145DA  mov     edi, [esp+0Ch+arg_0]
+145DE  mov     ebx, dword_53A45
+145E4  xor     esi, esi
+145E6  jmp     short loc_145EC
+145E8  add     ebx, 50h ; 'P'
+145EB  inc     esi
+145EC  cmp     esi, dword_53BEB
+145F2  jge     short loc_145C9
+145F4  movzx   eax, byte ptr [ebx]
+145F7  movzx   ecx, byte ptr [ebx+1]
+145FB  test    byte ptr [ebx+5], 1
+145FF  jnz     short loc_145E8
+14601  test    edi, edi
+14603  jnz     short loc_1460D
+14605  movzx   edx, byte ptr [ebx+6]
+14609  test    edx, edx
+1460B  jnz     short loc_14619
+1460D  test    edi, edi
+1460F  jz      short loc_145E8
+14611  movzx   edx, byte ptr [ebx+6]
+14615  test    edx, edx
+14617  jnz     short loc_145E8
+14619  push    ecx
+1461A  push    eax
+1461B  call    sub_14625
+14620  add     esp, 8
+14623  jmp     short loc_145E8
+
+===== 14625  size=130 =====
+14625  push    14h
+1462A  call    sub_3702F
+1462F  push    ebx
+14630  push    esi
+14631  mov     ebx, [esp+8+arg_0]
+14635  mov     esi, [esp+8+arg_4]
+14639  test    ebx, ebx
+1463B  jz      short loc_1464A
+1463D  push    esi
+1463E  lea     eax, [ebx-1]
+14641  push    eax
+14642  call    sub_146A7
+14647  add     esp, 8
+1464A  test    esi, esi
+1464C  jz      short loc_1465B
+1464E  lea     eax, [esi-1]
+14651  push    eax
+14652  push    ebx
+14653  call    sub_146A7
+14658  add     esp, 8
+1465B  mov     eax, dword_53AC1
+14660  dec     eax
+14661  cmp     ebx, eax
+14663  jge     short loc_14672
+14665  push    esi
+14666  lea     eax, [ebx+1]
+14669  push    eax
+1466A  call    sub_146A7
+1466F  add     esp, 8
+14672  mov     eax, dword_53AC5
+14677  dec     eax
+14678  cmp     esi, eax
+1467A  jge     short loc_14689
+1467C  lea     eax, [esi+1]
+1467F  push    eax
+14680  push    ebx
+14681  call    sub_146A7
+14686  add     esp, 8
+14689  imul    esi, dword_53AC1
+14690  lea     eax, [ebx+esi]
+14693  shl     eax, 2
+14696  mov     ebx, dword_53A51
+1469C  add     eax, ebx
+1469E  add     eax, 6
+146A1  or      byte ptr [eax], 40h
+146A4  pop     esi
+146A5  pop     ebx
+146A6  retn
+
+===== 146A7  size=42 =====
+146A7  push    4
+146AC  call    sub_3702F
+146B1  mov     edx, [esp+arg_4]
+146B5  imul    edx, dword_53AC1
+146BC  add     edx, [esp+arg_0]
+146C0  shl     edx, 2
+146C3  mov     eax, dword_53A51
+146C8  add     eax, edx
+146CA  add     eax, 6
+146CD  or      byte ptr [eax], 80h
+146D0  retn
+
+===== 1B750  size=237 =====
+1B750  push    24h ; '$'
+1B755  call    sub_3702F
+1B75A  push    ebx
+1B75B  push    esi
+1B75C  push    edi
+1B75D  sub     esp, 10h
+1B760  mov     edx, [esp+1Ch+arg_0]
+1B764  mov     eax, edx
+1B766  shl     eax, 2
+1B769  add     eax, edx
+1B76B  shl     eax, 4
+1B76E  mov     edi, dword_53A45
+1B774  add     edi, eax
+1B776  movsx   eax, word ptr [edi+37h]
+1B77A  mov     [esp+1Ch+var_14], eax
+1B77E  movsx   eax, word ptr [edi+39h]
+1B782  mov     [esp+1Ch+var_10], eax
+1B786  movsx   eax, word ptr [edi+3Eh]
+1B78A  mov     [esp+1Ch+var_18], eax
+1B78E  movzx   eax, byte ptr [edi+24h]
+1B792  test    eax, eax
+1B794  jz      short loc_1B79B
+1B796  add     [esp+1Ch+var_18], 0Fh
+1B79B  mov     eax, [esp+1Ch+var_18]
+1B79F  mov     [esp+1Ch+var_1C], eax
+1B7A2  xor     esi, esi
+1B7A4  jmp     short loc_1B7A7
+1B7A6  inc     esi
+1B7A7  cmp     esi, 8
+1B7AA  jge     short loc_1B7E7
+1B7AC  lea     eax, [esi+esi]
+1B7AF  add     eax, edi
+1B7B1  add     eax, 0Ah
+1B7B4  test    byte ptr [eax], 40h
+1B7B7  jz      short loc_1B7A6
+1B7B9  movzx   eax, byte ptr [eax+1]
+1B7BD  push    eax
+1B7BE  call    sub_4E8BC
+1B7C3  add     esp, 4
+1B7C6  movsx   edx, word ptr [eax+1]
+1B7CA  add     [esp+1Ch+var_14], edx
+1B7CE  movsx   edx, word ptr [eax+5]
+1B7D2  add     [esp+1Ch+var_10], edx
+1B7D6  movsx   edx, word ptr [eax+3]
+1B7DA  add     [esp+1Ch+var_1C], edx
+1B7DD  movsx   eax, word ptr [eax+7]
+1B7E1  add     [esp+1Ch+var_18], eax
+1B7E5  jmp     short loc_1B7A6
+1B7E7  movzx   eax, byte ptr [edi+22h]
+1B7EB  test    eax, eax
+1B7ED  jz      short loc_1B802
+1B7EF  fild    [esp+1Ch+var_14]
+1B7F3  fmul    dbl_5018D
+1B7F9  call    __CHP
+1B7FE  fistp   [esp+1Ch+var_14]
+1B802  movzx   eax, byte ptr [edi+23h]
+1B806  test    eax, eax
+1B808  jz      short loc_1B81D
+1B80A  fild    [esp+1Ch+var_10]
+1B80E  fmul    dbl_5018D
+1B814  call    __CHP
+1B819  fistp   [esp+1Ch+var_10]
+1B81D  mov     eax, [esp+1Ch+var_14]
+1B821  mov     [edi+48h], ax
+1B825  mov     eax, [esp+1Ch+var_10]
+1B829  mov     [edi+4Ah], ax
+1B82D  mov     eax, [esp+1Ch+var_1C]
+1B830  mov     [edi+4Ch], ax
+1B834  mov     eax, [esp+1Ch+var_18]
+1B838  jmp     loc_114FB
+
+===== 32999  size=895 =====
+32999  push    3Ch ; '<'
+3299E  call    sub_3702F
+329A3  push    ebx
+329A4  push    esi
+329A5  push    edi
+329A6  push    ebp
+329A7  sub     esp, 10h
+329AA  push    5Fh ; '_'
+329AC  push    0
+329AE  push    offset aFdotherDat; "FDOTHER.DAT"
+329B3  call    sub_111BA
+329B8  add     esp, 0Ch
+329BB  mov     [esp+20h+var_20], eax
+329BE  push    9
+329C0  push    0
+329C2  push    offset aFdotherDat; "FDOTHER.DAT"
+329C7  call    sub_111BA
+329CC  add     esp, 0Ch
+329CF  mov     [esp+20h+var_1C], eax
+329D3  push    25680h
+329D8  call    malloc
+329DD  add     esp, 4
+329E0  mov     [esp+20h+var_18], eax
+329E4  push    25680h
+329E9  push    dword_53A49
+329EF  push    eax
+329F0  call    memmove
+329F5  add     esp, 0Ch
+329F8  mov     edi, dword_53BEB
+329FE  push    [esp+20h+arg_0]
+32A02  call    sub_10B4E
+32A07  add     esp, 4
+32A0A  mov     [esp+20h+var_14], 0
+32A12  jmp     loc_32BB5
+32A17  inc     esi
+32A18  cmp     esi, dword_53BEB
+32A1E  jge     loc_32AC2
+32A24  mov     eax, esi
+32A26  shl     eax, 2
+32A29  add     eax, esi
+32A2B  shl     eax, 4
+32A2E  mov     edx, dword_53A45
+32A34  add     eax, edx
+32A36  movzx   edx, byte ptr [eax]
+32A39  movzx   ebx, byte ptr [eax+1]
+32A3D  mov     eax, dword_53AA9
+32A42  dec     eax
+32A43  cmp     edx, eax
+32A45  jl      short loc_32A17
+32A47  mov     eax, dword_53AA9
+32A4C  add     eax, dword_51A87
+32A52  cmp     edx, eax
+32A54  jg      short loc_32A17
+32A56  cmp     ebx, dword_53AAD
+32A5C  jl      short loc_32A17
+32A5E  mov     eax, dword_53AAD
+32A63  add     eax, dword_51A8B
+32A69  inc     eax
+32A6A  cmp     ebx, eax
+32A6C  jg      short loc_32A17
+32A6E  sub     edx, dword_53AA9
+32A74  lea     eax, [edx-1]
+32A77  imul    eax, 18h
+32A7A  mov     edx, dword_53A49
+32A80  add     edx, 8088h
+32A86  lea     ecx, [edx+eax]
+32A89  mov     edx, ebx
+32A8B  sub     edx, dword_53AAD
+32A91  mov     eax, edx
+32A93  shl     eax, 2
+32A96  add     eax, edx
+32A98  shl     eax, 2
+32A9B  sub     eax, edx
+32A9D  shl     eax, 6
+32AA0  mov     edx, eax
+32AA2  shl     eax, 3
+32AA5  add     eax, edx
+32AA7  add     eax, ecx
+32AA9  sub     eax, 0AB0h
+32AAE  push    1C8h
+32AB3  push    ebp
+32AB4  push    eax
+32AB5  call    sub_4EBAB
+32ABA  add     esp, 0Ch
+32ABD  jmp     loc_32A17
+32AC2  push    0C0h
+32AC7  push    138h
+32ACC  push    1C8h
+32AD1  mov     eax, dword_53A49
+32AD6  add     eax, 8088h
+32ADB  push    eax
+32ADC  push    140h
+32AE1  push    0A0504h
+32AE6  call    sub_11EB0
+32AEB  add     esp, 18h
+32AEE  cmp     [esp+20h+var_14], 6
+32AF3  jnz     loc_32C07
+32AF9  push    25680h
+32AFE  push    [esp+24h+var_18]
+32B02  push    dword_53A49
+32B08  call    memmove
+32B0D  add     esp, 0Ch
+32B10  xor     esi, esi
+32B12  jmp     short loc_32B15
+32B14  inc     esi
+32B15  cmp     esi, edi
+32B17  jge     short loc_32B3B
+32B19  mov     eax, esi
+32B1B  shl     eax, 2
+32B1E  lea     edx, [esi+eax]
+32B21  shl     edx, 4
+32B24  mov     eax, dword_53A45
+32B29  test    byte ptr [edx+eax+5], 1
+32B2E  jnz     short loc_32B14
+32B30  push    esi
+32B31  call    sub_127E0
+32B36  add     esp, 4
+32B39  jmp     short loc_32B14
+32B3B  mov     eax, dword_53A49
+32B40  sub     eax, 0E40h
+32B45  mov     dword_53A49, eax
+32B4A  jmp     short loc_32B4D
+32B4C  inc     esi
+32B4D  cmp     esi, dword_53BEB
+32B53  jge     short loc_32B77
+32B55  mov     eax, esi
+32B57  shl     eax, 2
+32B5A  add     eax, esi
+32B5C  shl     eax, 4
+32B5F  mov     edx, dword_53A45
+32B65  test    byte ptr [edx+eax+5], 1
+32B6A  jnz     short loc_32B4C
+32B6C  push    esi
+32B6D  call    sub_127E0
+32B72  add     esp, 4
+32B75  jmp     short loc_32B4C
+32B77  mov     eax, dword_53A49
+32B7C  add     eax, 0E40h
+32B81  mov     dword_53A49, eax
+32B86  call    sub_129EC
+32B8B  push    25680h
+32B90  push    dword_53A49
+32B96  push    [esp+28h+var_18]
+32B9A  call    memmove
+32B9F  add     esp, 0Ch
+32BA2  call    sub_4E381
+32BA7  push    1
+32BA9  call    sub_17AA9
+32BAE  add     esp, 4
+32BB1  inc     [esp+20h+var_14]
+32BB5  cmp     [esp+20h+var_14], 0Ch
+32BBA  jge     loc_32CED
+32BC0  cmp     [esp+20h+var_14], 1
+32BC5  jnz     short loc_32BD7
+32BC7  push    1
+32BC9  push    0
+32BCB  push    [esp+28h+var_20]
+32BCF  call    sub_25A96
+32BD4  add     esp, 0Ch
+32BD7  push    25680h
+32BDC  push    [esp+24h+var_18]
+32BE0  push    dword_53A49
+32BE6  call    memmove
+32BEB  add     esp, 0Ch
+32BEE  mov     eax, [esp+20h+var_14]
+32BF2  shl     eax, 2
+32BF5  add     eax, [esp+20h+var_1C]
+32BF9  mov     ebp, [esp+20h+var_1C]
+32BFD  add     ebp, [eax+6]
+32C00  mov     esi, edi
+32C02  jmp     loc_32A18
+32C07  cmp     [esp+20h+var_14], 7
+32C0C  jnz     loc_32CB0
+32C12  push    dword_53AAD
+32C18  push    dword_53AA9
+32C1E  push    8
+32C20  push    0Dh
+32C22  push    1C8h
+32C27  mov     eax, dword_53A49
+32C2C  add     eax, 8088h
+32C31  push    eax
+32C32  call    sub_11EEE
+32C37  add     esp, 18h
+32C3A  xor     esi, esi
+32C3C  jmp     short loc_32C3F
+32C3E  inc     esi
+32C3F  cmp     esi, edi
+32C41  jge     short loc_32C65
+32C43  mov     eax, esi
+32C45  shl     eax, 2
+32C48  add     eax, esi
+32C4A  shl     eax, 4
+32C4D  mov     edx, dword_53A45
+32C53  test    byte ptr [edx+eax+5], 1
+32C58  jnz     short loc_32C3E
+32C5A  push    esi
+32C5B  call    sub_127E0
+32C60  add     esp, 4
+32C63  jmp     short loc_32C3E
+32C65  mov     eax, dword_53A49
+32C6A  sub     eax, 8E8h
+32C6F  mov     dword_53A49, eax
+32C74  jmp     short loc_32C77
+32C76  inc     esi
+32C77  cmp     esi, dword_53BEB
+32C7D  jge     short loc_32CA1
+32C7F  mov     eax, esi
+32C81  shl     eax, 2
+32C84  lea     edx, [esi+eax]
+32C87  shl     edx, 4
+32C8A  mov     eax, dword_53A45
+32C8F  test    byte ptr [edx+eax+5], 1
+32C94  jnz     short loc_32C76
+32C96  push    esi
+32C97  call    sub_127E0
+32C9C  add     esp, 4
+32C9F  jmp     short loc_32C76
+32CA1  mov     eax, dword_53A49
+32CA6  add     eax, 8E8h
+32CAB  jmp     loc_32B81
+32CB0  cmp     [esp+20h+var_14], 8
+32CB5  jnz     loc_32BA2
+32CBB  push    dword_53AAD
+32CC1  push    dword_53AA9
+32CC7  push    8
+32CC9  push    0Dh
+32CCB  push    1C8h
+32CD0  mov     eax, dword_53A49
+32CD5  add     eax, 8088h
+32CDA  push    eax
+32CDB  call    sub_11EEE
+32CE0  add     esp, 18h
+32CE3  call    sub_127A9
+32CE8  jmp     loc_32B8B
+32CED  push    [esp+20h+var_1C]
+32CF1  call    free
+32CF6  add     esp, 4
+32CF9  push    [esp+20h+var_18]
+32CFD  call    free
+32D02  add     esp, 4
+32D05  push    [esp+20h+var_20]
+32D08  call    free
+32D0D  add     esp, 4
+32D10  add     esp, 10h
+32D13  pop     ebp
+32D14  pop     edi
+32D15  pop     esi
+32D16  pop     ebx
+32D17  retn

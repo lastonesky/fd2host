@@ -44,7 +44,7 @@
 | `keycheck` / `typecheck` | 低内存镜像 + **确定性时钟** | 原机器码与转译 C 共用同一个时钟桩（每读一次 tick 加一） |
 | `keyscheck` | 便携键表 `src/keys.c` vs `MapVirtualKeyA`（Windows 参考） | 每个键的 BIOS 扫描码 + VK 双向映射 + `0xE0` 规则；`--dump` 打全表（Linux 入口层的参考）。`build.ps1 -Target keyscheck`（`rounds/16` §46.3） |
 | `vmcheck` | 脚本 VM `0x15F84`：**完整事件序列**（12 个被调函数全桩化）+ 全局 + 返回值 | 词流由合法生成器产生；`VMONLY=<id>` `VMTRACE=1` 取单例现场（定位崩溃/差异用） |
-| `ev2check` | 批次 2+3+4（`game/ev2.c`+`ev3.c`+`ev4.c`，68 个）：27 个服务记录桩的事件序列 + **整个 obj1+obj2** + 3 个被指针缓冲逐字节 | **`--only=addr,...` 按地址跑子集**（批量转译每 3-5 个验一次）、`--cases=N`；`rounds/39` §39.3、`rounds/40` §40.2 |
+| `ev2check` | 批次 2–5（`game/ev2.c`+`ev3.c`+`ev4.c`+`ev5.c`，96 个）：27 个服务记录桩的事件序列 + **整个 obj1+obj2** + 3 个被指针缓冲逐字节 | **`--only=addr,...` 按地址跑子集**（批量转译每 3-5 个验一次）、`--cases=N`；`rounds/39` §39.3、`rounds/40` §40.2 |
 | `framediff.ps1` | 两个 `--screenshot` BMP 的逐像素差 | repl A/B：差值必须 ≤ none↔none 基线噪声 |
 | **Ghidra 参考镜像** | `python tools/ghidra_objects.py`：从本地桥（`docs/ENVIRONMENT.md`）把三个 object 区间重导成 `build/object1.bin..3`（参考文件是 gitignored 的，丢了就这么恢复）；导完跑 `letest`，应当 `reference check OK, exact match` |
 | 查某条 fixup 记录 | `python tools/fixup_dump.py [FD2.EXE] [地址]`：按 `le.c` 的语法走 fixup 表，不带地址时列出**所有会被跳过的记录**（跨页/越界源，`rounds/14` §44.2） |

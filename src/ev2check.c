@@ -32,6 +32,11 @@
 #include "game/ev2.h"
 #include "game/ev3.h"
 #include "game/ev4.h"
+#include "game/ev5.h"
+
+#define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(dos_lowmem_base + (off)))
+#define dword_53AC1 (*(uint32_t *)(uintptr_t)0x00053AC1u)
+#define dword_53AC5 (*(uint32_t *)(uintptr_t)0x00053AC5u)
 
 #define W32(x)  (*(uint32_t *)(uintptr_t)(x))
 #define W8(x)   (*(uint8_t  *)(uintptr_t)(x))
@@ -255,6 +260,7 @@ static void __cdecl stub_mapcell(int x, int y, uint8_t *out)
         out[1] = (uint8_t)y;
         out[2] = (uint8_t)(((unsigned)(x ^ y)) % 5u);
         out[3] = 0;
+        out[4] = (uint8_t)(((x + y) & 1) ? 0x20 : 0x00);  /* cell kind flag */
     }
 }
 static uint8_t g_resbuf[0x10000];
@@ -299,6 +305,12 @@ uint32_t dos_lowmem_base = 0x00070000u;
 static int g_key = 0x1C, g_kbd_countdown = 0;
 static uint8_t g_script[20] = { 3, 2,2, 3,1, 4,2,  0x82,2, 3,1, 4,2,  0x80,2, 5,1, 6,2 };
 static uint8_t g_screen[64000];
+static uint8_t *g_recbase;          /* current side's record buffer */
+static int g_rx, g_ry, g_ra, g_rb, g_rv;
+static void __cdecl stub_outp(int port, int val)
+{
+    ev_log(EV_EXT, 13, port, val, 0, 0, 0, 0, 0, 0);
+}
 static void __cdecl stub_11d40(int s, int e, int a) { ev_log(EV_EXT, 1, s, e, a, 0, 0, 0, 0, 0); }
 static void __cdecl stub_11eb0(void *d, int dp, const void *s, int sp, int w, int h)
 {
@@ -362,6 +374,9 @@ static void setup_world(uint32_t s)
     memcpy((void *)(uintptr_t)SNAP2_BASE, obj2_p, SNAP2_N);
     seed = s;
     fill_rand(rec_in, REC_BYTES);
+    rec_in[19604] = (uint8_t)(rnd() % 6u);   /* 0x314DE's p[4] must be 0..5 */
+    rec_in[4014] = 0x40; rec_in[4015] = 0;   /* 0x26C9B table offset = 0x40 */
+    rec_in[4016] = 0;    rec_in[4017] = 0;
     fill_rand(state_in, STATE_N);
     fill_rand(stat_in, STATUS_N);
     fill_rand(strm_in, STREAM_N);
@@ -395,6 +410,21 @@ static void setup_world(uint32_t s)
     W32(0x53C5B) = (uint32_t)(uintptr_t)g_screen;
     W32(0x53C5F) = (uint32_t)(uintptr_t)g_screen;
     W32(0x53C63) = (uint32_t)(uintptr_t)g_screen;
+    W32(0x53A51) = (uint32_t)(uintptr_t)(rec_o + 2000);   /* map cells   */
+    W32(0x53BF7) = (uint32_t)(uintptr_t)(rec_o + 3000);   /* party rows  */
+    W32(0x53F66) = (uint32_t)(uintptr_t)(rec_o + 4000);   /* 6-byte tbl  */
+    W32(0x53AC1) = 1 + (rnd() % 8u);
+    W32(0x53AC5) = 1 + (rnd() % 8u);
+    W32(0x53BFB) = 2 + (rnd() % 8u);
+    W32(0x53A0C) = 0xDEADBEEFu;   /* != the BDA tick, so 0x13460 exits */
+    rec_o[4000 + 14] = 0x40; rec_o[4000 + 15] = 0;    /* table offset */
+    rec_o[2000 + 4 * 0 + 7] = 1;                      /* reveal a cell */
+    g_recbase = rec_o;
+    g_rx = (int)(rnd() % (unsigned)dword_53AC1);
+    g_ry = (int)(rnd() % (unsigned)dword_53AC5);
+    g_ra = (int)(rnd() % 64u);
+    g_rb = (int)(rnd() % 256u);
+    g_rv = (int)(rnd() % 6u);
     *(volatile uint16_t *)(uintptr_t)(dos_lowmem_base + 0x46C) = (uint16_t)(rnd() & 0xFFFFu);
     g_key  = (int)(rnd() % 256u);
     g_kbd_countdown = (int)(rnd() % 3u);
@@ -408,6 +438,12 @@ static void point_c_side(void)
     W32(0x53AD5) = (uint32_t)(uintptr_t)stat_c;
     W32(0x53A79) = (uint32_t)(uintptr_t)strm_c;
     W32(0x53A7D) = (uint32_t)(uintptr_t)strm_c;
+    W32(0x53A51) = (uint32_t)(uintptr_t)(rec_c + 2000);
+    W32(0x53BF7) = (uint32_t)(uintptr_t)(rec_c + 3000);
+    W32(0x53F66) = (uint32_t)(uintptr_t)(rec_c + 4000);
+    rec_c[4000 + 14] = 0x40; rec_c[4000 + 15] = 0;
+    rec_c[2000 + 7] = 1;
+    g_recbase = rec_c;
 }
 
 static void capture(struct cap *c)
@@ -432,6 +468,9 @@ static void capture_c(struct cap *c)
     W32(0x53AD5) = (uint32_t)(uintptr_t)stat_o;
     W32(0x53A79) = (uint32_t)(uintptr_t)strm_o;
     W32(0x53A7D) = (uint32_t)(uintptr_t)strm_o;
+    W32(0x53A51) = (uint32_t)(uintptr_t)(rec_o + 2000);
+    W32(0x53BF7) = (uint32_t)(uintptr_t)(rec_o + 3000);
+    W32(0x53F66) = (uint32_t)(uintptr_t)(rec_o + 4000);
     memcpy(c->obj1, (const void *)(uintptr_t)SNAP_BASE, SNAP_N);
     memcpy(c->obj2, (const void *)(uintptr_t)SNAP2_BASE, SNAP2_N);
     memcpy(c->vga, (const void *)(uintptr_t)VGA_BASE, VGA_N);
@@ -644,6 +683,87 @@ static void c_1E1DC(void) { ev4_1E1DC(g_arg % 64); }
 static void o_24B4D(void) { O_24B4D(g_arg % 4); }
 static void c_24B4D(void) { ev4_24B4D(g_arg % 4); }
 
+/* --- batch 5 (src/game/ev5.c) ----------------------------------------- */
+typedef int  (*h1i_fn)(int);
+typedef void (*v1p_fn)(void *);
+typedef void (*v2p_fn)(int, void *);
+typedef void (*v3p_fn)(void *, int, int);
+typedef void *(*p1p_fn)(const void *);
+typedef void *(*p0_fn)(void);
+typedef int  (*i1p_fn)(const void *);
+typedef void (*h4_fn)(int, int, int, int);
+#define O_2860A ((h2i_fn)(uintptr_t)0x0002860Au)
+#define O_146A7 ((h2_fn)(uintptr_t)0x000146A7u)
+#define O_13460 ((h0i_fn)(uintptr_t)0x00013460u)
+#define O_13536 ((h0_fn)(uintptr_t)0x00013536u)
+#define O_1D4CB ((p0_fn)(uintptr_t)0x0001D4CBu)
+#define O_173E7 ((v1p_fn)(uintptr_t)0x000173E7u)
+#define O_24B14 ((h1i_fn)(uintptr_t)0x00024B14u)
+#define O_25052 ((h2_fn)(uintptr_t)0x00025052u)
+#define O_25089 ((h0_fn)(uintptr_t)0x00025089u)
+#define O_34317 ((v2p_fn)(uintptr_t)0x00034317u)
+#define O_1F6EF ((h4_fn)(uintptr_t)0x0001F6EFu)
+#define O_1C220 ((h1i_fn)(uintptr_t)0x0001C220u)
+#define O_1E5C0 ((h1_fn)(uintptr_t)0x0001E5C0u)
+#define O_2B749 ((i1p_fn)(uintptr_t)0x0002B749u)
+#define O_26C9B ((v3p_fn)(uintptr_t)0x00026C9Bu)
+#define O_314DE ((p1p_fn)(uintptr_t)0x000314DEu)
+#define O_1B5F1 ((h1i_fn)(uintptr_t)0x0001B5F1u)
+#define O_14B16 ((i1p_fn)(uintptr_t)0x00014B16u)
+#define O_203BD ((h3_fn)(uintptr_t)0x000203BDu)
+#define O_208CF ((h0_fn)(uintptr_t)0x000208CFu)
+#define O_20AAF ((h0_fn)(uintptr_t)0x00020AAFu)
+#define O_20BF5 ((h0_fn)(uintptr_t)0x00020BF5u)
+#define O_20B72 ((h0_fn)(uintptr_t)0x00020B72u)
+#define O_205B4 ((h0_fn)(uintptr_t)0x000205B4u)
+#define O_205BE ((h0_fn)(uintptr_t)0x000205BEu)
+#define O_1F04A ((h2_fn)(uintptr_t)0x0001F04Au)
+#define O_1F0DC ((h2i_fn)(uintptr_t)0x0001F0DCu)
+#define O_1B653 ((v1p_fn)(uintptr_t)0x0001B653u)
+#define E5I(a) \
+    static void o_##a(void) { (void)O_##a(g_arg); } \
+    static void c_##a(void) { (void)ev5_##a(g_arg); }
+#define E5V(a) \
+    static void o_##a(void) { O_##a(); } \
+    static void c_##a(void) { ev5_##a(); }
+E5I(24B14) E5I(1C220) E5I(1B5F1)
+E5V(13536) E5V(25089) E5V(208CF) E5V(20AAF) E5V(20BF5) E5V(20B72)
+E5V(205B4) E5V(205BE)
+static void o_2860A(void) { (void)O_2860A(g_arg, g_argx); }
+static void c_2860A(void) { (void)ev5_2860A(g_arg, g_argx); }
+static void o_146A7(void) { O_146A7(g_rx, g_ry); }
+static void c_146A7(void) { ev5_146A7(g_rx, g_ry); }
+static void o_13460(void) { (void)O_13460(); }
+static void c_13460(void) { (void)ev5_13460(); }
+static void o_1D4CB(void) { (void)O_1D4CB(); }
+static void c_1D4CB(void) { (void)ev5_1D4CB(); }
+static void o_173E7(void) { O_173E7(g_recbase + 19000); }
+static void c_173E7(void) { ev5_173E7((int *)(g_recbase + 19000)); }
+static void o_25052(void) { O_25052(g_ra % 64, g_rv); }
+static void c_25052(void) { ev5_25052(g_ra % 64, g_rv); }
+static void o_34317(void) { O_34317(g_ra, g_recbase + 17000); }
+static void c_34317(void) { ev5_34317(g_ra, g_recbase + 17000); }
+static void o_1F6EF(void) { O_1F6EF(g_ra * 4, g_ry * 20, g_rb, 1 + g_rv * 4); }
+static void c_1F6EF(void) { ev5_1F6EF(g_ra * 4, g_ry * 20, g_rb, 1 + g_rv * 4); }
+static void o_1E5C0(void) { O_1E5C0(g_rv); }
+static void c_1E5C0(void) { ev5_1E5C0(g_rv); }
+static void o_2B749(void) { (void)O_2B749(g_recbase + 19500); }
+static void c_2B749(void) { (void)ev5_2B749(g_recbase + 19500); }
+static void o_26C9B(void) { O_26C9B(g_recbase + 18000, 6 + g_rv * 4, g_rv); }
+static void c_26C9B(void) { ev5_26C9B(g_recbase + 18000, 6 + g_rv * 4, g_rv); }
+static void o_314DE(void) { (void)O_314DE(g_recbase + 19600); }
+static void c_314DE(void) { (void)ev5_314DE(g_recbase + 19600); }
+static void o_14B16(void) { (void)O_14B16(g_recbase + 15000); }
+static void c_14B16(void) { (void)ev5_14B16(g_recbase + 15000); }
+static void o_203BD(void) { O_203BD(g_ra % 64, g_rb % 64, (g_rv * 10) % 64); }
+static void c_203BD(void) { ev5_203BD(g_ra % 64, g_rb % 64, (g_rv * 10) % 64); }
+static void o_1F04A(void) { O_1F04A(g_arg % 8, g_argx % 8); }
+static void c_1F04A(void) { ev5_1F04A(g_arg % 8, g_argx % 8); }
+static void o_1F0DC(void) { (void)O_1F0DC(g_arg % 8, g_argx % 8); }
+static void c_1F0DC(void) { (void)ev5_1F0DC(g_arg % 8, g_argx % 8); }
+static void o_1B653(void) { O_1B653(g_recbase + 16000); }
+static void c_1B653(void) { ev5_1B653(g_recbase + 16000); }
+
 #define EV3_PAIR(a, name) \
     static void o_##name(void) { O_##name(g_arg); } \
     static void c_##name(void) { ev3_##name(g_arg); }
@@ -737,6 +857,35 @@ static const struct entry g_entries[] = {
     { 0x1E1DC, "1E1DC", o_1E1DC, c_1E1DC },
     { 0x24B4D, "24B4D", o_24B4D, c_24B4D },
     { 0x196CB, "196CB", o_196CB, c_196CB },
+    /* batch 5 (src/game/ev5.c) */
+    { 0x2860A, "2860A", o_2860A, c_2860A },
+    { 0x146A7, "146A7", o_146A7, c_146A7 },
+    { 0x13460, "13460", o_13460, c_13460 },
+    { 0x13536, "13536", o_13536, c_13536 },
+    { 0x1D4CB, "1D4CB", o_1D4CB, c_1D4CB },
+    { 0x173E7, "173E7", o_173E7, c_173E7 },
+    { 0x24B14, "24B14", o_24B14, c_24B14 },
+    { 0x25052, "25052", o_25052, c_25052 },
+    { 0x25089, "25089", o_25089, c_25089 },
+    { 0x34317, "34317", o_34317, c_34317 },
+    { 0x1F6EF, "1F6EF", o_1F6EF, c_1F6EF },
+    { 0x1C220, "1C220", o_1C220, c_1C220 },
+    { 0x1E5C0, "1E5C0", o_1E5C0, c_1E5C0 },
+    { 0x2B749, "2B749", o_2B749, c_2B749 },
+    { 0x26C9B, "26C9B", o_26C9B, c_26C9B },
+    { 0x314DE, "314DE", o_314DE, c_314DE },
+    { 0x1B5F1, "1B5F1", o_1B5F1, c_1B5F1 },
+    { 0x14B16, "14B16", o_14B16, c_14B16 },
+    { 0x203BD, "203BD", o_203BD, c_203BD },
+    { 0x208CF, "208CF", o_208CF, c_208CF },
+    { 0x20AAF, "20AAF", o_20AAF, c_20AAF },
+    { 0x20BF5, "20BF5", o_20BF5, c_20BF5 },
+    { 0x20B72, "20B72", o_20B72, c_20B72 },
+    { 0x205B4, "205B4", o_205B4, c_205B4 },
+    { 0x205BE, "205BE", o_205BE, c_205BE },
+    { 0x1F04A, "1F04A", o_1F04A, c_1F04A },
+    { 0x1F0DC, "1F0DC", o_1F0DC, c_1F0DC },
+    { 0x1B653, "1B653", o_1B653, c_1B653 },
 };
 #define NENT (sizeof g_entries / sizeof g_entries[0])
 
@@ -805,6 +954,7 @@ static int patch_lowmem_refs(le_image *le, uint32_t mirror)
 int main(int argc, char **argv)
 {
     le_image le;
+    setvbuf(stdout, NULL, _IONBF, 0);
     int      applied = 0;
     unsigned cases = 200, i, k;
 
@@ -874,9 +1024,11 @@ int main(int argc, char **argv)
     HOOK(0x10620, stub_10620);
     HOOK(0x4E31C, stub_4e31c);
     HOOK(0x4EB48, stub_4eb48);
+    HOOK(0x37AE5, stub_outp);
 
     for (i = 0; i < NENT; i++) {
         if (!selected[i]) continue;
+        if (getenv("EVCHECK_TRACE")) printf("== %s ==\n", g_entries[i].name);
         for (k = 0; k < cases; k++) {
             seed = 0xE2C0DEu + 0x9E3779B9u * (uint32_t)(i * cases + k);
             run_pair((unsigned)(i * cases + k), g_entries[i].name,

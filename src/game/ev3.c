@@ -216,7 +216,7 @@ void ev3_35833(int arg)
 void ev3_35854(int arg)
 {
     static const uint8_t table5[5] = { 0x1D, 0x2B, 0x33, 0x3D, 0x47 };
-    uint8_t out[4];
+    uint8_t out[8];   /* map_cell_info writes 5 bytes (the +4 kind flag) */
     int     i;
 
     ORIG_FLUSH();
@@ -254,14 +254,14 @@ void ev3_35A0D(int arg)
     ORIG_MSG_OPEN(*(uint8_t *)(uintptr_t)(dword_53A45 + REC_STRIDE * arg + 7));
     e = ORIG_FIND(arg, 0xD0);
     if (e == -1) {
-        vm_sub(dword_53A79, 2);
+        vm(dword_53A79, 2, 0xA951F);
         ORIG_DLG_BLIT(0);
         ORIG_DLG_WAIT(0);
         ORIG_MSG_CLOSE();
         return;
     }
     ORIG_SLOT_REMV(arg, e);
-    vm_sub(dword_53A79, 3);
+    vm(dword_53A79, 3, 0xA951F);
     ORIG_DLG_WAIT(0);
     ORIG_MSG_CLOSE();
 
