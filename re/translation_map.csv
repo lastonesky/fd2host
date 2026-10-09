@@ -43,6 +43,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x14B16,ev5_14B16,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x15E71,dlg_snap_restore,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x15E9E,dlg_snap_save,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
+0x15F0E,res_draw_subimage,src/game/res.c,res,rescheck,160,wired (repl.c),LMI resource loader; heap via guest_mem
 0x15F84,vm_run,src/game/vm.c,vm,vmcheck,5512,wired (repl.c),script/text VM 0x15F84
 0x164E8,dlg_type_step,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x16559,dlg_blit_dato,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"

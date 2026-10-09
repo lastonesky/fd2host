@@ -83,3 +83,25 @@ void res_blit6(void *dst, int pitch, void *buf, int index)
 
     rle_decode(src, 0, 0, dst, pitch, -1);
 }
+
+/* 0x15F0E - save background + draw a sub-image over it. */
+typedef void (*saverect_fn)(void *, int, int, const void *, int, int);
+typedef void (*rle2trans_fn)(void *, const void *, int);
+#define ORIG_SAVERECT  ((saverect_fn) (uintptr_t)0x0004ECBFu)
+#define ORIG_RLE2TRANS ((rle2trans_fn)(uintptr_t)0x0004EBABu)
+
+void *res_draw_subimage(const void *tbl, void *surface, int stride,
+                        int base, int row, int index)
+{
+    const uint8_t *e = (const uint8_t *)tbl
+        + *(const uint32_t *)(const void *)((const uint8_t *)tbl
+                                            + (uint32_t)index * 4u + 6u);
+    int w = *(const int16_t *)e;
+    int h = *((const int16_t *)e + 1);
+    int off = row * stride + base;
+    void *rec = guest_malloc((size_t)w * (size_t)h + 8u);
+
+    ORIG_SAVERECT(rec, w, h, surface, off, stride);
+    ORIG_RLE2TRANS((uint8_t *)surface + off, e, stride);
+    return rec;
+}

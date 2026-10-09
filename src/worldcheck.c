@@ -27,6 +27,8 @@
 #include "game/map.h"
 #include "game/util.h"
 #include "game/unit_load.h"
+#include "game/gfx.h"
+#include "game/rle2.h"
 
 #define W32(x) (*(uint32_t *)(uintptr_t)(x))
 #define R_U32(x) (*(uint32_t *)(uintptr_t)(x))
@@ -68,6 +70,7 @@ typedef void (*h1_fn)(int);
 
 /* 0x10B4E is not under test here: replace it with a no-op on both sides. */
 static void __cdecl stub_build(int idx) { (void)idx; }
+static void __cdecl stub_delay0(int ms) { (void)ms; }
 static int  __cdecl stub_entrydata(int idx, void *fh) { (void)idx; (void)fh; return 0; }
 static void __cdecl stub_metrics(int idx) { (void)idx; }
 
@@ -79,6 +82,7 @@ static uint8_t  rec_o[0x2000], rec_c[0x2000];
 static uint8_t  tile_o[0x40000], tile_c[0x40000];
 
 #define dword_53A45 (*(uint32_t *)(uintptr_t)0x00053A45u)
+#define dword_53A49 (*(uint32_t *)(uintptr_t)0x00053A49u)
 #define dword_53AFF (*(uint32_t *)(uintptr_t)0x00053AFFu)
 #define dword_53B03 (*(uint32_t *)(uintptr_t)0x00053B03u)
 #define dword_53BE7 (*(uint32_t *)(uintptr_t)0x00053BE7u)
@@ -217,6 +221,49 @@ static void run_party(int c)
     failures += cmp_cap("world_load_party", c, &co, &cc);
 }
 
+/* --- heap leaf (0x15F0E res_draw_subimage) ------------------------------ */
+typedef void *(*subimage_fn)(const void *, void *, int, int, int, int);
+#define O_SUBIMAGE ((subimage_fn)(uintptr_t)0x00015F0Eu)
+
+static uint8_t g_tbl[128];          /* sub-image offset table + one entry */
+static uint8_t heap_o[0x40000], heap_c[0x40000];   /* dword_53A49 surface */
+
+static int cmp_buf(const char *what, int c, const void *a, const void *b, size_t n)
+{
+    if (memcmp(a, b, n) != 0) {
+        size_t i; for (i = 0; i < n; i++) if (((const uint8_t *)a)[i] != ((const uint8_t *)b)[i]) break;
+        printf("FAIL %s case %d: buffer byte %u orig=%02X ours=%02X\n", what, c,
+               (unsigned)i, ((const uint8_t *)a)[i], ((const uint8_t *)b)[i]);
+        return 1;
+    }
+    return 0;
+}
+
+static void run_subimage(int c)
+{
+    void *ro, *rc;
+    int stride = 456, base = (int)(rnd() % 64), row = (int)(rnd() % 64), idx = (int)(rnd() % 8);
+
+    seed = 0xA5A50000u ^ (uint32_t)c;
+    memset(g_tbl, 0, sizeof g_tbl);
+    { int k; for (k = 0; k < 8; k++) *(uint32_t *)(void *)(g_tbl + 6 + k * 4) = 48; }
+    { uint8_t *e = g_tbl + 48; int k;
+      *(uint16_t *)(void *)e = 4; *(uint16_t *)(void *)(e + 2) = 4;
+      for (k = 0; k < 4; k++) { e[4 + 2*k] = 0x03; e[4 + 2*k + 1] = (uint8_t)(0x30 + idx); } }
+
+    memset(heap_o, 0x11, sizeof heap_o);
+    dword_53A49 = (uint32_t)(uintptr_t)heap_o;
+    ro = O_SUBIMAGE(g_tbl, heap_o, stride, base, row, idx);
+    memset(heap_c, 0x11, sizeof heap_c);
+    dword_53A49 = (uint32_t)(uintptr_t)heap_c;
+    rc = res_draw_subimage(g_tbl, heap_c, stride, base, row, idx);
+    cases_run++;
+    failures += cmp_buf("res_draw_subimage", c, heap_o, heap_c, 0x40000);
+    if (ro && rc)
+        failures += cmp_buf("res_draw_subimage.rec", c, ro, rc, 4u * 4u + 8u);
+    free(ro); free(rc);
+}
+
 int main(int argc, char **argv)
 {
     le_image le;
@@ -247,13 +294,16 @@ int main(int argc, char **argv)
     HOOK(0x11019, stub_entrydata);
     HOOK(0x1B750, stub_metrics);
     HOOK(0x10B4E, stub_build);        /* not under test: keeps FD2.TMP out */
+    HOOK(0x3790A, stub_delay0);       /* heap leaves pause a lot; no-op them */
+    HOOK(0x4ECBF, gfx_save_rect);     /* heap leaf: go through the C helpers */
+    HOOK(0x4EBAB, rle2_blit_trans);
 
     {
         int modes[10] = { 9, 17, 21, 22, 23, 24, 25, 27, 28, 29 };
         for (c = 0; c < cases; c++) {
             int m = modes[c % 10];
             if (c & 1)
-                run_party(m);
+                run_subimage(m);
             else
                 run_tiles(m);
             if (failures) break;

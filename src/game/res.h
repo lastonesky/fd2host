@@ -46,3 +46,10 @@ void res_blit(void *buf, int index, void *dst, int pitch, int mode);
 /* 0x16886 - like res_blit but the offset table starts at +6 and the sub-image
  * is always decoded at (0,0) with mode -1. */
 void res_blit6(void *dst, int pitch, void *buf, int index);
+
+/* 0x15F0E - save the w*h background rectangle at surface+`offset` into a fresh
+ * record, then draw the RLE sub-image `index` of `tbl` transparently over it.
+ * `offset` is `row * stride + base`. Returns the saved record (caller-owned,
+ * game heap). */
+void *res_draw_subimage(const void *tbl, void *surface, int stride,
+                        int base, int row, int index);
