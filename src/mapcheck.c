@@ -80,6 +80,8 @@ typedef int  (*revealr_fn)(int, int, uint8_t *, int, int, int);
 typedef void (*icons_fn)(int, int, int, const uint8_t *);
 #define ORIG_ICONS   ((icons_fn)      (uintptr_t)0x0001C2DAu)
 #define ORIG_ICONSANIM ((icons_fn)    (uintptr_t)0x0001C4CCu)
+typedef void (*slide_fn)(int, int);
+#define ORIG_SLIDE   ((slide_fn)      (uintptr_t)0x00012CEAu)
 
 #define BITMAP_SZ (400 * 1024)
 #define SCR_SZ    (256 * 1024)
@@ -1480,6 +1482,49 @@ int main(int argc, char **argv)
             }
         }
 
+        /* ---- map_slide_view (0x12CEA) --------------------------------- */
+        for (i = 0; i < 6 && !g_fail; i++) {
+            uint32_t save = g_rnd;
+            int flag, ox, oy, tx, ty, o_x, o_y, bad = 0;
+
+            setup_view(bitmap, scrA, expA, cells, ctbl, recs, &flag, &ox, &oy);
+            I32(0x53AC5) = 32;   /* setup_view only sets 0x53AC1 */
+            tx = I32(0x53AB1) + ((int)(rnd() % 3u) - 1);
+            ty = I32(0x53AB5) + ((int)(rnd() % 3u) - 1);
+            if (tx < 0) tx = 0;
+            if (tx > I32(0x53AC1) - 1) tx = I32(0x53AC1) - 1;
+            if (ty < 0) ty = 0;
+            if (ty > I32(0x53AC5) - 1) ty = I32(0x53AC5) - 1;
+            ORIG_SLIDE(tx, ty);
+            o_x = I32(0x53AB1); o_y = I32(0x53AB5);
+            memcpy(res_bmp,   bitmap, BITMAP_SZ);
+            memcpy(res_vga,   (void *)(uintptr_t)0xA0000u, VGA_SZ);
+            memcpy(res_scr,   scrA,   SCR_SZ);
+            memcpy(res_cells, cells,  4 * 64 * 64);
+
+            g_rnd = save;
+            setup_view(bitmap, scrA, expA, cells, ctbl, recs, &flag, &ox, &oy);
+            I32(0x53AC5) = 32;
+            tx = I32(0x53AB1) + ((int)(rnd() % 3u) - 1);
+            ty = I32(0x53AB5) + ((int)(rnd() % 3u) - 1);
+            if (tx < 0) tx = 0;
+            if (tx > I32(0x53AC1) - 1) tx = I32(0x53AC1) - 1;
+            if (ty < 0) ty = 0;
+            if (ty > I32(0x53AC5) - 1) ty = I32(0x53AC5) - 1;
+            map_slide_view(tx, ty);
+            cases++;
+            if (I32(0x53AB1) != o_x || I32(0x53AB5) != o_y
+                || memcmp(res_bmp, bitmap, BITMAP_SZ) != 0
+                || memcmp(res_vga, (void *)(uintptr_t)0xA0000u, VGA_SZ) != 0
+                || memcmp(res_scr, scrA, SCR_SZ) != 0
+                || memcmp(res_cells, cells, 4 * 64 * 64) != 0)
+                bad = 1;
+            if (bad) {
+                snprintf(g_why, sizeof g_why, "tx=%d ty=%d o=(%d,%d) c=(%d,%d)",
+                         tx, ty, o_x, o_y, I32(0x53AB1), I32(0x53AB5));
+                fail("map_slide_view");
+            }
+        }
     }
 
     /* The machine-code side of 0x4E31C only runs if the narrow VEH serviced

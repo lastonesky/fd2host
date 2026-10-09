@@ -29,6 +29,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x12AC6,map_blit_cell_sprite,src/game/map.c,map,mapcheck,3000,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x12C0D,dlg_portrait_find,src/game/dlg.c,dlg,mapcheck,3000,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x12C60,rec_find,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x12CEA,map_slide_view,src/game/map.c,map,mapcheck,122500,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x12D7B,dlg_portrait_glide,src/game/dlg.c,dlg,leafcheck,72000,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x12E38,map_cell_info,src/game/map.c,map,mapcheck,3000,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x13460,ev5_13460,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot

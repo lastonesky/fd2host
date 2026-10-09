@@ -17,12 +17,12 @@
 **同一份源码也能在 Linux 上跑**（`build/fd2host-linux32`，X11/XWayland + sokol GLCORE）：
 与 Windows 同 guest tick 抓帧**逐像素 0 差异**（`rounds/16-entry-layer.md` §46.10）。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 307 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 308 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。转译已改按**批量节奏**（一次 ~30 个、
 每 3-5 个 `--only` 验证一次，见 `AGENTS.md` §2、`docs/TRANSLATION.md` §1）。
 
 > ⚠ **进度必须看清**：全量函数表 `re/funcmap.csv` 有 **1359** 个函数，已源码化的只有
-> **307 个 ≈ 22.6%**；**其余 ~79% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
+> **308 个 ≈ 22.7%**；**其余 ~79% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
 > 直接执行**。这正是宿主必须是 **32 位进程**的原因（x86-64 长模式不能执行 32 位代码，
 > 只有 `-m32`/WOW64 这类 32 位进程才行）；**等全部函数源码化后，这个 32 位门槛才会消失**。
 
@@ -51,7 +51,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**307 / 1359 个函数接入（≈22.6%）**          ⏳ 其余 ~79% 仍是原始机器码在跑
+源码转译：**308 / 1359 个函数接入（≈22.7%）**          ⏳ 其余 ~79% 仍是原始机器码在跑
 Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 px** ✅（§46.10）
 ```
 
@@ -133,6 +133,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
 | §80 | 10-09 | **地图世界叶子两件套（第 304–305 个）** | 优先级 2：把地图叶子放进已有完整地图世界的 `mapcheck` 对拍。新钩 `0x17AA9→no-op`；两个测试把 `0x53A49` 指向 `dstA`/`dstB` 逐字节比 400KB 位图。新增 `0x1DF58 map_draw_status_popups`（状态数字上浮，目的地址 `+0x8088`/`456*(v3-3)`——不是 `31536`/`v3`）与 `0x1C2DA map_draw_party_icons`（队伍图标 + 闪 5 次）→ `game/map.c`（`REPL_MAP`），303→**305**。`mapcheck` 全量 **128500/0**。**未接入** `0x1C4CC`（同类，原机器码对 `0x11CAC` 世界前置敏感，段错误）。判据：`mapcheck` 128500/0、`regress` 连续 3 次 8/8（首跑偶发=§8-85）、A/B **0/64000 px**、Linux 0 warning + exact + 49/49 | `docs/rounds/49-map-leaves.md` |
 | §81 | 10-09 | **`map_reveal_reachable`（第 306 个）** | 把第 45 轮写好、一直未 wire 的 `0x14818 map_reveal_reachable`（洪泛可达格 + 按 `+6` 状态收集记录）补上 `mapcheck` 测试后接入 `REPL_MAP`，305→**306**。**关键点**：`path_mark`（`0x4E390`）从**网格首字节**读宽高 `map[0]=W`/`map[2]=H`（不是旁边的 `dword_53AC1/53AC5`），合成 world 必须把头字段写进去（否则原机器码按随机宽高寻址、与 C 不一致甚至越界）。`mapcheck` 全量 **132500/0**（含新 8 例）。判据：`mapcheck` 132500/0、`regress` 8/8、A/B **0/64000 px**、Linux 0 warning + exact + 49/49 | `docs/rounds/50-map-reveal.md` |
 | §82 | 10-09 | **`map_draw_party_icons_anim`（第 307 个）** | 把第 49 轮写好但段错误的 `0x1C4CC` 用 `mapcheck` 的**完整视图 world**（`setup_view`，两次调用 `g_rnd` 恢复到同一起点）对拍后接入 `REPL_MAP`，306→**307**。**关键点**：它一进来就 `map_view_update(0)`，需要一整套视图全局；shape 库是 `0x53AD1`（+6 偏移表）不是 `0x53A61`；`sprite24_const` 只读 3 参。`mapcheck` 全量 **135500/0**（含新 6 例）。**未接入** `0x12CEA`（窗口 stepper 在合成 world 下不推进 `dword_53AB1`，`while` 死循环）。判据：`mapcheck` 135500/0、`regress` 8/8、A/B **0/64000 px**、Linux 0 warning + exact + 49/49 | `docs/rounds/51-map-icons-anim.md` |
+| §83 | 10-09 | **`map_slide_view`（第 308 个）** | 第 51 轮因合成 world 下窗口 stepper 死循环而未接入的 `0x12CEA`：定位根因——stepper `0x11BFA` 的守卫 `dword_53AC1-1 != dword_53AB1` 使**到边界不再推进**，测试的越界 target 让 `while` 永不收敛；且 `setup_view` 只设 `dword_53AC1` 没设 `dword_53AC5`。修测试（target 夹在 `[0,W-1]/[0,H-1]` + 补 `dword_53AC5`），对拍接入 `REPL_MAP`，307→**308**。`mapcheck` 全量 **138500/0**（含新 6 例）。判据：`mapcheck` 138500/0、`regress` 8/8、A/B **0/64000 px**、Linux 0 warning + exact + 49/49 | `docs/rounds/52-map-slide-view.md` |
 
 ## 4. 下一步计划（按优先级）
 
@@ -201,7 +202,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    - ~~**菜单 action 簇**~~ **已完成（§75，接入 261→285）**：两个菜单分派表的 24 个 action
      → `game/menu_actions.c`（`REPL_MENU`）+ `ev2check` 扩 24 项/3 桩。菜单两族更大的同族块
      （`0x33169`/`0x333F5`/`0x335DA`/`0x336A0` 等）留下一批。
-   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 201→229→261→285→297→300→302→303→305→306→**307**/1359）。
+   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 201→229→261→285→297→300→302→303→305→306→307→**308**/1359）。
 2. ~~**补 autokey 配方**~~ **已完成（§40，2026-10-06）**：标准配方 + `--shot-tick=326..334`
    即可落在“打字进行中”，抓到 3 张不同进度的逐字画面（框区差异 455→327→325→0），
    且 **15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽 ⇒ `vm_run`+`dlg_type_step`
