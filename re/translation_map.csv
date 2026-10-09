@@ -75,6 +75,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x1C220,ev5_1C220,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x1C269,rec_collect_slot_bits,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x1C2DA,map_draw_party_icons,src/game/map.c,map,mapcheck,122500,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
+0x1C4CC,map_draw_party_icons_anim,src/game/map.c,map,mapcheck,122500,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x1CA89,rec_sub_table5,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x1D4CB,ev5_1D4CB,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x1D4F6,menu_stop_and_free_music,src/game/menu_actions.c,menu,?,?,wired (repl.c),

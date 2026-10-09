@@ -79,6 +79,7 @@ typedef int  (*revealr_fn)(int, int, uint8_t *, int, int, int);
 #define ORIG_REVEALR ((revealr_fn)    (uintptr_t)0x00014818u)
 typedef void (*icons_fn)(int, int, int, const uint8_t *);
 #define ORIG_ICONS   ((icons_fn)      (uintptr_t)0x0001C2DAu)
+#define ORIG_ICONSANIM ((icons_fn)    (uintptr_t)0x0001C4CCu)
 
 #define BITMAP_SZ (400 * 1024)
 #define SCR_SZ    (256 * 1024)
@@ -1438,6 +1439,47 @@ int main(int argc, char **argv)
                 fail("map_view_update");
             }
         }
+
+        /* ---- map_draw_party_icons_anim (0x1C4CC) ---------------------- */
+        for (i = 0; i < 6 && !g_fail; i++) {
+            uint32_t save = g_rnd;
+            int flag, ox, oy, k, tidx, cnt, bad = 0;
+            uint8_t list[16];
+
+            tidx = (int)(rnd() % 26u);
+            cnt  = 1 + (int)(rnd() % 6);
+            for (k = 0; k < cnt; k++) list[k] = (uint8_t)(rnd() % 8u);
+            for (k = 0; k < cnt; k++) list[k] = (uint8_t)(list[k] % (uint8_t)3);
+            setup_view(bitmap, scrA, expA, cells, ctbl, recs, &flag, &ox, &oy);
+            PTR(0x53AD1) = nres; I32(0x53B13) = 0;
+            for (k = 0; k < cnt; k++) list[k] = (uint8_t)(list[k] % (uint8_t)I32(0x53BEB));
+            ORIG_ICONSANIM(0, tidx, cnt, list);
+            memcpy(res_bmp,   bitmap, BITMAP_SZ);
+            memcpy(res_vga,   (void *)(uintptr_t)0xA0000u, VGA_SZ);
+            memcpy(res_cells, cells,  4 * 64 * 64);
+            memcpy(res_recs,  recs,   80 * 16);
+
+            g_rnd = save;
+            tidx = (int)(rnd() % 26u);
+            cnt  = 1 + (int)(rnd() % 6);
+            for (k = 0; k < cnt; k++) list[k] = (uint8_t)(rnd() % 8u);
+            for (k = 0; k < cnt; k++) list[k] = (uint8_t)(list[k] % (uint8_t)3);
+            setup_view(bitmap, scrA, expA, cells, ctbl, recs, &flag, &ox, &oy);
+            PTR(0x53AD1) = nres; I32(0x53B13) = 0;
+            for (k = 0; k < cnt; k++) list[k] = (uint8_t)(list[k] % (uint8_t)I32(0x53BEB));
+            map_draw_party_icons_anim(0, tidx, cnt, list);
+            cases++;
+            if (memcmp(res_bmp, bitmap, BITMAP_SZ) != 0
+                || memcmp(res_vga, (void *)(uintptr_t)0xA0000u, VGA_SZ) != 0
+                || memcmp(res_cells, cells, 4 * 64 * 64) != 0
+                || memcmp(res_recs, recs, 80 * 16) != 0)
+                bad = 1;
+            if (bad) {
+                snprintf(g_why, sizeof g_why, "tidx=%d cnt=%d", tidx, cnt);
+                fail("map_draw_party_icons_anim");
+            }
+        }
+
     }
 
     /* The machine-code side of 0x4E31C only runs if the narrow VEH serviced

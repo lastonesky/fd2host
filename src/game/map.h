@@ -58,4 +58,9 @@ void map_draw_status_popups(void);
  * bitmap, then flash between the current and saved bitmap five times. */
 void map_draw_party_icons(int unused, int table_idx, int count, const uint8_t *list);
 
+/* 0x1C4CC - like map_draw_party_icons but shape bank 0x53AD1, a per-frame
+ * sound effect and a map-view refresh before and after. */
+void map_draw_party_icons_anim(int unused, int table_idx, int count,
+                               const uint8_t *list);
+
 #endif /* GAME_MAP_H */

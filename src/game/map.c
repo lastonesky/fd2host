@@ -715,3 +715,61 @@ void map_draw_party_icons(int unused, int table_idx, int count, const uint8_t *l
     guest_free(p);
 }
 
+
+/* 0x1C4CC - like 0x1C2DA but shape bank 0x53AD1, a per-frame sound effect
+ * and a map-view refresh before and after. */
+#define byte_51F33 ((const uint8_t *)(uintptr_t)0x00051F33u)
+#define byte_51F54 ((const uint8_t *)(uintptr_t)0x00051F54u)
+#define byte_51F75 ((const uint8_t *)(uintptr_t)0x00051F75u)
+#define dword_53AD1 (*(uint32_t *)(uintptr_t)0x00053AD1u)
+
+void map_draw_party_icons_anim(int unused, int table_idx, int count,
+                               const uint8_t *list)
+{
+    uint8_t v16[36], v17[36], v18[36];
+    uint8_t *p;
+    int i, j;
+
+    (void)unused;
+    memcpy(v18, byte_51F33, 33);
+    memcpy(v16, byte_51F54, 33);
+    memcpy(v17, byte_51F75, 33);
+    map_view_update(0);
+    p = (uint8_t *)guest_malloc(0x25680u);
+    if (p == NULL)
+        return;
+    memmove(p, dword_53A49, 0x25680u);
+    for (i = 0; i < (int)v16[table_idx]; i++) {
+        const void *v20 = (const void *)(uintptr_t)(dword_53AD1 +
+            *(const uint32_t *)(uintptr_t)(dword_53AD1 +
+                4u * (uint32_t)(i + v18[table_idx]) + 6u));
+        memmove(dword_53A49, p, 0x25680u);
+        for (j = 0; j < count; j++) {
+            const uint8_t *rec = dword_53A45 + 80u * (uint32_t)list[j];
+            int x = rec[0], y = rec[1];
+            if (x >= dword_53AA9 - 1 && x <= dword_51A87 + dword_53AA9 &&
+                y >= dword_53AAD - 1 && y <= dword_51A8B + dword_53AAD + 1) {
+                uint8_t *dst = dword_53A49 + 24u * (uint32_t)(x - dword_53AA9)
+                    + 32904u + 10944u * (uint32_t)(y - dword_53AAD) - 2736u;
+                ORIG_RLE2TRANS2(dst, v20, 456);
+            }
+        }
+        ORIG_GFXROWS((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
+        if (i != 0 || v17[table_idx] == 0) {
+            int s = -1;
+            if (table_idx == 22 && i == 7)                     s = 3;
+            else if (table_idx == 25 && (i == 3 || i == 6))    s = 5;
+            else if (table_idx == 18 && i == 4)                s = 7;
+            else if (table_idx == 19 && (i == 3 || i == 6))    s = 8;
+            else if (table_idx == 8  && (i == 3 || i == 6))    s = 10;
+            else if (table_idx == 9  && (i == 15 || i == 19))  s = 15;
+            if (s >= 0)
+                ORIG_SFX2((void *)(uintptr_t)dword_53B13, s, 1);
+        } else {
+            ORIG_SFX2((void *)(uintptr_t)dword_53B13, v17[table_idx], 1);
+        }
+        ORIG_WAIT(1);
+    }
+    guest_free(p);
+    map_view_update(0);
+}
