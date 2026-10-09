@@ -17,12 +17,12 @@
 **同一份源码也能在 Linux 上跑**（`build/fd2host-linux32`，X11/XWayland + sokol GLCORE）：
 与 Windows 同 guest tick 抓帧**逐像素 0 差异**（`rounds/16-entry-layer.md` §46.10）。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 261 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 285 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。转译已改按**批量节奏**（一次 ~30 个、
 每 3-5 个 `--only` 验证一次，见 `AGENTS.md` §2、`docs/TRANSLATION.md` §1）。
 
 > ⚠ **进度必须看清**：全量函数表 `re/funcmap.csv` 有 **1359** 个函数，已源码化的只有
-> **261 个 ≈ 19.2%**；**其余 ~81% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
+> **285 个 ≈ 21.0%**；**其余 ~79% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
 > 直接执行**。这正是宿主必须是 **32 位进程**的原因（x86-64 长模式不能执行 32 位代码，
 > 只有 `-m32`/WOW64 这类 32 位进程才行）；**等全部函数源码化后，这个 32 位门槛才会消失**。
 
@@ -51,7 +51,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**261 / 1359 个函数接入（≈19.2%）**          ⏳ 其余 ~80.8% 仍是原始机器码在跑
+源码转译：**285 / 1359 个函数接入（≈21.0%）**          ⏳ 其余 ~79% 仍是原始机器码在跑
 Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 px** ✅（§46.10）
 ```
 
@@ -125,6 +125,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
 | §72 | 10-08 | **小叶子大批量（第 202–229 个，28 个）** | 操作者要求“不限制 30、越多越好”：一次收 `re/func_ranking.csv` ready 集里 28 个小叶子（地图格/记录谓词/调色板填充/tick 等待/队伍重置/四组 rec_flag 事件等）→ `game/ev5.c`，新分组 `REPL_EV5`（201→**229**）。harness 用记录缓冲当 scratch（`dword_53A51/53BF7/53F66` 指进快照区）并新增 `outp`(0x37AE5) 钩子。**抓到**：① 第 40 轮漏的 `0x35A0D` `vm_run` 地址写错（0xA951F→0xA0000，200 例没命中该分支）；② `map_cell_info` 写 5 字节而桩只写 4、修后又把 `ev3_35854` 的 `out[4]` 写越界致全量段错误（§8-90）。判据：5 组×1000 + 全量 2400/0、`regress` all/none 8/8、A/B **0/64000 px**、Linux 0 warning + exact match + 49/49 | `docs/rounds/42-leaf-batch5.md`、`docs/PITFALLS.md` §8-90 |
 | §73 | 10-08 | **单位精灵构建链 + `funcs_1199C` 低索引收口（第 230–261 个，32 个）** | 把 §5 首选项一次做完：**`0x10B4E` 链**（`0x10B4E`/`0x10C50`/`0x11019`/`0x145CD`/`0x14625`/`0x1B750`）+ `0x32999` → `game/unit_load.c`（新分组 `REPL_UNITLD`）；`funcs_1199C` 索引 0..37 剩余 **25 个 handler** → `game/ev6.c`（`REPL_EV6`），**整表 0..90 全部源码化**（229→**261**）。**关键点**：FILE\* 跨 C/机器码边界要走**游戏自己的 Watcom CRT 入口**（宿主=Watcom 走 int21h，check=重定向宿主 libc），不能用宿主 stdio；IDA 的 `JUMPOUT` 跳进别的函数中段=编译器尾合并，按各自 `sub` 内联成 `vm_play()`。新对拍器 `ev6check`（CRT 七入口 + 合成 FDICON/FDFIELD，A 组整链/B 组 `0x1B750`）。判据：`ev2check` 25×200=**5000/0**、全量 121×25=**3025/0**、`ev6check` **400/0**、`regress` all/none 8/8、A/B **0/64000 px**、Linux 0 warning + exact match + 49/49 | `docs/rounds/43-unit-load-and-funcs1199c-low.md`、`docs/PITFALLS.md` §8-91/92、`docs/TRANSLATION.md` §4/§5 |
 | §74 | 10-09 | **Linux/WSLg 音频排查（无代码改动）** | 摸清 Linux 输出链（sokol→ALSA `"default"`→pulse 插件→WSLg PulseAudio→RDPSink）与两处可移植性缺口：① 32 位宿主缺 `libasound2-plugins:i386` 即静音；② `dls.c` 默认 bank 路径硬编码 `C:\` 致所有乐器退回兜底波形（"音色全变"，不是高频被截）。不改代码的改善：`--audio-rate=44100`（免重采样、缓冲 93→41 ms）+ `--gm-bank=/mnt/c/.../gm.dls`（`dls: 235 instruments, 495 waves`）。**待办：`dls.c` 跨平台默认查找** | `docs/AUDIO.md` §11.11、`docs/PITFALLS.md` §8-94/95/96 |
+| §75 | 10-09 | **菜单/队伍 action handler 批量（第 262–285 个，24 个）** | 按 ranking+调用图选两个菜单分派表的 action 簇：`0x205DA`（重载世界）+ 菜单 A 记录标志校验 13 个（`0x206C5`/`0x20707`/`0x2073D`/`0x20765`/`0x20822`/`0x2084A`/`0x20872`/`0x20926`/`0x20957`/`0x20A51`/`0x20A87`/`0x20B14`/`0x20B3C`）+ 菜单 B 脚本/vm 10 个（`0x3314B`/`0x33219`/`0x3332B`/`0x3346B`/`0x3347C`/`0x335A0`/`0x335AA`/`0x33674`/`0x3367E`/`0x33AAE`）→ 新模块 `game/ev7.c`（`REPL_EV7`），261→**285**。**关键点**：IDA 的 `__fastcall/__usercall` 全是栈探针伪像，真 ABI=cdecl；共享尾 `loc_3312D` 的子流号由调用者压栈决定（`0x33AAE` 传 **0** 不是 1，对拍抓到）；所有外部依赖走固定地址（宿主 repl 换 C、check hook 桩）。`ev2check` 扩 24 项 + 3 桩（`0x1088D`/`0x12D7B`/`0x1F525`）。判据：`ev2check` 子集 480/0、全量 2900/0、`regress` all/none 8/8、A/B **0/64000 px**、`letest` exact match、Linux 0 warning + exact match + 49/49、`repl: installed 285` | `docs/rounds/44-menu-actions.md`、`docs/TRANSLATION.md` §4/§5 |
 
 ## 4. 下一步计划（按优先级）
 
@@ -190,7 +191,10 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
      → `game/unit_load.c`（`REPL_UNITLD`）+ `funcs_1199C` 低索引 25 个 handler → `game/ev6.c`
      （`REPL_EV6`）。**`funcs_1199C` 整表 0..90 至此全部源码化**。新工具 `ev6check`
      （CRT 七入口重定向 + 合成 FDICON/FDFIELD）。
-   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 201→229→**261**/1359）。
+   - ~~**菜单 action 簇**~~ **已完成（§75，接入 261→285）**：两个菜单分派表的 24 个 action
+     → `game/ev7.c`（`REPL_EV7`）+ `ev2check` 扩 24 项/3 桩。菜单两族更大的同族块
+     （`0x33169`/`0x333F5`/`0x335DA`/`0x336A0` 等）留下一批。
+   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 201→229→261→**285**/1359）。
 2. ~~**补 autokey 配方**~~ **已完成（§40，2026-10-06）**：标准配方 + `--shot-tick=326..334`
    即可落在“打字进行中”，抓到 3 张不同进度的逐字画面（框区差异 455→327→325→0），
    且 **15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽 ⇒ `vm_run`+`dlg_type_step`

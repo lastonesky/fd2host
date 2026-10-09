@@ -34,6 +34,7 @@
 #include "game/ev4.h"
 #include "game/ev5.h"
 #include "game/ev6.h"
+#include "game/ev7.h"
 
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(dos_lowmem_base + (off)))
 #define dword_53AC1 (*(uint32_t *)(uintptr_t)0x00053AC1u)
@@ -352,6 +353,10 @@ static int __cdecl stub_10620(void)
 }
 static void *__cdecl stub_4eb48(int sel) { (void)sel; return g_script; }
 static void __cdecl stub_4e31c(void) { ev_log(EV_EXT, 12, 0, 0, 0, 0, 0, 0, 0, 0); }
+/* --- batch-7 services (src/game/ev7.c) -------------------------------- */
+static void __cdecl stub_1088d(int a) { ev_log(EV_EXT, 20, a, 0, 0, 0, 0, 0, 0, 0); }
+static void __cdecl stub_glide(int a) { ev_log(EV_EXT, 21, a, 0, 0, 0, 0, 0, 0, 0); }
+static void __cdecl stub_fadein(void) { ev_log(EV_EXT, 22, 0, 0, 0, 0, 0, 0, 0, 0); }
 
 /* --- world setup / capture --------------------------------------------- */
 struct cap {
@@ -824,6 +829,39 @@ static void c_2AEDB(void) { (void)ev3_2AEDB(g_arg % 64, g_arg % 256); }
 static void o_33F78(void) { O_33F78(g_arg, g_argx, g_argy); }
 static void c_33F78(void) { ev3_33F78(g_arg, g_argx, g_argy); }
 
+/* --- batch 7 (src/game/ev7.c): menu/party action handlers --------------- */
+#define O_205DA ((void (*)(void))(uintptr_t)0x000205DAu)
+#define O_206C5 ((void (*)(void))(uintptr_t)0x000206C5u)
+#define O_20707 ((void (*)(void))(uintptr_t)0x00020707u)
+#define O_2073D ((void (*)(void))(uintptr_t)0x0002073Du)
+#define O_20765 ((void (*)(void))(uintptr_t)0x00020765u)
+#define O_20822 ((void (*)(void))(uintptr_t)0x00020822u)
+#define O_2084A ((void (*)(void))(uintptr_t)0x0002084Au)
+#define O_20872 ((void (*)(void))(uintptr_t)0x00020872u)
+#define O_20926 ((void (*)(void))(uintptr_t)0x00020926u)
+#define O_20957 ((void (*)(void))(uintptr_t)0x00020957u)
+#define O_20A51 ((void (*)(void))(uintptr_t)0x00020A51u)
+#define O_20A87 ((void (*)(void))(uintptr_t)0x00020A87u)
+#define O_20B14 ((void (*)(void))(uintptr_t)0x00020B14u)
+#define O_20B3C ((void (*)(void))(uintptr_t)0x00020B3Cu)
+#define O_3314B ((void (*)(void))(uintptr_t)0x0003314Bu)
+#define O_33219 ((void (*)(void))(uintptr_t)0x00033219u)
+#define O_3332B ((void (*)(void))(uintptr_t)0x0003332Bu)
+#define O_3346B ((void (*)(void))(uintptr_t)0x0003346Bu)
+#define O_3347C ((void (*)(void))(uintptr_t)0x0003347Cu)
+#define O_335A0 ((void (*)(void))(uintptr_t)0x000335A0u)
+#define O_335AA ((void (*)(void))(uintptr_t)0x000335AAu)
+#define O_33674 ((void (*)(void))(uintptr_t)0x00033674u)
+#define O_3367E ((void (*)(void))(uintptr_t)0x0003367Eu)
+#define O_33AAE ((void (*)(void))(uintptr_t)0x00033AAEu)
+#define E7(a) \
+    static void o_##a(void) { O_##a(); } \
+    static void c_##a(void) { ev7_##a(); }
+E7(205DA) E7(206C5) E7(20707) E7(2073D) E7(20765) E7(20822) E7(2084A)
+E7(20872) E7(20926) E7(20957) E7(20A51) E7(20A87) E7(20B14) E7(20B3C)
+E7(3314B) E7(33219) E7(3332B) E7(3346B) E7(3347C) E7(335A0) E7(335AA)
+E7(33674) E7(3367E) E7(33AAE)
+
 struct entry { uint32_t addr; const char *name; pair_fn orig, ours; };
 static const struct entry g_entries[] = {
     { 0x135DD, "135DD", o_135DD, c_135DD },
@@ -951,6 +989,32 @@ static const struct entry g_entries[] = {
     { 0x34FC2, "34FC2", o_34FC2, c_34FC2 },
     { 0x34FCC, "34FCC", o_34FCC, c_34FCC },
     { 0x35022, "35022", o_35022, c_35022 },
+
+    /* batch 7: menu/party action handlers (src/game/ev7.c) */
+    { 0x205DA, "205DA", o_205DA, c_205DA },
+    { 0x206C5, "206C5", o_206C5, c_206C5 },
+    { 0x20707, "20707", o_20707, c_20707 },
+    { 0x2073D, "2073D", o_2073D, c_2073D },
+    { 0x20765, "20765", o_20765, c_20765 },
+    { 0x20822, "20822", o_20822, c_20822 },
+    { 0x2084A, "2084A", o_2084A, c_2084A },
+    { 0x20872, "20872", o_20872, c_20872 },
+    { 0x20926, "20926", o_20926, c_20926 },
+    { 0x20957, "20957", o_20957, c_20957 },
+    { 0x20A51, "20A51", o_20A51, c_20A51 },
+    { 0x20A87, "20A87", o_20A87, c_20A87 },
+    { 0x20B14, "20B14", o_20B14, c_20B14 },
+    { 0x20B3C, "20B3C", o_20B3C, c_20B3C },
+    { 0x3314B, "3314B", o_3314B, c_3314B },
+    { 0x33219, "33219", o_33219, c_33219 },
+    { 0x3332B, "3332B", o_3332B, c_3332B },
+    { 0x3346B, "3346B", o_3346B, c_3346B },
+    { 0x3347C, "3347C", o_3347C, c_3347C },
+    { 0x335A0, "335A0", o_335A0, c_335A0 },
+    { 0x335AA, "335AA", o_335AA, c_335AA },
+    { 0x33674, "33674", o_33674, c_33674 },
+    { 0x3367E, "3367E", o_3367E, c_3367E },
+    { 0x33AAE, "33AAE", o_33AAE, c_33AAE },
 };
 #define NENT (sizeof g_entries / sizeof g_entries[0])
 
@@ -1091,6 +1155,9 @@ int main(int argc, char **argv)
     HOOK(0x4EB48, stub_4eb48);
     HOOK(0x37AE5, stub_outp);
     HOOK(0x32999, stub_maprender);
+    HOOK(0x1088D, stub_1088d);
+    HOOK(0x12D7B, stub_glide);
+    HOOK(0x1F525, stub_fadein);
 
     for (i = 0; i < NENT; i++) {
         if (!selected[i]) continue;
