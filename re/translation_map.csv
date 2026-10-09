@@ -40,6 +40,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x145CD,unit_mark_nearby,src/game/unit_load.c,unitld,?,?,wired (repl.c),
 0x14625,unit_reveal_around,src/game/unit_load.c,unitld,?,?,wired (repl.c),
 0x146A7,ev5_146A7,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
+0x14818,map_reveal_reachable,src/game/map.c,map,mapcheck,122500,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x14B16,ev5_14B16,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x15E71,dlg_snap_restore,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x15E9E,dlg_snap_save,src/game/dlg.c,dlg,dlgcheck+boxcheck+keycheck+typecheck,800+240+100+1176,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"

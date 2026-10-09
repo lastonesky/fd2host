@@ -17,12 +17,12 @@
 **同一份源码也能在 Linux 上跑**（`build/fd2host-linux32`，X11/XWayland + sokol GLCORE）：
 与 Windows 同 guest tick 抓帧**逐像素 0 差异**（`rounds/16-entry-layer.md` §46.10）。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 305 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 306 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。转译已改按**批量节奏**（一次 ~30 个、
 每 3-5 个 `--only` 验证一次，见 `AGENTS.md` §2、`docs/TRANSLATION.md` §1）。
 
 > ⚠ **进度必须看清**：全量函数表 `re/funcmap.csv` 有 **1359** 个函数，已源码化的只有
-> **305 个 ≈ 22.4%**；**其余 ~79% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
+> **306 个 ≈ 22.5%**；**其余 ~79% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
 > 直接执行**。这正是宿主必须是 **32 位进程**的原因（x86-64 长模式不能执行 32 位代码，
 > 只有 `-m32`/WOW64 这类 32 位进程才行）；**等全部函数源码化后，这个 32 位门槛才会消失**。
 
@@ -51,7 +51,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**305 / 1359 个函数接入（≈22.4%）**          ⏳ 其余 ~79% 仍是原始机器码在跑
+源码转译：**306 / 1359 个函数接入（≈22.5%）**          ⏳ 其余 ~79% 仍是原始机器码在跑
 Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 px** ✅（§46.10）
 ```
 
@@ -131,6 +131,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
 | §78 | 10-09 | **CRT 重定向对拍器 + 世界加载两件套（第 301–302 个）** | 按优先级 1：新建 **`src/worldcheck.c`**（将 Watcom CRT 七个入口 `0x3706E/0x3776E/0x37324/0x3759C/0x37940/0x373CA/0x377A3` 重定向到宿主 libc，`stub_malloc` 零填充；`0x111BA/0x4E98D/0x24D22/0x4DF4C` 走 C；`0x11019/0x1B750/0x10B4E` 桩掉），拿**真实数据文件**跑原机器码 vs C，逐字节比对记录/图块缓冲 + 全部标量。新模块 **`src/game/world_load.c/.h`**：`0x10652 world_load_tiles`（按 `dword_53C03` 选图块集，两半 rle 进 `h×w`）与 `0x1088D world_load_party`（FDTXT/FDFIELD/FDSHAP + FDICON.B24 重建记录 + `unit_sprites_build`），接入 `REPL_MENU`，300→**302**。**踩坑**：`stub_malloc` 零填充使两侧同起点；`capture()` 要按 case 限长（否则段错误）；`unit_entry_data` 第二参不能强转 `int`（gcc 报错）。判据：`worldcheck --cases=60` **60/0**、`regress` 8/8、A/B **0/64000 px**、`letest` exact、Linux 0 warning + exact + 49/49 | `docs/rounds/47-world-load.md` |
 | §79 | 10-09 | **堆叶子第一刀 `res_draw_subimage`（第 303 个）** | 用第 47 轮的 CRT 重定向对拍器：`0x15F0E`（6 个 cdecl 栈参，`gfx_save_rect` 存背景 + `rle2_blit_trans` 贴子图，返回 malloc 出的背景记录）→ `game/res.c`（`REPL_RES`），302→**303**。`worldcheck` 扩出堆叶子组（合成子图偏移表 + 0x40000 surface 缓冲，钩 `0x4ECBF/0x4EBAB/0x3790A`，逐字节比 surface + 返回记录），`--cases=40`=**40/0**。**未接入**：`0x1DF58`/`0x1C2DA`/`0x1C4CC`（机器码在合成世界里仍段错，需先补“地图世界”：视图原点+记录坐标+shape 表）。判据：`worldcheck` 40/0、`regress` 8/8、A/B **0/64000 px**、Linux 0 warning + exact + 49/49 | `docs/rounds/48-heap-leaf.md` |
 | §80 | 10-09 | **地图世界叶子两件套（第 304–305 个）** | 优先级 2：把地图叶子放进已有完整地图世界的 `mapcheck` 对拍。新钩 `0x17AA9→no-op`；两个测试把 `0x53A49` 指向 `dstA`/`dstB` 逐字节比 400KB 位图。新增 `0x1DF58 map_draw_status_popups`（状态数字上浮，目的地址 `+0x8088`/`456*(v3-3)`——不是 `31536`/`v3`）与 `0x1C2DA map_draw_party_icons`（队伍图标 + 闪 5 次）→ `game/map.c`（`REPL_MAP`），303→**305**。`mapcheck` 全量 **128500/0**。**未接入** `0x1C4CC`（同类，原机器码对 `0x11CAC` 世界前置敏感，段错误）。判据：`mapcheck` 128500/0、`regress` 连续 3 次 8/8（首跑偶发=§8-85）、A/B **0/64000 px**、Linux 0 warning + exact + 49/49 | `docs/rounds/49-map-leaves.md` |
+| §81 | 10-09 | **`map_reveal_reachable`（第 306 个）** | 把第 45 轮写好、一直未 wire 的 `0x14818 map_reveal_reachable`（洪泛可达格 + 按 `+6` 状态收集记录）补上 `mapcheck` 测试后接入 `REPL_MAP`，305→**306**。**关键点**：`path_mark`（`0x4E390`）从**网格首字节**读宽高 `map[0]=W`/`map[2]=H`（不是旁边的 `dword_53AC1/53AC5`），合成 world 必须把头字段写进去（否则原机器码按随机宽高寻址、与 C 不一致甚至越界）。`mapcheck` 全量 **132500/0**（含新 8 例）。判据：`mapcheck` 132500/0、`regress` 8/8、A/B **0/64000 px**、Linux 0 warning + exact + 49/49 | `docs/rounds/50-map-reveal.md` |
 
 ## 4. 下一步计划（按优先级）
 
@@ -199,7 +200,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    - ~~**菜单 action 簇**~~ **已完成（§75，接入 261→285）**：两个菜单分派表的 24 个 action
      → `game/menu_actions.c`（`REPL_MENU`）+ `ev2check` 扩 24 项/3 桩。菜单两族更大的同族块
      （`0x33169`/`0x333F5`/`0x335DA`/`0x336A0` 等）留下一批。
-   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 201→229→261→285→297→300→302→303→**305**/1359）。
+   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 201→229→261→285→297→300→302→303→305→**306**/1359）。
 2. ~~**补 autokey 配方**~~ **已完成（§40，2026-10-06）**：标准配方 + `--shot-tick=326..334`
    即可落在“打字进行中”，抓到 3 张不同进度的逐字画面（框区差异 455→327→325→0），
    且 **15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽 ⇒ `vm_run`+`dlg_type_step`

@@ -75,6 +75,8 @@ typedef void (*refreshall_fn)(void);
 #define ORIG_ALLPORT ((refreshall_fn) (uintptr_t)0x000127A9u)
 typedef void (*popups_fn)(void);
 #define ORIG_POPUPS  ((popups_fn)     (uintptr_t)0x0001DF58u)
+typedef int  (*revealr_fn)(int, int, uint8_t *, int, int, int);
+#define ORIG_REVEALR ((revealr_fn)    (uintptr_t)0x00014818u)
 typedef void (*icons_fn)(int, int, int, const uint8_t *);
 #define ORIG_ICONS   ((icons_fn)      (uintptr_t)0x0001C2DAu)
 
@@ -1121,6 +1123,55 @@ int main(int argc, char **argv)
                 fail("map_reveal_cursor");
             }
         }
+
+        /* ---- map_reveal_reachable (0x14818) --------------------------- */
+        for (i = 0; i < 8 && !g_fail; i++) {
+            int x = (int)(rnd() % 32u), y = (int)(rnd() % 32u);
+            int range = (int)(rnd() % 20u), radius = (int)(rnd() % 6u);
+            int filter = (int)(rnd() % 4u);
+            int n = 1 + (int)(rnd() % 8), k, ra, rb;
+            uint8_t listA[64], listB[64];
+            static uint8_t cell_init[4 * 32 * 32];
+            static uint8_t ctbl_save[4096];
+            static uint8_t obj1_save[0x56B0];
+
+            PTR(0x53A51) = cellA; I32(0x53A69) = (int32_t)(uintptr_t)ctbl;
+            I32(0x53AC1) = 32;    I32(0x53AC5) = 32;
+            I32(0x53BEB) = n;     PTR(0x53A45) = recs;
+            for (k = 0; k < 4 * 32 * 32; k++) cell_init[k] = (uint8_t)rnd();
+            cell_init[0] = 32; cell_init[2] = 32;   /* path_mark reads W/H from the grid */
+            memcpy(cellA, cell_init, 4 * 32 * 32);
+            memcpy(cellB, cell_init, 4 * 32 * 32);
+            memset(recs, 0, 80 * 16);
+            for (k = 0; k < 80 * n; k++) recs[k] = (uint8_t)rnd();
+            for (k = 0; k < n; k++) {
+                recs[80 * k + 0] = (uint8_t)(rnd() % 32u);
+                recs[80 * k + 1] = (uint8_t)(rnd() % 32u);
+                recs[80 * k + 6] = (uint8_t)(rnd() % 3u);
+            }
+            memset(listA, 0xEE, sizeof listA);
+            memset(listB, 0xEE, sizeof listB);
+            for (k = 0; k < 4096; k++) ctbl_save[k] = ctbl[k];
+            memcpy(obj1_save, (const void *)0x50000u, sizeof obj1_save);
+            ra = ORIG_REVEALR(x, y, listA, range, radius, filter);
+            memcpy((void *)0x50000u, obj1_save, sizeof obj1_save);
+            for (k = 0; k < 4096; k++) ctbl[k] = ctbl_save[k];
+            PTR(0x53A51) = cellB;
+            rb = map_reveal_reachable(x, y, listB, range, radius, filter);
+            cases++;
+            if (memcmp(cellA, cellB, 4 * 32 * 32) != 0
+                || memcmp(listA, listB, sizeof listA) != 0 || ra != rb) {
+                size_t q, where = 0;
+                for (q = 0; q < 4 * 32 * 32; q++)
+                    if (cellA[q] != cellB[q]) { where = q; break; }
+                snprintf(g_why, sizeof g_why,
+                         "x=%d y=%d range=%d radius=%d filter=%d n=%d ra=%d rb=%d cell@%u(%02X/%02X)",
+                         x, y, range, radius, filter, n, ra, rb,
+                         (unsigned)where, cellA[where], cellB[where]);
+                fail("map_reveal_reachable"); break;
+            }
+        }
+        PTR(0x53A51) = cells;
 
         /* ---- map_draw_cursor (0x1ACF3) -------------------------------- */
         for (i = 0; i < 8 && !g_fail; i++) {
