@@ -87,4 +87,9 @@ int rec_flag_set1(int index);
 uint32_t rec_status_mask_records(void);
 uint32_t rec_status_set_record14(void);
 
+/* 0x1C269 - collect the indices of the set bits in record[index] bytes
+ * +26..+30 (bit b of byte i -> index 8*i+b). Returns the count; `out` may be
+ * NULL for a dry run. */
+int rec_collect_slot_bits(int index, uint8_t *out);
+
 #endif /* GAME_REC_H */

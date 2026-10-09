@@ -35,4 +35,19 @@ void map_unit_ping(int idx);
  * animation step. */
 void map_view_update(int flag);
 
+/* 0x14818 - mark the cells reachable from (x,y) with the given flood range
+ * (or a diamond radius for range >= 16) and collect every unflagged record
+ * standing on them, filtered by its +6 status class. Returns how many were
+ * collected; `out` may be NULL. */
+int map_reveal_reachable(int x, int y, uint8_t *out, int range, int radius,
+                         int filter);
+
+/* 0x1E0DB - append the four digit glyphs of `value` to the status icon queue
+ * for record `rec_index`; `char_base` is the '0' glyph index. */
+void map_enqueue_status(int value, int char_base, int rec_index);
+
+/* 0x12CEA - step the map view cursor to (target_x, target_y), one line at a
+ * time, waiting for a tick between steps. */
+void map_slide_view(int target_x, int target_y);
+
 #endif /* GAME_MAP_H */

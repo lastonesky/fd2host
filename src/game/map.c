@@ -26,6 +26,8 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #define dword_53A49 (*(uint8_t **)(uintptr_t)0x00053A49u) /* map bitmap     */
 #define dword_53A4D (*(uint8_t **)(uintptr_t)0x00053A4Du) /* tileset        */
@@ -508,4 +510,116 @@ void map_view_update(int flag)
     dlg_portraits_refresh();
     map_draw_cursor(view, 456);
     gfx_copy_rows((void *)(uintptr_t)0xA0504u, 320, view, 456, 312, 192);
+}
+
+/* --- map reveal / status queue / view slide (batch of small leaves) ----- */
+
+#define dword_53AC5 (*(int32_t  *)(uintptr_t)0x00053AC5u) /* map height */
+#define dword_53EC4 (*(int32_t  *)(uintptr_t)0x00053EC4u) /* status cursor */
+#define byte_53C6C ((uint8_t *)(uintptr_t)0x00053C6Cu)    /* status glyph */
+#define byte_53D34 ((uint8_t *)(uintptr_t)0x00053D34u)    /* status x     */
+#define byte_53DFC ((uint8_t *)(uintptr_t)0x00053DFCu)    /* status record*/
+
+typedef void *(*path_tbl_fn)(int);
+typedef void  (*path_flood_fn)(void *, int, int, int, void *, void *);
+typedef int   (*wait_fn)(int);
+typedef void  (*h0v_fn)(void);
+
+#define ORIG_PATH_TBL   ((path_tbl_fn)  (uintptr_t)0x0004E8A5u)
+#define ORIG_PATH_FLOOD ((path_flood_fn)(uintptr_t)0x0004E390u)
+#define ORIG_11B48      ((h0v_fn)(uintptr_t)0x00011B48u)
+#define ORIG_11B9B      ((h0v_fn)(uintptr_t)0x00011B9Bu)
+#define ORIG_11BFA      ((h0v_fn)(uintptr_t)0x00011BFAu)
+#define ORIG_11C59      ((h0v_fn)(uintptr_t)0x00011C59u)
+#define ORIG_17AA9      ((wait_fn)(uintptr_t)0x00017AA9u)
+#define ORIG_4E381      ((h0v_fn)(uintptr_t)0x0004E381u)
+
+/* 0x14818 */
+int map_reveal_reachable(int x, int y, uint8_t *out, int range, int radius,
+                         int filter)
+{
+    int n = 0, i, j;
+
+    if (range >= 16) {
+        int lim = range - 16;
+        for (i = 0; i < dword_53AC1; i++)
+            if (abs(i - x) <= lim)
+                dword_53A51[4 * (i + dword_53AC1 * y) + 7] = 0;
+        for (i = 0; i < dword_53AC5; i++)
+            if (abs(i - y) <= lim)
+                dword_53A51[4 * (x + i * dword_53AC1) + 7] = 0;
+    } else {
+        void *tbl = ORIG_PATH_TBL(0);
+        ORIG_PATH_FLOOD(tbl, x, y, range, dword_53A51,
+                        (void *)(uintptr_t)dword_53A69);
+        if (radius != 0) {
+            for (j = 0; j < dword_53AC5; j++)
+                for (i = 0; i < dword_53AC1; i++)
+                    if (abs(i - x) + abs(j - y) < radius)
+                        dword_53A51[4 * (i + j * dword_53AC1) + 7] = 0xFF;
+        }
+    }
+    for (i = 0; i < dword_53BEB; i++) {
+        const uint8_t *rec = dword_53A45 + 80u * (uint32_t)i;
+        if ((rec[5] & 1u) == 0 &&
+            dword_53A51[4 * (dword_53AC1 * rec[1] + rec[0]) + 7] != 0xFF &&
+            ((filter == 0 && rec[6] == 0) || (filter == 1 && rec[6] != 0) ||
+             (filter == 2 && rec[6] == 1) || (filter == 3 && rec[6] == 2))) {
+            if (out)
+                out[n] = (uint8_t)i;
+            n++;
+        }
+    }
+    return n;
+}
+
+/* 0x1E0DB */
+void map_enqueue_status(int value, int char_base, int rec_index)
+{
+    const uint8_t *rec = dword_53A45 + 80u * (uint32_t)rec_index;
+    int x = rec[0], y = rec[1];
+    int remain = 3, used = 0, i;
+    char buf[8];
+
+    if (!(x > dword_53AA9 - 1 && x < dword_51A87 + dword_53AA9 &&
+          y >= dword_53AAD - 1 && y <= dword_51A8B + dword_53AAD))
+        return;
+    for (i = 0; i < 4; i++) {
+        int len;
+        sprintf(buf, "%d", value);
+        byte_53D34[dword_53EC4 + i] = (uint8_t)(5 * i + 2);
+        byte_53DFC[dword_53EC4 + i] = (uint8_t)rec_index;
+        len = (int)strlen(buf);
+        if (len <= remain)
+            byte_53C6C[dword_53EC4 + i] = 0;
+        else
+            byte_53C6C[dword_53EC4 + i] =
+                (uint8_t)(buf[used++] + char_base - 48);
+        remain--;
+    }
+    dword_53EC4 += 4;
+}
+
+/* 0x12CEA */
+void map_slide_view(int target_x, int target_y)
+{
+    map_view_update(0);
+    while (target_x != dword_53AB1) {
+        if (target_x >= dword_53AB1)
+            ORIG_11BFA();
+        else
+            ORIG_11C59();
+        if (dword_51A83 != 0 && dword_51A83 != 6)
+            ORIG_17AA9(1);
+        ORIG_4E381();
+    }
+    while (target_y != dword_53AB5) {
+        if (target_y >= dword_53AB5)
+            ORIG_11B9B();
+        else
+            ORIG_11B48();
+        if (dword_51A83 != 0 && dword_51A83 != 6)
+            ORIG_17AA9(1);
+        ORIG_4E381();
+    }
 }

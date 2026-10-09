@@ -34,7 +34,12 @@
 #include "game/ev4.h"
 #include "game/ev5.h"
 #include "game/ev6.h"
-#include "game/ev7.h"
+#include "game/menu_actions.h"
+#include "game/rec.h"
+#include "game/anim.h"
+#include "game/map.h"
+#include "game/scene.h"
+#include "game/msg.h"
 
 #define BDA_W(off) (*(volatile uint16_t *)(uintptr_t)(dos_lowmem_base + (off)))
 #define dword_53AC1 (*(uint32_t *)(uintptr_t)0x00053AC1u)
@@ -829,38 +834,122 @@ static void c_2AEDB(void) { (void)ev3_2AEDB(g_arg % 64, g_arg % 256); }
 static void o_33F78(void) { O_33F78(g_arg, g_argx, g_argy); }
 static void c_33F78(void) { ev3_33F78(g_arg, g_argx, g_argy); }
 
-/* --- batch 7 (src/game/ev7.c): menu/party action handlers --------------- */
-#define O_205DA ((void (*)(void))(uintptr_t)0x000205DAu)
-#define O_206C5 ((void (*)(void))(uintptr_t)0x000206C5u)
-#define O_20707 ((void (*)(void))(uintptr_t)0x00020707u)
-#define O_2073D ((void (*)(void))(uintptr_t)0x0002073Du)
-#define O_20765 ((void (*)(void))(uintptr_t)0x00020765u)
-#define O_20822 ((void (*)(void))(uintptr_t)0x00020822u)
-#define O_2084A ((void (*)(void))(uintptr_t)0x0002084Au)
-#define O_20872 ((void (*)(void))(uintptr_t)0x00020872u)
-#define O_20926 ((void (*)(void))(uintptr_t)0x00020926u)
-#define O_20957 ((void (*)(void))(uintptr_t)0x00020957u)
-#define O_20A51 ((void (*)(void))(uintptr_t)0x00020A51u)
-#define O_20A87 ((void (*)(void))(uintptr_t)0x00020A87u)
-#define O_20B14 ((void (*)(void))(uintptr_t)0x00020B14u)
-#define O_20B3C ((void (*)(void))(uintptr_t)0x00020B3Cu)
-#define O_3314B ((void (*)(void))(uintptr_t)0x0003314Bu)
-#define O_33219 ((void (*)(void))(uintptr_t)0x00033219u)
-#define O_3332B ((void (*)(void))(uintptr_t)0x0003332Bu)
-#define O_3346B ((void (*)(void))(uintptr_t)0x0003346Bu)
-#define O_3347C ((void (*)(void))(uintptr_t)0x0003347Cu)
-#define O_335A0 ((void (*)(void))(uintptr_t)0x000335A0u)
-#define O_335AA ((void (*)(void))(uintptr_t)0x000335AAu)
-#define O_33674 ((void (*)(void))(uintptr_t)0x00033674u)
-#define O_3367E ((void (*)(void))(uintptr_t)0x0003367Eu)
-#define O_33AAE ((void (*)(void))(uintptr_t)0x00033AAEu)
-#define E7(a) \
-    static void o_##a(void) { O_##a(); } \
-    static void c_##a(void) { ev7_##a(); }
-E7(205DA) E7(206C5) E7(20707) E7(2073D) E7(20765) E7(20822) E7(2084A)
-E7(20872) E7(20926) E7(20957) E7(20A51) E7(20A87) E7(20B14) E7(20B3C)
-E7(3314B) E7(33219) E7(3332B) E7(3346B) E7(3347C) E7(335A0) E7(335AA)
-E7(33674) E7(3367E) E7(33AAE)
+/* --- menu/party action handlers (src/game/menu_actions.c) ----------------
+ * Wrapper tag = the original address, so the three identical "plain"
+ * handlers keep their own original entry point while sharing one C body. */
+#define MENU_PAIR(addr, tag, fn) \
+    static void o_##tag(void) { ((void (*)(void))(uintptr_t)(addr))(); } \
+    static void c_##tag(void) { fn(); }
+MENU_PAIR(0x205DA, 205DA, menu_reload_world)
+MENU_PAIR(0x206C5, 206C5, menu_need_records_marked)
+MENU_PAIR(0x20707, 20707, menu_need_flags_clear_50_51)
+MENU_PAIR(0x2073D, 2073D, menu_need_flag_clear_14)
+MENU_PAIR(0x20765, 20765, menu_need_any_clear_15_26)
+MENU_PAIR(0x20822, 20822, menu_need_flag_clear_64)
+MENU_PAIR(0x2084A, 2084A, menu_need_flag_clear_65)
+MENU_PAIR(0x20872, 20872, menu_need_flag_clear_52_no_unit18)
+MENU_PAIR(0x20926, 20926, menu_need_flag_clear_64_late)
+MENU_PAIR(0x20957, 20957, menu_need_any_clear_26_43)
+MENU_PAIR(0x20A51, 20A51, menu_need_flags_clear_16_17)
+MENU_PAIR(0x20A87, 20A87, menu_need_flag_clear_1)
+MENU_PAIR(0x20B14, 20B14, menu_need_flag_clear_16)
+MENU_PAIR(0x20B3C, 20B3C, menu_need_flags_clear_1_2)
+MENU_PAIR(0x3314B, 3314B, menu_show_reload)
+MENU_PAIR(0x33219, 33219, menu_show_reload_pair)
+MENU_PAIR(0x3332B, 3332B, menu_show_mark_two)
+MENU_PAIR(0x3346B, 3346B, menu_show_plain)
+MENU_PAIR(0x3347C, 3347C, menu_show_step20)
+MENU_PAIR(0x335A0, 335A0, menu_show_plain)
+MENU_PAIR(0x335AA, 335AA, menu_show_or_rebuild_sprites)
+MENU_PAIR(0x33674, 33674, menu_show_plain)
+MENU_PAIR(0x3367E, 3367E, menu_show_step16_then_clear)
+MENU_PAIR(0x33AAE, 33AAE, menu_show_step9_then_clear)
+MENU_PAIR(0x33169, 33169, menu_rebuild_sprites_and_show)
+MENU_PAIR(0x3327D, 3327D, menu_mark_records_and_show)
+MENU_PAIR(0x33367, 33367, menu_rebuild_sprites_and_clear)
+MENU_PAIR(0x333F5, 333F5, menu_reset_and_show)
+MENU_PAIR(0x334D9, 334D9, menu_show_gated_by_unit)
+MENU_PAIR(0x335DA, 335DA, menu_step_pair_then_clear)
+
+/* --- small scene/UI leaves (batch 45) ------------------------------------ */
+#define W32P(x) (*(uint32_t *)(uintptr_t)(x))
+static uint8_t g_lx[32], g_ly[32];
+static uint8_t g_frames[128];
+static uint8_t g_range[2];
+static uint16_t g_counter;
+
+static void frames_init(void)
+{
+    int i;
+    for (i = 0; i < 128; i++) g_frames[i] = 0;
+    g_frames[0] = 2;                     /* two frames */
+    W32P((uintptr_t)g_frames + 8) = 16;  /* frame 0 offset */
+    W32P((uintptr_t)g_frames + 12) = 32; /* frame 1 offset */
+    g_frames[16 + 6] = 3;                /* frame 0 sub-steps */
+    g_frames[32 + 6] = 2;                /* frame 1 sub-steps */
+}
+
+static void leave_args(int side)   /* side 0 = orig buffer, 1 = C buffer */
+{
+    int i;
+    (void)side;
+    for (i = 0; i < 32; i++) { g_lx[i] = (uint8_t)(g_argx + i); g_ly[i] = (uint8_t)(g_argy + i); }
+    /* pointer globals must hold the SAME value on both sides or obj1 diverges:
+     * point to the orig-side scratch, which neither side mutates here. */
+    W32P(0x53A69) = (uint32_t)(uintptr_t)(rec_o + 4500);
+    W32P(0x53EC4) = 0;
+    W32P(0x53AB1) = 0; W32P(0x53AB5) = 0;
+    g_range[0] = 1 + (uint8_t)(g_argx & 3);
+    g_range[1] = g_range[0] + (uint8_t)(1 + (g_argy & 3));
+    g_counter = (uint16_t)g_arg;
+}
+static int  ret_orig(int r) { *(uint16_t *)(rec_o + 20470) = (uint16_t)r; return r; }
+static int  ret_ours(int r) { *(uint16_t *)(rec_c + 20470) = (uint16_t)r; return r; }
+
+/* 0x1C269 rec_collect_slot_bits */
+static void o_rec_slot_bits(void)
+{ (void)ret_orig(((int (*)(int, uint8_t *))(uintptr_t)0x0001C269u)
+                ((g_argx + 8) & 0x3F, rec_o + 19000)); }
+static void c_rec_slot_bits(void)
+{ (void)ret_ours(rec_collect_slot_bits((g_argx + 8) & 0x3F, rec_c + 19000)); }
+
+/* 0x311E5 anim_cycle_frame */
+static void o_anim_cycle(void)
+{ frames_init(); ((void (*)(const void *, int, void *, int))(uintptr_t)0x000311E5u)
+                 (g_frames, 1 + (g_argy & 7), rec_o + 5000, 456); }
+static void c_anim_cycle(void)
+{ frames_init(); anim_cycle_frame(g_frames, 1 + (g_argy & 7), rec_c + 5000, 456); }
+
+/* 0x1E0DB map_enqueue_status */
+static void o_enq_status(void)
+{ leave_args(0); ((void (*)(int, int, int))(uintptr_t)0x0001E0DBu)
+                 (g_argx, g_argy & 0xFF, g_rx); }
+static void c_enq_status(void)
+{ leave_args(1); map_enqueue_status(g_argx, g_argy & 0xFF, g_rx); }
+
+/* 0x233C6 scene_place_records */
+static void o_place_records(void)
+{ leave_args(0); ((void (*)(const uint8_t *, const uint8_t *, uintptr_t, int, int,
+                 int, int, int, int, uint64_t))(uintptr_t)0x000233C6u)
+                 (g_lx, g_ly, (uintptr_t)(g_argx & 3), 0, 2, 3, g_argx, g_argy,
+                  g_argx & 3, ((uint64_t)(uint32_t)g_argx << 32) | (uint32_t)g_argy); }
+static void c_place_records(void)
+{ leave_args(1); scene_place_records(g_lx, g_ly, (uintptr_t)(g_argx & 3), 0, 2, 3,
+                 g_argx, g_argy, g_argx & 3,
+                 ((uint64_t)(uint32_t)g_argx << 32) | (uint32_t)g_argy); }
+
+/* 0x31BDF msg_show_lines */
+static void o_show_lines(void)
+{ ((void (*)(int, int))(uintptr_t)0x00031BDFu)(g_argx & 7, g_argy & 3); }
+static void c_show_lines(void)
+{ msg_show_lines(g_argx & 7, g_argy & 3); }
+
+/* 0x1E529 msg_show_page */
+static void o_show_page(void)
+{ leave_args(0); (void)ret_orig(((int (*)(uint16_t *, const uint8_t *, int, int))
+                 (uintptr_t)0x0001E529u)(&g_counter, g_range, g_argx & 3, g_argy & 3)); }
+static void c_show_page(void)
+{ leave_args(1); (void)ret_ours(msg_show_page(&g_counter, g_range, g_argx & 3, g_argy & 3)); }
 
 struct entry { uint32_t addr; const char *name; pair_fn orig, ours; };
 static const struct entry g_entries[] = {
@@ -990,31 +1079,45 @@ static const struct entry g_entries[] = {
     { 0x34FCC, "34FCC", o_34FCC, c_34FCC },
     { 0x35022, "35022", o_35022, c_35022 },
 
-    /* batch 7: menu/party action handlers (src/game/ev7.c) */
-    { 0x205DA, "205DA", o_205DA, c_205DA },
-    { 0x206C5, "206C5", o_206C5, c_206C5 },
-    { 0x20707, "20707", o_20707, c_20707 },
-    { 0x2073D, "2073D", o_2073D, c_2073D },
-    { 0x20765, "20765", o_20765, c_20765 },
-    { 0x20822, "20822", o_20822, c_20822 },
-    { 0x2084A, "2084A", o_2084A, c_2084A },
-    { 0x20872, "20872", o_20872, c_20872 },
-    { 0x20926, "20926", o_20926, c_20926 },
-    { 0x20957, "20957", o_20957, c_20957 },
-    { 0x20A51, "20A51", o_20A51, c_20A51 },
-    { 0x20A87, "20A87", o_20A87, c_20A87 },
-    { 0x20B14, "20B14", o_20B14, c_20B14 },
-    { 0x20B3C, "20B3C", o_20B3C, c_20B3C },
-    { 0x3314B, "3314B", o_3314B, c_3314B },
-    { 0x33219, "33219", o_33219, c_33219 },
-    { 0x3332B, "3332B", o_3332B, c_3332B },
-    { 0x3346B, "3346B", o_3346B, c_3346B },
-    { 0x3347C, "3347C", o_3347C, c_3347C },
-    { 0x335A0, "335A0", o_335A0, c_335A0 },
-    { 0x335AA, "335AA", o_335AA, c_335AA },
-    { 0x33674, "33674", o_33674, c_33674 },
-    { 0x3367E, "3367E", o_3367E, c_3367E },
-    { 0x33AAE, "33AAE", o_33AAE, c_33AAE },
+    /* menu/party action handlers (src/game/menu_actions.c) */
+    { 0x205DA, "menu_reload_world",           o_205DA, c_205DA },
+    { 0x206C5, "menu_need_records_marked",    o_206C5, c_206C5 },
+    { 0x20707, "menu_need_flags_clear_50_51", o_20707, c_20707 },
+    { 0x2073D, "menu_need_flag_clear_14",     o_2073D, c_2073D },
+    { 0x20765, "menu_need_any_clear_15_26",   o_20765, c_20765 },
+    { 0x20822, "menu_need_flag_clear_64",     o_20822, c_20822 },
+    { 0x2084A, "menu_need_flag_clear_65",     o_2084A, c_2084A },
+    { 0x20872, "menu_need_flag_clear_52_no_unit18", o_20872, c_20872 },
+    { 0x20926, "menu_need_flag_clear_64_late", o_20926, c_20926 },
+    { 0x20957, "menu_need_any_clear_26_43",   o_20957, c_20957 },
+    { 0x20A51, "menu_need_flags_clear_16_17", o_20A51, c_20A51 },
+    { 0x20A87, "menu_need_flag_clear_1",      o_20A87, c_20A87 },
+    { 0x20B14, "menu_need_flag_clear_16",     o_20B14, c_20B14 },
+    { 0x20B3C, "menu_need_flags_clear_1_2",   o_20B3C, c_20B3C },
+    { 0x3314B, "menu_show_reload",            o_3314B, c_3314B },
+    { 0x33219, "menu_show_reload_pair",       o_33219, c_33219 },
+    { 0x3332B, "menu_show_mark_two",          o_3332B, c_3332B },
+    { 0x3346B, "menu_show_plain",             o_3346B, c_3346B },
+    { 0x3347C, "menu_show_step20",            o_3347C, c_3347C },
+    { 0x335A0, "menu_show_plain",             o_335A0, c_335A0 },
+    { 0x335AA, "menu_show_or_rebuild_sprites", o_335AA, c_335AA },
+    { 0x33674, "menu_show_plain",             o_33674, c_33674 },
+    { 0x3367E, "menu_show_step16_then_clear", o_3367E, c_3367E },
+    { 0x33AAE, "menu_show_step9_then_clear",  o_33AAE, c_33AAE },
+    { 0x33169, "menu_rebuild_sprites_and_show",  o_33169, c_33169 },
+    { 0x3327D, "menu_mark_records_and_show",    o_3327D, c_3327D },
+    { 0x33367, "menu_rebuild_sprites_and_clear", o_33367, c_33367 },
+    { 0x333F5, "menu_reset_and_show",           o_333F5, c_333F5 },
+    { 0x334D9, "menu_show_gated_by_unit",       o_334D9, c_334D9 },
+    { 0x335DA, "menu_step_pair_then_clear",     o_335DA, c_335DA },
+
+    /* small scene/UI leaves (batch 45) */
+    { 0x1C269, "rec_collect_slot_bits",   o_rec_slot_bits, c_rec_slot_bits },
+    { 0x311E5, "anim_cycle_frame",        o_anim_cycle,    c_anim_cycle },
+    { 0x1E0DB, "map_enqueue_status",      o_enq_status,    c_enq_status },
+    { 0x233C6, "scene_place_records",     o_place_records, c_place_records },
+    { 0x31BDF, "msg_show_lines",          o_show_lines,    c_show_lines },
+    { 0x1E529, "msg_show_page",           o_show_page,     c_show_page },
 };
 #define NENT (sizeof g_entries / sizeof g_entries[0])
 

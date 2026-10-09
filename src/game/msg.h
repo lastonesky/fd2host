@@ -21,6 +21,8 @@
 #ifndef GAME_MSG_H
 #define GAME_MSG_H
 
+#include <stdint.h>
+
 /* 0x1956B - open the talking-portrait composite for portrait id `id`:
  * allocate the working/screen/staging buffers, snapshot the VGA into the
  * screen buffer, stage the 310x86 dialogue box (19x5 tiles at 5,112), select
@@ -36,5 +38,16 @@ void msg_blit_band(int y, void *dst, void *src);
 /* 0x26996 - finish the composite: compose the five lower bands (rows 1..5),
  * push the saved screen back to the VGA and free the three buffers. */
 void msg_close_portrait(void);
+
+/* 0x31BDF - show one text page: flush keys, open the portrait `id`, draw the
+ * vm sub-stream `sub` into the lower band, blit the box, wait for a key and
+ * close the portrait again. */
+void msg_show_lines(int id, int sub);
+
+/* 0x1E529 - show one dialogue page starting at portrait page `page`: when
+ * `page == 3` (the "mouth open" variant) fall back to the closed portrait,
+ * draw the vm sub-stream `sub` at the page's address, advance the counter
+ * and return the next page. */
+int msg_show_page(uint16_t *counter, const uint8_t *range, int sub, int page);
 
 #endif /* GAME_MSG_H */

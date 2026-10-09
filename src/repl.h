@@ -44,8 +44,8 @@
 #define REPL_EV5      0x40000u  /* small leaves batch 5 (src/game/ev5.c) */
 #define REPL_EV6      0x80000u   /* funcs_1199C batch 6 (src/game/ev6.c) */
 #define REPL_UNITLD   0x100000u  /* unit sprite builder (src/game/unit_load.c) */
-#define REPL_EV7      0x200000u  /* menu/party action handlers (src/game/ev7.c) */
-#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG | REPL_REC | REPL_SVC | REPL_VM | REPL_RES | REPL_BGM | REPL_SCENE | REPL_FADE | REPL_MAP | REPL_FX | REPL_EV2 | REPL_EV3 | REPL_EV4 | REPL_EV5 | REPL_EV6 | REPL_UNITLD | REPL_EV7)
+#define REPL_MENU     0x200000u  /* menu/party action handlers (src/game/menu_actions.c) */
+#define REPL_ALL      (REPL_RLE | REPL_GFX | REPL_SPRITE24 | REPL_UTIL | REPL_PATH | REPL_DLG | REPL_REC | REPL_SVC | REPL_VM | REPL_RES | REPL_BGM | REPL_SCENE | REPL_FADE | REPL_MAP | REPL_FX | REPL_EV2 | REPL_EV3 | REPL_EV4 | REPL_EV5 | REPL_EV6 | REPL_UNITLD | REPL_MENU)
 
 /* "all" | "none" | comma-separated group names -> mask.
  * A token may be prefixed with '-' to clear that group after adding, so

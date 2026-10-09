@@ -259,3 +259,24 @@ uint32_t rec_status_set_record14(void)
     rec[52] = 0x83;
     return (uint32_t)(uintptr_t)rec;
 }
+
+/* 0x1C269 - collect the set-bit indices of record[index] bytes +26..+30.
+ * Bit b of byte i maps to index 8*i+b; `out` may be NULL for a dry run. */
+int rec_collect_slot_bits(int index, uint8_t *out)
+{
+    const uint8_t *rec = (const uint8_t *)(uintptr_t)dword_53A45
+                         + REC_STRIDE * (uint32_t)index;
+    int n = 0, i, j;
+
+    for (i = 0; i < 5; i++) {
+        uint8_t bits = rec[26 + i];
+        for (j = 0; j < 8; j++) {
+            if (((bits >> j) & 1u) != 0) {
+                if (out)
+                    out[n] = (uint8_t)(j + 8 * i);
+                n++;
+            }
+        }
+    }
+    return n;
+}

@@ -4,7 +4,7 @@
 > 选中**两个菜单分派表的 action 簇**——它们只依赖已接入的 `0x205BE`/`rec_flag`/
 > `unit_exists`/`vm_run` 等——共 **24 个**，接入 261 → **285 / 1359（21.0%）**。
 
-## 44.1 批次内容（24 个，新模块 `src/game/ev7.c/.h`，新分组 `REPL_EV7`）
+## 44.1 批次内容（24 个，新模块 `src/game/menu_actions.c/.h`，新分组 `REPL_MENU`）
 
 ### 0x205DA（1 个）
 
@@ -49,15 +49,15 @@
 
 1. **IDA 的 `__fastcall/__usercall` 全是假象**。这些函数在机器码里都是 cdecl：
    `push idx; call 0x34894; add esp,4`（见 `0x2073D`/`0x20B3C` 反汇编）。C 侧按
-   “最后一个 push = 第一个参数”写即可，`src/game/ev7.c` 头部注明。
+   “最后一个 push = 第一个参数”写即可，`src/game/menu_actions.c` 头部注明。
 2. **共享尾块**（同 §8-87）：
    - `loc_3344D → loc_33206 → loc_33140` = `vm_run(stream, 0, …)` + `dlg_portrait_glide(0)`；
    - `loc_3312D` 是同一段但**由调用者压入的 8 号参数（sub）决定子流**：`loc_33028` 传 1、
      `0x33AAE` 传 **0**（第一版误按 1 写，`ev2check` 报 `orig 0 / ours 1` 后修正）；
    - `loc_33440` = `ev4_1366A(sel)` + `dlg_portrait_clear()` 后落进 `loc_3344D`。
-   C 里抽成 `ev7_tail_d/g/h` 与 `ev7_tail_e(sel)`。
+   C 里抽成 `menu_tail_d/g/h` 与 `menu_tail_e(sel)`。
 3. **`0x33470` 是共享体**：`0x335A0`/`0x33674` 只是 `push 0x28; jmp 0x33470`，C 里与
-   `ev7_3346B` 同体。
+   `menu_3346B` 同体。
 4. **所有外部依赖走固定地址函数指针**（`ORIG_*`）：宿主里 repl 已把它们换成 C，
    对拍 harness 里则被 hook 成桩，两侧对称。`0x205DA` 调 `0x1088D` 也走地址——
    `ev2check` 把 `0x1088D`/`0x12D7B`/`0x1F525` 桩掉，避免真去开文件/写 DAC。
@@ -66,7 +66,7 @@
 
 `src/ev2check.c` 扩 batch-7：
 
-- 新增 `#include "game/ev7.h"`、24 个 `O_xxxxx` 原入口 + `E7(a)` 宏生成的 `o_/c_` 包装；
+- 新增 `#include "game/menu_actions.h"`、24 个 `O_xxxxx` 原入口 + `E7(a)` 宏生成的 `o_/c_` 包装；
 - 新桩 `stub_1088d`(EV_EXT 20)、`stub_glide`(21)、`stub_fadein`(22)，
   并 `HOOK(0x1088D/0x12D7B/0x1F525)`；
 - 表项追加 24 条，`--only` 子集照常可用。

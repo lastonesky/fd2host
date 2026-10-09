@@ -33,3 +33,28 @@ void anim_frame_step(void)
     if (++dword_53C07 == 4)
         dword_53C07 = 0;
 }
+
+/* 0x311E5 - step a small menu sprite animation. */
+typedef void (*res_blit_fn)(void *, int, void *, int, int);
+#define ORIG_RES_BLIT ((res_blit_fn)(uintptr_t)0x0002EB9Fu)
+#define byte_54130 (*(uint8_t *)(uintptr_t)0x00054130u)
+#define byte_54131 (*(uint8_t *)(uintptr_t)0x00054131u)
+
+void anim_cycle_frame(const void *frames, int mode, void *dst, int pitch)
+{
+    const uint8_t *f = (const uint8_t *)(uintptr_t)frames;
+    unsigned n;
+
+    if (mode == 0) {
+        byte_54130 = 0;
+        byte_54131 = 0;
+        return;
+    }
+    ORIG_RES_BLIT((void *)f, byte_54131, dst, pitch, mode);
+    n = f[*(const uint32_t *)(const void *)(f + 4 * byte_54131 + 8) + 6u];
+    if ((unsigned)++byte_54130 >= n) {
+        byte_54130 = 0;
+        if ((unsigned)++byte_54131 >= f[0])
+            byte_54131 = 0;
+    }
+}

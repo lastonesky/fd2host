@@ -171,3 +171,49 @@ void scene_state_18(void)
     vm3();
     dword_53C03++;
 }
+
+/* 0x233C6 - place records from coordinate arrays, set the view origin and
+ * fade back in. */
+typedef void (*h0v_fn)(void);
+#define ORIG_FADE_OUT ((h0v_fn)(uintptr_t)0x0001F882u)
+#define ORIG_FADE_IN  ((h0v_fn)(uintptr_t)0x0001F525u)
+#define ORIG_VIEW     ((void (*)(int))(uintptr_t)0x00011CACu)
+#define ORIG_13536    ((h0v_fn)(uintptr_t)0x00013536u)
+#define ORIG_DELAY    ((void (*)(int))(uintptr_t)0x0003790Au)
+#define dword_53A45   (*(uint8_t **)(uintptr_t)0x00053A45u)
+#define dword_51A83   (*(int32_t  *)(uintptr_t)0x00051A83u)
+#define dword_53AB9   (*(int32_t  *)(uintptr_t)0x00053AB9u)
+#define dword_53ABD   (*(int32_t  *)(uintptr_t)0x00053ABDu)
+#define qword_53AA9   (*(uint64_t *)(uintptr_t)0x00053AA9u)
+#define qword_53AB1   (*(uint64_t *)(uintptr_t)0x00053AB1u)
+
+void scene_place_records(const uint8_t *xs, const uint8_t *ys, uintptr_t kind,
+                         int first, int last, int single,
+                         int sx, int sy, int skind, uint64_t origin)
+{
+    int i;
+
+    ORIG_FADE_OUT();
+    ORIG_13536();
+    for (i = first; i <= last; i++) {
+        uint8_t *rec = dword_53A45 + 80u * (uint32_t)i;
+        rec[0] = xs[i];
+        rec[1] = ys[i];
+        rec[3] = (kind < 4) ? (uint8_t)kind
+                            : ((const uint8_t *)(uintptr_t)kind)[i];
+    }
+    if (single != 0) {
+        uint8_t *rec = dword_53A45 + 80u * (uint32_t)single;
+        rec[0] = (uint8_t)sx;
+        rec[1] = (uint8_t)sy;
+        rec[3] = (uint8_t)skind;
+    }
+    dword_51A83 = 0;
+    qword_53AA9 = origin;
+    qword_53AB1 = origin;
+    dword_53AB9 = 0;
+    dword_53ABD = 0;
+    ORIG_VIEW(1);
+    ORIG_FADE_IN();
+    ORIG_DELAY(200);
+}

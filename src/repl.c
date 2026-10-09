@@ -54,7 +54,7 @@
 #include "game/ev5.h"
 #include "game/ev6.h"
 #include "game/unit_load.h"
-#include "game/ev7.h"
+#include "game/menu_actions.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -375,34 +375,48 @@ static const struct repl_entry g_repl[] = {
     { 0x1B750, "unit_metrics",        (void *)unit_metrics,        REPL_UNITLD },
     { 0x32999, "unit_map_render",     (void *)unit_map_render,     REPL_UNITLD },
 
-    /* --- menu/party action handlers (src/game/ev7.c) ---------------------
+    /* --- menu/party action handlers (src/game/menu_actions.c) -----------
      * The two menu dispatch tables' leaf actions: reload the party/map world
      * (0x205DA), validate record flags, and draw the menu vm sub-streams.
      * They call the already-wired helpers through their original addresses. */
-    { 0x205DA, "ev7_205DA",          (void *)ev7_205DA,           REPL_EV7 },
-    { 0x206C5, "ev7_206C5",          (void *)ev7_206C5,           REPL_EV7 },
-    { 0x20707, "ev7_20707",          (void *)ev7_20707,           REPL_EV7 },
-    { 0x2073D, "ev7_2073D",          (void *)ev7_2073D,           REPL_EV7 },
-    { 0x20765, "ev7_20765",          (void *)ev7_20765,           REPL_EV7 },
-    { 0x20822, "ev7_20822",          (void *)ev7_20822,           REPL_EV7 },
-    { 0x2084A, "ev7_2084A",          (void *)ev7_2084A,           REPL_EV7 },
-    { 0x20872, "ev7_20872",          (void *)ev7_20872,           REPL_EV7 },
-    { 0x20926, "ev7_20926",          (void *)ev7_20926,           REPL_EV7 },
-    { 0x20957, "ev7_20957",          (void *)ev7_20957,           REPL_EV7 },
-    { 0x20A51, "ev7_20A51",          (void *)ev7_20A51,           REPL_EV7 },
-    { 0x20A87, "ev7_20A87",          (void *)ev7_20A87,           REPL_EV7 },
-    { 0x20B14, "ev7_20B14",          (void *)ev7_20B14,           REPL_EV7 },
-    { 0x20B3C, "ev7_20B3C",          (void *)ev7_20B3C,           REPL_EV7 },
-    { 0x3314B, "ev7_3314B",          (void *)ev7_3314B,           REPL_EV7 },
-    { 0x33219, "ev7_33219",          (void *)ev7_33219,           REPL_EV7 },
-    { 0x3332B, "ev7_3332B",          (void *)ev7_3332B,           REPL_EV7 },
-    { 0x3346B, "ev7_3346B",          (void *)ev7_3346B,           REPL_EV7 },
-    { 0x3347C, "ev7_3347C",          (void *)ev7_3347C,           REPL_EV7 },
-    { 0x335A0, "ev7_335A0",          (void *)ev7_335A0,           REPL_EV7 },
-    { 0x335AA, "ev7_335AA",          (void *)ev7_335AA,           REPL_EV7 },
-    { 0x33674, "ev7_33674",          (void *)ev7_33674,           REPL_EV7 },
-    { 0x3367E, "ev7_3367E",          (void *)ev7_3367E,           REPL_EV7 },
-    { 0x33AAE, "ev7_33AAE",          (void *)ev7_33AAE,           REPL_EV7 },
+    { 0x205DA, "menu_reload_world",           (void *)menu_reload_world,           REPL_MENU },
+    { 0x206C5, "menu_need_records_marked",    (void *)menu_need_records_marked,    REPL_MENU },
+    { 0x20707, "menu_need_flags_clear_50_51", (void *)menu_need_flags_clear_50_51, REPL_MENU },
+    { 0x2073D, "menu_need_flag_clear_14",     (void *)menu_need_flag_clear_14,     REPL_MENU },
+    { 0x20765, "menu_need_any_clear_15_26",   (void *)menu_need_any_clear_15_26,   REPL_MENU },
+    { 0x20822, "menu_need_flag_clear_64",     (void *)menu_need_flag_clear_64,     REPL_MENU },
+    { 0x2084A, "menu_need_flag_clear_65",     (void *)menu_need_flag_clear_65,     REPL_MENU },
+    { 0x20872, "menu_need_flag_clear_52_no_unit18", (void *)menu_need_flag_clear_52_no_unit18, REPL_MENU },
+    { 0x20926, "menu_need_flag_clear_64_late", (void *)menu_need_flag_clear_64_late, REPL_MENU },
+    { 0x20957, "menu_need_any_clear_26_43",   (void *)menu_need_any_clear_26_43,   REPL_MENU },
+    { 0x20A51, "menu_need_flags_clear_16_17", (void *)menu_need_flags_clear_16_17, REPL_MENU },
+    { 0x20A87, "menu_need_flag_clear_1",      (void *)menu_need_flag_clear_1,      REPL_MENU },
+    { 0x20B14, "menu_need_flag_clear_16",     (void *)menu_need_flag_clear_16,     REPL_MENU },
+    { 0x20B3C, "menu_need_flags_clear_1_2",   (void *)menu_need_flags_clear_1_2,   REPL_MENU },
+    { 0x3314B, "menu_show_reload",            (void *)menu_show_reload,            REPL_MENU },
+    { 0x33219, "menu_show_reload_pair",       (void *)menu_show_reload_pair,       REPL_MENU },
+    { 0x3332B, "menu_show_mark_two",          (void *)menu_show_mark_two,          REPL_MENU },
+    { 0x3346B, "menu_show_plain",             (void *)menu_show_plain,             REPL_MENU },
+    { 0x3347C, "menu_show_step20",            (void *)menu_show_step20,            REPL_MENU },
+    { 0x335A0, "menu_show_plain",             (void *)menu_show_plain,             REPL_MENU },
+    { 0x335AA, "menu_show_or_rebuild_sprites", (void *)menu_show_or_rebuild_sprites, REPL_MENU },
+    { 0x33674, "menu_show_plain",             (void *)menu_show_plain,             REPL_MENU },
+    { 0x3367E, "menu_show_step16_then_clear", (void *)menu_show_step16_then_clear, REPL_MENU },
+    { 0x33AAE, "menu_show_step9_then_clear",  (void *)menu_show_step9_then_clear,  REPL_MENU },
+    { 0x33169, "menu_rebuild_sprites_and_show",  (void *)menu_rebuild_sprites_and_show,  REPL_MENU },
+    { 0x3327D, "menu_mark_records_and_show",    (void *)menu_mark_records_and_show,    REPL_MENU },
+    { 0x33367, "menu_rebuild_sprites_and_clear", (void *)menu_rebuild_sprites_and_clear, REPL_MENU },
+    { 0x333F5, "menu_reset_and_show",           (void *)menu_reset_and_show,           REPL_MENU },
+    { 0x334D9, "menu_show_gated_by_unit",       (void *)menu_show_gated_by_unit,       REPL_MENU },
+    { 0x335DA, "menu_step_pair_then_clear",     (void *)menu_step_pair_then_clear,     REPL_MENU },
+
+    /* --- small dependency-closed scene/UI leaves (batch 45) ------------- */
+    { 0x1C269, "rec_collect_slot_bits",         (void *)rec_collect_slot_bits,         REPL_REC },
+    { 0x311E5, "anim_cycle_frame",              (void *)anim_cycle_frame,              REPL_MAP },
+    { 0x1E0DB, "map_enqueue_status",            (void *)map_enqueue_status,            REPL_MAP },
+    { 0x233C6, "scene_place_records",           (void *)scene_place_records,           REPL_SCENE },
+    { 0x31BDF, "msg_show_lines",                (void *)msg_show_lines,                REPL_DLG },
+    { 0x1E529, "msg_show_page",                 (void *)msg_show_page,                 REPL_DLG },
 
     /* The persistent party roster (src/game/unit.c): the three functions
      * that build/sync/recalc its 80-byte records. They call each other, so
@@ -568,7 +582,7 @@ unsigned repl_parse(const char *spec)
             else if (!plat_stricmp(tok, "ev5"))      mask &= ~REPL_EV5;
             else if (!plat_stricmp(tok, "ev6"))      mask &= ~REPL_EV6;
             else if (!plat_stricmp(tok, "unitload")) mask &= ~REPL_UNITLD;
-            else if (!plat_stricmp(tok, "ev7"))      mask &= ~REPL_EV7;
+            else if (!plat_stricmp(tok, "menu"))     mask &= ~REPL_MENU;
             else printf("repl: unknown group '%s'\n", tok);
             continue;
         }
@@ -593,7 +607,7 @@ unsigned repl_parse(const char *spec)
         else if (!plat_stricmp(tok, "ev5"))      mask |= REPL_EV5;
         else if (!plat_stricmp(tok, "ev6"))      mask |= REPL_EV6;
         else if (!plat_stricmp(tok, "unitload")) mask |= REPL_UNITLD;
-        else if (!plat_stricmp(tok, "ev7"))      mask |= REPL_EV7;
+        else if (!plat_stricmp(tok, "menu"))     mask |= REPL_MENU;
         else printf("repl: unknown group '%s'\n", tok);
     }
     return mask;

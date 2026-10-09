@@ -7,6 +7,8 @@
 #ifndef GAME_SCENE_H
 #define GAME_SCENE_H
 
+#include <stdint.h>
+
 /* 0x22E5C - the `dword_53ECC == 1` transition card. Fades the palette to
  * black, loads FDOTHER.DAT resource 79, clears the screen, blits sub-image 0,
  * fades back in, blits sub-image 1, frees the buffer. Its exact role in the
@@ -23,5 +25,12 @@ void scene_state_10(void);  /* 0x23790 - funcs_25E23[10] */
 void scene_state_12(void);  /* 0x2389F - funcs_25E23[12] */
 void scene_state_14(void);  /* 0x239BD - funcs_25E23[14] */
 void scene_state_18(void);  /* 0x23E39 - funcs_25E23[18] */
+
+/* 0x233C6 - fade out, move records `first..last` to the coordinates in the
+ * xs/ys arrays (kind is either a small literal or a byte array), optionally
+ * reposition record `single`, set the view origin (origin) and fade back in. */
+void scene_place_records(const uint8_t *xs, const uint8_t *ys, uintptr_t kind,
+                         int first, int last, int single,
+                         int sx, int sy, int skind, uint64_t origin);
 
 #endif /* GAME_SCENE_H */

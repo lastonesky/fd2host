@@ -148,3 +148,51 @@ void msg_close_portrait(void)
     guest_free((void *)(uintptr_t)dword_53C5F);
     guest_free((void *)(uintptr_t)dword_53C63);
 }
+
+/* --- single dialogue page helpers -------------------------------------- */
+
+typedef int  (*vm_fn)(void *, int, int, int, int, int, int, int, int);
+typedef void (*h0v_fn)(void);
+typedef void (*h1v_fn)(int);
+
+#define ORIG_VM_PAGE  ((vm_fn)  (uintptr_t)0x00015F84u)
+#define ORIG_4E381    ((h0v_fn)(uintptr_t)0x0004E381u)
+#define ORIG_16E24    ((h0v_fn)(uintptr_t)0x00016E24u)
+#define ORIG_1956B    ((h1v_fn)(uintptr_t)0x0001956Bu)
+#define ORIG_16559    ((h1v_fn)(uintptr_t)0x00016559u)
+#define ORIG_16C57    ((h1v_fn)(uintptr_t)0x00016C57u)
+#define dword_53A79   (*(uint32_t *)(uintptr_t)0x00053A79u)
+#define dword_53A7D   (*(uint32_t *)(uintptr_t)0x00053A7Du)
+#define dword_53AE1   (*(int32_t  *)(uintptr_t)0x00053AE1u)
+
+/* 0x31BDF */
+void msg_show_lines(int id, int sub)
+{
+    ORIG_4E381();
+    ORIG_1956B(id);
+    ORIG_4E381();
+    ORIG_VM_PAGE((void *)(uintptr_t)dword_53A79, sub, 0xA9514,
+                 320, 205, 76, 74, 19, 1);
+    ORIG_16559(0);
+    ORIG_16C57(0);
+    msg_close_portrait();
+    ORIG_4E381();
+}
+
+/* 0x1E529 */
+int msg_show_page(uint16_t *counter, const uint8_t *range, int sub, int page)
+{
+    dword_53AE1 = range[1];
+    if (dword_53AE1 != 0) {
+        if (page == 3) {
+            page = 2;
+            ORIG_16E24();
+        }
+        ORIG_4E381();
+        ORIG_VM_PAGE((void *)(uintptr_t)dword_53A7D, sub,
+                     page * 6080 + 0xA951F, 320, 205, 76, 74, 19, 1);
+        *counter += (uint16_t)dword_53AE1;
+        page++;
+    }
+    return page;
+}

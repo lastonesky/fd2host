@@ -1,4 +1,4 @@
-/* ev7.c - FD2 menu/party action handlers, batch 7 (see ev7.h).
+/* menu_actions.c - FD2 menu/party action handlers (see menu_actions.h).
  *
  * All originals are cdecl: the C bodies push the same arguments the machine
  * code does (rec_flag(index), unit_exists(id), vm_run(stream,...), res_load
@@ -6,7 +6,7 @@
  * reached through their fixed game addresses so the differential harness can
  * hook them and the running host sees the repl-patched C.
  */
-#include "ev7.h"
+#include "menu_actions.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -46,6 +46,7 @@ typedef int  (*load_fn)(int);
 #define dword_53BEF (*(uint32_t *)(uintptr_t)0x00053BEFu)
 #define dword_53C03 (*(uint32_t *)(uintptr_t)0x00053C03u)
 #define dword_53ECC (*(uint32_t *)(uintptr_t)0x00053ECCu)
+#define byte_53AFA  (*(uint8_t  *)(uintptr_t)0x00053AFAu)
 #define qword_53AA9 (*(uint64_t *)(uintptr_t)0x00053AA9u)
 #define qword_53AB1 (*(uint64_t *)(uintptr_t)0x00053AB1u)
 
@@ -53,45 +54,49 @@ typedef int  (*load_fn)(int);
 
 /* --- shared vm tails --------------------------------------------------- */
 /* 0x33206/0x3312D: draw one menu sub-stream, then move the portrait back. */
-static void ev7_vm(int sub)
+static void menu_vm(int sub)
 {
     ORIG_VM((void *)(uintptr_t)dword_53A79, sub,
             0xA0000, 0x140, 0xCD, 0x4C, 0x4A, 0x13, 1);
 }
 
 /* loc_3344D */
-static void ev7_tail_d(void)
+static void menu_tail_draw0(void)
 {
-    ev7_vm(0);
+    menu_vm(0);
     ORIG_GLIDE(0);
 }
 
-/* loc_33028/0x3312D */
-static void ev7_tail_g(void)
+/* 0x3312D is shared, but the sub-stream number is the 8th argument pushed by
+ * the *caller* before entering it:
+ *   loc_33028 (0x33219, 0x3367E) pushes 1,
+ *   loc_3310C (0x33367, 0x335DA) pushes 2,
+ *   0x33AAE directly        pushes 0.
+ * So the tail proper is "draw sub-stream N, clear the mouth, glide back". */
+static void menu_tail_drawN_clear(int sub)
 {
-    ev7_vm(1);
+    menu_vm(sub);
     ORIG_CLEAR();
     ORIG_GLIDE(0);
 }
 
-/* 0x3312D entered with sub 0 (0x33AAE): drawing sub-stream 0, then clear. */
-static void ev7_tail_h(void)
-{
-    ev7_vm(0);
-    ORIG_CLEAR();
-    ORIG_GLIDE(0);
-}
-
-/* loc_33440 */
-static void ev7_tail_e(int sel)
+/* loc_33440 + loc_3344D */
+static void menu_tail_step_clear_draw0(int sel)
 {
     ORIG_1366A(sel);
     ORIG_CLEAR();
-    ev7_tail_d();
+    menu_tail_draw0();
+}
+
+/* loc_3310C (sub 2) + loc_3312D */
+static void menu_tail_step_draw2_clear(int sel)
+{
+    ORIG_1366A(sel);
+    menu_tail_drawN_clear(2);
 }
 
 /* --- 0x205DA ----------------------------------------------------------- */
-void ev7_205DA(void)
+void menu_reload_world(void)
 {
     dword_51A83 = 0;
     dword_53ECC = 0;
@@ -108,10 +113,10 @@ void ev7_205DA(void)
     ORIG_FLUSH();
 }
 
-/* --- menu A: record-flag validators (0x206C5 .. 0x20B3C) --------------- */
+/* --- menu A: option-denied checks -------------------------------------- */
 
-/* 0x206C5 - records 5..10 must all carry flag bit0; else select error 1. */
-void ev7_206C5(void)
+/* 0x206C5 */
+void menu_need_records_marked(void)
 {
     int i;
     ORIG_205BE();
@@ -122,26 +127,24 @@ void ev7_206C5(void)
     dword_53ECC = 1;
 }
 
-/* 0x20707 - fail if rec_flag(50) or rec_flag(51). */
-void ev7_20707(void)
+/* 0x20707 */
+void menu_need_flags_clear_50_51(void)
 {
     ORIG_205BE();
     if (ORIG_REC_FLAG(50) != 0 || ORIG_REC_FLAG(51) != 0)
         dword_53ECC = 1;
 }
 
-/* 0x2073D - fail if rec_flag(14). */
-void ev7_2073D(void)
+/* 0x2073D */
+void menu_need_flag_clear_14(void)
 {
     ORIG_205BE();
     if (ORIG_REC_FLAG(14) != 0)
         dword_53ECC = 1;
 }
 
-/* 0x20765 - "menu 10": if none of rec_flag(15..26) is clear, fail and draw
- * sub-stream 10; when dword_53BEF>5 and rec_flag(59) is set, fail and draw
- * sub-stream 2. */
-void ev7_20765(void)
+/* 0x20765 */
+void menu_need_any_clear_15_26(void)
 {
     int i, any_clear = 0;
 
@@ -152,47 +155,46 @@ void ev7_20765(void)
     }
     if (any_clear == 0) {
         dword_53ECC = 1;
-        ev7_vm(0x0A);
+        menu_vm(0x0A);
     }
     if ((int32_t)dword_53BEF > 5) {
         if (ORIG_REC_FLAG(0x3B) != 0) {
             dword_53ECC = 1;
-            ev7_vm(2);
+            menu_vm(2);
         }
     }
 }
 
-/* 0x20822 - fail if rec_flag(64). */
-void ev7_20822(void)
+/* 0x20822 */
+void menu_need_flag_clear_64(void)
 {
     ORIG_205BE();
     if (ORIG_REC_FLAG(0x40) != 0)
         dword_53ECC = 1;
 }
 
-/* 0x2084A - fail if rec_flag(65). */
-void ev7_2084A(void)
+/* 0x2084A */
+void menu_need_flag_clear_65(void)
 {
     ORIG_205BE();
     if (ORIG_REC_FLAG(0x41) != 0)
         dword_53ECC = 1;
 }
 
-/* 0x20872 - only when unit 18 is absent: fail if rec_flag(52) and draw
- * sub-stream 2. */
-void ev7_20872(void)
+/* 0x20872 */
+void menu_need_flag_clear_52_no_unit18(void)
 {
     ORIG_205BE();
     if (ORIG_UNIT_EXISTS(0x12) != 0)
         return;
     if (ORIG_REC_FLAG(0x34) != 0) {
-        ev7_vm(2);
+        menu_vm(2);
         dword_53ECC = 1;
     }
 }
 
-/* 0x20926 - when dword_53BEF>6: fail if rec_flag(64). */
-void ev7_20926(void)
+/* 0x20926 */
+void menu_need_flag_clear_64_late(void)
 {
     ORIG_205BE();
     if ((int32_t)dword_53BEF <= 6)
@@ -201,9 +203,8 @@ void ev7_20926(void)
         dword_53ECC = 1;
 }
 
-/* 0x20957 - two-range validation (records 0x26..0x2D then 0x2E..0x43 plus
- * rec_flag(0)/rec_flag(0x34)); fail code 1 and/or 2. */
-void ev7_20957(void)
+/* 0x20957 */
+void menu_need_any_clear_26_43(void)
 {
     int i, any_clear = 0;
 
@@ -214,7 +215,7 @@ void ev7_20957(void)
     }
     if (any_clear == 0) {
         dword_53ECC = 1;
-        ev7_vm(0x0A);
+        menu_vm(0x0A);
     }
     if (ORIG_REC_FLAG(0) != 0 || ORIG_REC_FLAG(0x34) != 0)
         dword_53ECC = 1;
@@ -232,121 +233,198 @@ void ev7_20957(void)
         dword_53ECC = 2;
 }
 
-/* 0x20A51 - fail if rec_flag(16) or rec_flag(17). */
-void ev7_20A51(void)
+/* 0x20A51 */
+void menu_need_flags_clear_16_17(void)
 {
     ORIG_205BE();
     if (ORIG_REC_FLAG(0x10) != 0 || ORIG_REC_FLAG(0x11) != 0)
         dword_53ECC = 1;
 }
 
-/* 0x20A87 - fail if rec_flag(1). */
-void ev7_20A87(void)
+/* 0x20A87 */
+void menu_need_flag_clear_1(void)
 {
     ORIG_205BE();
     if (ORIG_REC_FLAG(1) != 0)
         dword_53ECC = 1;
 }
 
-/* 0x20B14 - fail if rec_flag(16). */
-void ev7_20B14(void)
+/* 0x20B14 */
+void menu_need_flag_clear_16(void)
 {
     ORIG_205BE();
     if (ORIG_REC_FLAG(0x10) != 0)
         dword_53ECC = 1;
 }
 
-/* 0x20B3C - fail if rec_flag(1) or rec_flag(2). */
-void ev7_20B3C(void)
+/* 0x20B3C */
+void menu_need_flags_clear_1_2(void)
 {
     ORIG_205BE();
     if (ORIG_REC_FLAG(1) != 0 || ORIG_REC_FLAG(2) != 0)
         dword_53ECC = 1;
 }
 
-/* --- menu B: script/vm actions (0x3314B .. 0x33AAE) -------------------- */
+/* --- menu B: menu-screen actions --------------------------------------- */
 
 /* 0x3314B */
-void ev7_3314B(void)
+void menu_show_reload(void)
 {
     ORIG_205DA();
     dword_51A83 = 0;
-    ev7_tail_d();
+    menu_tail_draw0();
 }
 
 /* 0x33219 */
-void ev7_33219(void)
+void menu_show_reload_pair(void)
 {
     ORIG_205DA();
     ORIG_135DD(7, 32);
     ORIG_1366A(31);
-    ev7_vm(0);
+    menu_vm(0);
     ORIG_135DD(7, 23);
     ORIG_1366A(32);
-    ev7_tail_g();
+    menu_tail_drawN_clear(1);
 }
 
 /* 0x3332B */
-void ev7_3332B(void)
+void menu_show_mark_two(void)
 {
     ORIG_205DA();
     ORIG_135DD(10, 0);
     *(uint8_t *)(uintptr_t)(dword_53A45 + 4038) = 100;
     *(uint8_t *)(uintptr_t)(dword_53A45 + 4118) = 100;
-    ev7_tail_d();
+    menu_tail_draw0();
 }
 
-/* 0x3346B */
-void ev7_3346B(void)
+/* 0x3346B (also 0x335A0 and 0x33674) */
+void menu_show_plain(void)
 {
     ORIG_205DA();
-    ev7_tail_d();
+    menu_tail_draw0();
 }
 
 /* 0x3347C */
-void ev7_3347C(void)
+void menu_show_step20(void)
 {
     ORIG_205DA();
     ORIG_135DD(20, 20);
-    ev7_tail_d();
-}
-
-/* 0x335A0 - body is the shared 0x33470 block. */
-void ev7_335A0(void)
-{
-    ORIG_205DA();
-    ev7_tail_d();
+    menu_tail_draw0();
 }
 
 /* 0x335AA */
-void ev7_335AA(void)
+void menu_show_or_rebuild_sprites(void)
 {
     ORIG_205DA();
     if (ORIG_UNIT_EXISTS(0x12) == 0)
         ORIG_LOAD(1);
-    ev7_tail_d();
-}
-
-/* 0x33674 - body is the shared 0x33470 block. */
-void ev7_33674(void)
-{
-    ORIG_205DA();
-    ev7_tail_d();
+    menu_tail_draw0();
 }
 
 /* 0x3367E */
-void ev7_3367E(void)
+void menu_show_step16_then_clear(void)
 {
     ORIG_205DA();
     ORIG_135DD(16, 28);
-    ev7_tail_e(0x43);
+    menu_tail_step_clear_draw0(0x43);
 }
 
 /* 0x33AAE */
-void ev7_33AAE(void)
+void menu_show_step9_then_clear(void)
 {
     ORIG_205DA();
     ORIG_135DD(9, 39);
     ORIG_1366A(76);
-    ev7_tail_h();
+    menu_tail_drawN_clear(0);
+}
+
+/* 0x33169 */
+void menu_rebuild_sprites_and_show(void)
+{
+    ORIG_205DA();
+    menu_vm(0);
+    dword_51A83 = 0;
+    byte_53AFA = 1;
+    ORIG_LOAD(1);
+    byte_53AFA = 0;
+    ORIG_135DD(8, 1);
+    ORIG_1366A(28);
+    ORIG_135DD(8, 0);
+    ORIG_1366A(29);
+    menu_vm(1);
+    ORIG_GLIDE(0);
+}
+
+/* 0x3327D */
+void menu_mark_records_and_show(void)
+{
+    int i;
+    ORIG_205DA();
+    for (i = 0; i < 11; i++)
+        *(uint8_t *)(uintptr_t)(dword_53A45 + REC * (uint32_t)i + 3) = 2;
+    ORIG_135DD(6, 0);
+    menu_vm(0);
+    dword_51A83 = 0;
+    ORIG_1366A(35);
+    menu_vm(1);
+    ORIG_GLIDE(0);
+    ORIG_CLEAR();
+}
+
+/* 0x33367 */
+void menu_rebuild_sprites_and_clear(void)
+{
+    ORIG_205DA();
+    menu_vm(0);
+    dword_51A83 = 0;
+    ORIG_135DD(10, 7);
+    ORIG_LOAD(1);
+    ORIG_1366A(38);
+    menu_vm(1);
+    menu_tail_step_draw2_clear(0x27);
+}
+
+/* 0x333F5 */
+void menu_reset_and_show(void)
+{
+    ORIG_205DA();
+    ORIG_135DD(4, 4);
+    byte_53AFA = 1;
+    ORIG_LOAD(1);
+    byte_53AFA = 0;
+    ORIG_1366A(40);
+    ORIG_135DD(11, 40);
+    ORIG_1366A(41);
+    ORIG_CLEAR();
+    menu_tail_draw0();
+}
+
+/* 0x334D9 */
+void menu_show_gated_by_unit(void)
+{
+    int sub;
+
+    ORIG_205DA();
+    sub = (ORIG_UNIT_EXISTS(0x0C) == 0) ? 3 : 0;
+    menu_vm(sub);
+    ORIG_135DD(0x18, 0x11);
+    menu_vm(sub + 1);
+    dword_51A83 = 0;
+    ORIG_1366A(0x30);
+    menu_vm(sub + 2);
+    ORIG_GLIDE(0);
+}
+
+/* 0x335DA */
+void menu_step_pair_then_clear(void)
+{
+    ORIG_205DA();
+    menu_vm(0);
+    dword_51A83 = 0;
+    ORIG_135DD(0x10, 4);
+    ORIG_1366A(0x36);
+    menu_vm(1);
+    dword_51A83 = 0;
+    ORIG_135DD(0x10, 4);
+    menu_tail_step_draw2_clear(0x37);
 }
