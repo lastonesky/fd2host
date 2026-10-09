@@ -409,6 +409,9 @@ static const struct repl_entry g_repl[] = {
     { 0x333F5, "menu_reset_and_show",           (void *)menu_reset_and_show,           REPL_MENU },
     { 0x334D9, "menu_show_gated_by_unit",       (void *)menu_show_gated_by_unit,       REPL_MENU },
     { 0x335DA, "menu_step_pair_then_clear",     (void *)menu_step_pair_then_clear,     REPL_MENU },
+    { 0x338C4, "menu_show_step_pairs",          (void *)menu_show_step_pairs,          REPL_MENU },
+    { 0x3396A, "menu_show_map_pan",             (void *)menu_show_map_pan,             REPL_MENU },
+    { 0x1D4F6, "menu_stop_and_free_music",      (void *)menu_stop_and_free_music,      REPL_MENU },
 
     /* --- small dependency-closed scene/UI leaves (batch 45) ------------- */
     { 0x1C269, "rec_collect_slot_bits",         (void *)rec_collect_slot_bits,         REPL_REC },

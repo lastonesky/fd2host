@@ -17,12 +17,12 @@
 **同一份源码也能在 Linux 上跑**（`build/fd2host-linux32`，X11/XWayland + sokol GLCORE）：
 与 Windows 同 guest tick 抓帧**逐像素 0 差异**（`rounds/16-entry-layer.md` §46.10）。
 
-**当前重心是路线 C 的主体：逐步源码化。** 已把 297 个函数从机器码还原成 C、经 `src/repl.c`
+**当前重心是路线 C 的主体：逐步源码化。** 已把 300 个函数从机器码还原成 C、经 `src/repl.c`
 接入运行中的游戏（逐字节对拍 + `regress.ps1` 8/8）。转译已改按**批量节奏**（一次 ~30 个、
 每 3-5 个 `--only` 验证一次，见 `AGENTS.md` §2、`docs/TRANSLATION.md` §1）。
 
 > ⚠ **进度必须看清**：全量函数表 `re/funcmap.csv` 有 **1359** 个函数，已源码化的只有
-> **297 个 ≈ 21.9%**；**其余 ~79% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
+> **300 个 ≈ 22.1%**；**其余 ~79% 仍然是 `FD2.EXE` 里的原始 32 位 x86 机器码，由宿主在本进程里
 > 直接执行**。这正是宿主必须是 **32 位进程**的原因（x86-64 长模式不能执行 32 位代码，
 > 只有 `-m32`/WOW64 这类 32 位进程才行）；**等全部函数源码化后，这个 32 位门槛才会消失**。
 
@@ -51,7 +51,7 @@ INT 10h AH=0 设 0x13 模式、调色板端口 I/O         ✅
 文件服务：AH=3C 创建 / AH=41 删除 / AH=40 截断      ✅ fresh install 不再崩，regress 8/8
 游戏退出路径（INT10 mode 3 → AH=4Ch → shutdown）   ✅
 第 1 步接口抽取：render.h / host.h / main_win32.c  ✅ GDI 成为第一个后端
-源码转译：**297 / 1359 个函数接入（≈21.9%）**          ⏳ 其余 ~79% 仍是原始机器码在跑
+源码转译：**300 / 1359 个函数接入（≈22.1%）**          ⏳ 其余 ~79% 仍是原始机器码在跑
 Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 px** ✅（§46.10）
 ```
 
@@ -127,6 +127,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
 | §74 | 10-09 | **Linux/WSLg 音频排查（无代码改动）** | 摸清 Linux 输出链（sokol→ALSA `"default"`→pulse 插件→WSLg PulseAudio→RDPSink）与两处可移植性缺口：① 32 位宿主缺 `libasound2-plugins:i386` 即静音；② `dls.c` 默认 bank 路径硬编码 `C:\` 致所有乐器退回兜底波形（"音色全变"，不是高频被截）。不改代码的改善：`--audio-rate=44100`（免重采样、缓冲 93→41 ms）+ `--gm-bank=/mnt/c/.../gm.dls`（`dls: 235 instruments, 495 waves`）。**待办：`dls.c` 跨平台默认查找** | `docs/AUDIO.md` §11.11、`docs/PITFALLS.md` §8-94/95/96 |
 | §75 | 10-09 | **菜单/队伍 action handler 批量（第 262–285 个，24 个）** | 按 ranking+调用图选两个菜单分派表的 action 簇：`0x205DA`（重载世界）+ 菜单 A 记录标志校验 13 个（`0x206C5`/`0x20707`/`0x2073D`/`0x20765`/`0x20822`/`0x2084A`/`0x20872`/`0x20926`/`0x20957`/`0x20A51`/`0x20A87`/`0x20B14`/`0x20B3C`）+ 菜单 B 脚本/vm 10 个（`0x3314B`/`0x33219`/`0x3332B`/`0x3346B`/`0x3347C`/`0x335A0`/`0x335AA`/`0x33674`/`0x3367E`/`0x33AAE`）→ 新模块 `game/menu_actions.c`（`REPL_MENU`），261→**285**。**关键点**：IDA 的 `__fastcall/__usercall` 全是栈探针伪像，真 ABI=cdecl；共享尾 `loc_3312D` 的子流号由调用者压栈决定（`0x33AAE` 传 **0** 不是 1，对拍抓到）；所有外部依赖走固定地址（宿主 repl 换 C、check hook 桩）。`ev2check` 扩 24 项 + 3 桩（`0x1088D`/`0x12D7B`/`0x1F525`）。判据：`ev2check` 子集 480/0、全量 2900/0、`regress` all/none 8/8、A/B **0/64000 px**、`letest` exact match、Linux 0 warning + exact match + 49/49、`repl: installed 285` | `docs/rounds/44-menu-actions.md`、`docs/TRANSLATION.md` §4/§5 |
 | §76 | 10-09 | **菜单层收尾 + 语义命名 + 场景/UI 叶子（第 286–297 个，12 个）** | 按操作者要求把第 44 轮的 `ev7_205DA` 式代号**整体改成语义名**：`src/game/ev7.c/.h` → `game/menu_actions.c/.h`，分组 `REPL_EV7` → `REPL_MENU`，30 个函数改成 `menu_reload_world`/`menu_need_*`/`menu_show_*`。新增 12 个：菜单 B 剩余 6 个（`0x33169`/`0x3327D`/`0x33367`/`0x333F5`/`0x334D9`/`0x335DA` → `menu_rebuild_sprites_and_show` 等）+ 6 个依赖闭合叶子（`0x1C269 rec_collect_slot_bits`→`rec.c`、`0x311E5 anim_cycle_frame`→`anim.c`、`0x1E0DB map_enqueue_status`→`map.c`、`0x233C6 scene_place_records`→`scene.c`、`0x31BDF msg_show_lines`/`0x1E529 msg_show_page`→`msg.c`），285→**297**。**关键点**：`loc_3310C` 压的子流号是 **2**（不是 1）；对拍 obj1 逐字节比指针全局⇒两侧必须同值（`0x53A69` 踩坑）；`scene_place_records` 的 `0x11CAC` 需参数 1。`0x14818`/`0x12CEA` 两个地图叶子因需“地图世界”harness 暂不 wire。判据：`ev2check` 子集 240/0、全量 2355/0、`regress` all/none 8/8、A/B **0/64000 px**、`letest` exact match、Linux 0 warning + exact match + 49/49、`repl: installed 297` | `docs/rounds/45-menu-completion-and-leaves.md`、`docs/TRANSLATION.md` §4/§5 |
+| §77 | 10-09 | **菜单 B 尾块（第 298–300 个，3 个）** | 继续菜单层收尾，把菜单 B 里对拍可控的 3 个尾块收进 `game/menu_actions.c`：`0x338C4 menu_show_step_pairs`（4 步头像位 + 400ms 停顿）、`0x3396A menu_show_map_pan`（加载 FDOTHER#88 当效果库 + 4 次地图平移）、`0x1D4F6 menu_stop_and_free_music`（停库 + free），297→**300**。**关键点**：`loc_331EA` 的 `add esp,4` 只是清 cdecl 参数（字节码 `e8 a5 3f 00 00` = `call delay`）；`0x1D4F6` 尾部 `jmp loc_1A80A` = `call free; retn`；harness 要给 `0x53A49` 一块两侧同值的大缓冲。**未接入**：`0x336A0`/`0x33AF1`→`0x24618`→`0x22046`→未转译 `0x219AD`（堆+依赖链），需先做 CRT 重定向对拍器。判据：`ev2check` 全量 2400/0、`regress` 8/8、A/B **0/64000 px**、Linux 0 warning + exact match + 49/49 | `docs/rounds/46-menu-tail.md` |
 
 ## 4. 下一步计划（按优先级）
 
@@ -195,7 +196,7 @@ Linux 原生：`fd2host-linux32` 跑真游戏，与 Windows 同 tick 抓帧 **0 
    - ~~**菜单 action 簇**~~ **已完成（§75，接入 261→285）**：两个菜单分派表的 24 个 action
      → `game/menu_actions.c`（`REPL_MENU`）+ `ev2check` 扩 24 项/3 桩。菜单两族更大的同族块
      （`0x33169`/`0x333F5`/`0x335DA`/`0x336A0` 等）留下一批。
-   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 201→229→261→285→**297**/1359）。
+   记录维持：`repl.c` 加行 → `python tools/translation_map.py`（现 201→229→261→285→297→**300**/1359）。
 2. ~~**补 autokey 配方**~~ **已完成（§40，2026-10-06）**：标准配方 + `--shot-tick=326..334`
    即可落在“打字进行中”，抓到 3 张不同进度的逐字画面（框区差异 455→327→325→0），
    且 **15 字符 ↔ 15 tick ↔ `svc_wait_ticks(1)` 55 ms/字符**自洽 ⇒ `vm_run`+`dlg_type_step`

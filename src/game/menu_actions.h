@@ -96,5 +96,14 @@ void menu_show_gated_by_unit(void);
 /* 0x335DA - reload, draw sub-stream 0, step the portrait twice the other
  * way, then draw sub-stream 1 and clear. */
 void menu_step_pair_then_clear(void);
+/* 0x338C4 - reload, draw sub-stream 0, rebuild the sprites, then walk the
+ * portrait through four positions with 400 ms pauses. */
+void menu_show_step_pairs(void);
+/* 0x3396A - reload, load FDOTHER.DAT#88 as the effect bank, draw sub-stream
+ * 1, clear the map, pan it four times with sound, then draw sub-stream 2 and
+ * release the bank. */
+void menu_show_map_pan(void);
+/* 0x1D4F6 - stop the effect bank and free it. */
+void menu_stop_and_free_music(void);
 
 #endif /* FD2_GAME_MENU_ACTIONS_H */

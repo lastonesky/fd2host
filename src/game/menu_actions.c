@@ -428,3 +428,68 @@ void menu_step_pair_then_clear(void)
     ORIG_135DD(0x10, 4);
     menu_tail_step_draw2_clear(0x37);
 }
+
+/* --- menu B tail (0x338C4 / 0x3396A / 0x1D4F6) ------------------------- */
+
+typedef void *(*resload_fn)(const char *, void *, int);
+typedef int   (*sfx_fn)(void *, int, int);
+typedef void  (*h1v_fn)(int);
+typedef void  (*free_fn)(void *);
+
+#define ORIG_RESLOAD ((resload_fn)(uintptr_t)0x000111BAu)
+#define ORIG_SFX     ((sfx_fn)    (uintptr_t)0x00025A96u)
+#define ORIG_SCROLL  ((h1v_fn)    (uintptr_t)0x00024B4Du)
+#define ORIG_DELAY   ((h1v_fn)    (uintptr_t)0x0003790Au)
+#define ORIG_FREE    ((free_fn)   (uintptr_t)0x0003776Eu)
+#define dword_53B13 (*(uint32_t *)(uintptr_t)0x00053B13u)
+#define dword_53A49 (*(uint32_t *)(uintptr_t)0x00053A49u)
+
+/* 0x338C4 */
+void menu_show_step_pairs(void)
+{
+    ORIG_205DA();
+    menu_vm(0);
+    ORIG_LOAD(1);
+    ORIG_135DD(0, 4);
+    ORIG_DELAY(400);
+    ORIG_135DD(0, 0x16);
+    ORIG_DELAY(400);
+    ORIG_135DD(0x1A, 0x18);
+    ORIG_DELAY(400);
+    ORIG_135DD(0x1A, 2);
+    ORIG_DELAY(400);
+    menu_vm(1);
+    ORIG_GLIDE(0);
+}
+
+/* 0x3396A */
+void menu_show_map_pan(void)
+{
+    ORIG_205DA();
+    dword_53B13 = 0;
+    dword_53B13 = (uint32_t)(uintptr_t)ORIG_RESLOAD("FDOTHER.DAT", NULL, 88);
+    ORIG_135DD(5, 0);
+    menu_vm(1);
+    memset((void *)(uintptr_t)dword_53A49, 0, 0x25680u);
+    ORIG_SFX((void *)(uintptr_t)dword_53B13, 1, 1);
+    ORIG_SCROLL(20);
+    ORIG_DELAY(600);
+    ORIG_SFX((void *)(uintptr_t)dword_53B13, 1, 1);
+    ORIG_SCROLL(20);
+    ORIG_DELAY(600);
+    ORIG_SFX((void *)(uintptr_t)dword_53B13, 1, 1);
+    ORIG_SCROLL(20);
+    ORIG_DELAY(600);
+    ORIG_SFX((void *)(uintptr_t)dword_53B13, 1, 1);
+    ORIG_SCROLL(60);
+    menu_vm(2);
+    ORIG_GLIDE(0);
+    menu_stop_and_free_music();
+}
+
+/* 0x1D4F6 */
+void menu_stop_and_free_music(void)
+{
+    ORIG_SFX((void *)(uintptr_t)dword_53B13, -1, 1);
+    ORIG_FREE((void *)(uintptr_t)dword_53B13);
+}

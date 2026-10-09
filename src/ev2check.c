@@ -951,6 +951,22 @@ static void o_show_page(void)
 static void c_show_page(void)
 { leave_args(1); (void)ret_ours(msg_show_page(&g_counter, g_range, g_argx & 3, g_argy & 3)); }
 
+/* 0x338C4 / 0x3396A / 0x1D4F6 (menu B tail). The map bitmap 0x53A49 must be
+ * valid and identical on both sides; each call starts from the same fill. */
+static uint8_t g_mapsrc[160000];
+static void menuB_args(void)
+{
+    W32P(0x53A49) = (uint32_t)(uintptr_t)g_mapsrc;
+    W32P(0x53B13) = 0;
+    memset(g_mapsrc, 0x11, sizeof g_mapsrc);
+}
+static void o_menu_steps(void) { menuB_args(); ((void (*)(void))(uintptr_t)0x000338C4u)(); }
+static void c_menu_steps(void) { menuB_args(); menu_show_step_pairs(); }
+static void o_menu_pan(void)   { menuB_args(); ((void (*)(void))(uintptr_t)0x0003396Au)(); }
+static void c_menu_pan(void)   { menuB_args(); menu_show_map_pan(); }
+static void o_menu_free(void)  { menuB_args(); ((void (*)(void))(uintptr_t)0x0001D4F6u)(); }
+static void c_menu_free(void)  { menuB_args(); menu_stop_and_free_music(); }
+
 struct entry { uint32_t addr; const char *name; pair_fn orig, ours; };
 static const struct entry g_entries[] = {
     { 0x135DD, "135DD", o_135DD, c_135DD },
@@ -1118,6 +1134,11 @@ static const struct entry g_entries[] = {
     { 0x233C6, "scene_place_records",     o_place_records, c_place_records },
     { 0x31BDF, "msg_show_lines",          o_show_lines,    c_show_lines },
     { 0x1E529, "msg_show_page",           o_show_page,     c_show_page },
+
+    /* menu B tail (batch 46) */
+    { 0x338C4, "menu_show_step_pairs",    o_menu_steps, c_menu_steps },
+    { 0x3396A, "menu_show_map_pan",       o_menu_pan,   c_menu_pan },
+    { 0x1D4F6, "menu_stop_and_free_music", o_menu_free, c_menu_free },
 };
 #define NENT (sizeof g_entries / sizeof g_entries[0])
 
