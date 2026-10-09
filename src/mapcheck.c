@@ -82,6 +82,9 @@ typedef void (*icons_fn)(int, int, int, const uint8_t *);
 #define ORIG_ICONSANIM ((icons_fn)    (uintptr_t)0x0001C4CCu)
 typedef void (*slide_fn)(int, int);
 #define ORIG_SLIDE   ((slide_fn)      (uintptr_t)0x00012CEAu)
+typedef void (*textwin_fn)(void);
+#define ORIG_TEXTWIN ((textwin_fn)    (uintptr_t)0x000197E5u)
+static uint8_t tbl12[0x8000];   /* 0x53A89 shape bank, 12-byte stride */
 
 #define BITMAP_SZ (400 * 1024)
 #define SCR_SZ    (256 * 1024)
@@ -514,6 +517,18 @@ int main(int argc, char **argv)
         }
     }
     PTR(0x53A61) = ibank;
+
+    /* 0x53A89 shape bank: 12-byte-stride offset table; every index points at
+     * one raw 24x24 block (u16 w, u16 h, pixels). */
+    {
+        uint32_t off = 0x1000;
+        int kk, q;
+        uint8_t *p = tbl12 + off;
+        for (kk = 0; kk < 64; kk++)
+            *(uint32_t *)(tbl12 + 12 * kk) = off;
+        *(uint16_t *)p = 24; *(uint16_t *)(p + 2) = 24;
+        for (q = 0; q < 24 * 24; q++) p[4 + q] = (uint8_t)q;
+    }
 
     for (round = 0; round < 500 && !g_fail; round++) {
         int i;
@@ -1523,6 +1538,37 @@ int main(int argc, char **argv)
                 snprintf(g_why, sizeof g_why, "tx=%d ty=%d o=(%d,%d) c=(%d,%d)",
                          tx, ty, o_x, o_y, I32(0x53AB1), I32(0x53AB5));
                 fail("map_slide_view");
+            }
+        }
+
+        /* ---- map_draw_text_window (0x197E5) --------------------------- */
+        for (i = 0; i < 6 && !g_fail; i++) {
+            uint32_t save = g_rnd;
+            int flag, ox, oy, k, bad = 0;
+
+            setup_view(bitmap, scrA, expA, cells, ctbl, recs, &flag, &ox, &oy);
+            PTR(0x53C63) = scrB;
+            PTR(0x53A89) = tbl12;
+            for (k = 0; k < SCR_SZ; k++) scrB[k] = (uint8_t)(k * 13 + 7);
+            ORIG_TEXTWIN();
+            memcpy(res_bmp, bitmap, BITMAP_SZ);
+            memcpy(res_vga, (void *)(uintptr_t)0xA0000u, VGA_SZ);
+            memcpy(res_scr, scrB, SCR_SZ);
+
+            g_rnd = save;
+            setup_view(bitmap, scrA, expA, cells, ctbl, recs, &flag, &ox, &oy);
+            PTR(0x53C63) = scrB;
+            PTR(0x53A89) = tbl12;
+            for (k = 0; k < SCR_SZ; k++) scrB[k] = (uint8_t)(k * 13 + 7);
+            map_draw_text_window();
+            cases++;
+            if (memcmp(res_bmp, bitmap, BITMAP_SZ) != 0
+                || memcmp(res_vga, (void *)(uintptr_t)0xA0000u, VGA_SZ) != 0
+                || memcmp(res_scr, scrB, SCR_SZ) != 0)
+                bad = 1;
+            if (bad) {
+                snprintf(g_why, sizeof g_why, "ox=%d oy=%d", ox, oy);
+                fail("map_draw_text_window");
             }
         }
     }

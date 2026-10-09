@@ -63,6 +63,7 @@ addr,c_name,source_file,group,check,cases,status,note
 0x1956B,msg_open_portrait,src/game/msg.c,dlg,msgcheck,465,wired (repl.c),portrait compositor 0x1956B/0x1974C/0x26996; event log + screen pair compared
 0x196CB,ev4_196CB,src/game/ev4.c,ev4,ev2check,6000,wired (repl.c),scene move/map batch 4 (0x1366A + steppers + 0x196CB); obj1/obj2 + VGA + buffers
 0x1974C,msg_blit_band,src/game/msg.c,dlg,msgcheck,465,wired (repl.c),portrait compositor 0x1956B/0x1974C/0x26996; event log + screen pair compared
+0x197E5,map_draw_text_window,src/game/map.c,map,mapcheck,122500,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x1ACF3,map_draw_cursor,src/game/map.c,map,mapcheck,4000,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x1AEB1,dlg_draw_number_signed,src/game/dlg.c,dlg,mapcheck,3000,wired (repl.c),"dialogue helpers, box animation, wait-key, typewriter"
 0x1B5F1,ev5_1B5F1,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot

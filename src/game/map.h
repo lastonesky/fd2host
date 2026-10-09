@@ -63,4 +63,7 @@ void map_draw_party_icons(int unused, int table_idx, int count, const uint8_t *l
 void map_draw_party_icons_anim(int unused, int table_idx, int count,
                                const uint8_t *list);
 
+/* 0x197E5 - composite the dialogue/text window from the staging screen. */
+void map_draw_text_window(void);
+
 #endif /* GAME_MAP_H */

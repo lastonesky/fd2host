@@ -773,3 +773,56 @@ void map_draw_party_icons_anim(int unused, int table_idx, int count,
     guest_free(p);
     map_view_update(0);
 }
+
+/* 0x197E5 - composite the dialogue/text window: render the map view, copy a
+ * band from the staging screen, blit two raw shape blocks with a sliding
+ * vertical offset, blit the view to 0xA0504, then copy the lower band back. */
+typedef void (*h0v3_fn)(void);
+typedef void (*render3_fn)(uint8_t *, int, int, int, int, int);
+typedef void (*blittrans_fn)(void *, const void *, int);
+typedef void (*gfxrows3_fn)(void *, int, const void *, int, int, int);
+#define ORIG_ANIM3     ((h0v3_fn)     (uintptr_t)0x0001297Du)
+#define ORIG_RENDER3   ((render3_fn)  (uintptr_t)0x00011EEEu)
+#define ORIG_ALLPORT3  ((h0v3_fn)     (uintptr_t)0x000127A9u)
+#define ORIG_BLITTRANS ((blittrans_fn)(uintptr_t)0x0004ED34u)
+#define ORIG_GFXROWS3  ((gfxrows3_fn) (uintptr_t)0x00011EB0u)
+#define dword_53C63 (*(uint32_t *)(uintptr_t)0x00053C63u)
+#define dword_53A89 (*(uint32_t *)(uintptr_t)0x00053A89u)
+
+void map_draw_text_window(void)
+{
+    uint32_t v13[2];
+    uint8_t *base;
+    int32_t v14 = -16, v15 = 16;
+    int i, j, k;
+
+    v13[0] = *(const uint32_t *)(uintptr_t)0x00051EE5u;
+    v13[1] = *(const uint32_t *)(uintptr_t)0x00051EE9u;
+    base = dword_53A49 + 0x1A59Cu;
+    if ((uint32_t)(uintptr_t)dword_53A51 > 1u) {
+        ORIG_ANIM3();
+        ORIG_RENDER3(dword_53A49 + 0x8088u, 456, 13, 8,
+                     dword_53AA9, dword_53AAD);
+        ORIG_ALLPORT3();
+    }
+    for (i = 0; i < 4; i++) {
+        v14 += 4;
+        v15 -= 4;
+        for (k = 0; k < 86; k++)
+            memmove(dword_53A49 + 0x8089u + 456u * (uint32_t)(k + 108),
+                    (const void *)(uintptr_t)(dword_53C63 + 0x8C05u
+                                              + 320u * (uint32_t)k), 310);
+        for (j = 0; j < 2; j++) {
+            int off = (j == 0) ? v14 : v15;
+            ORIG_BLITTRANS(base + off,
+                (const void *)(uintptr_t)(dword_53A89 +
+                    *(const uint32_t *)(uintptr_t)(dword_53A89
+                        + 12u * v13[j])), 456);
+        }
+        ORIG_GFXROWS3((void *)0xA0504u, 320, dword_53A49 + 0x8088u, 456, 312, 192);
+    }
+    for (k = 0; k < 86; k++)
+        memmove((uint8_t *)(uintptr_t)0xA8C05u + 320u * (uint32_t)k,
+                (const void *)(uintptr_t)(dword_53C63 + 5u
+                                          + 320u * (uint32_t)(k + 112)), 310);
+}
