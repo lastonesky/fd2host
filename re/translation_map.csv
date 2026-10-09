@@ -73,9 +73,11 @@ addr,c_name,source_file,group,check,cases,status,note
 0x1BB8C,rec_slot_claim,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x1C220,ev5_1C220,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x1C269,rec_collect_slot_bits,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
+0x1C2DA,map_draw_party_icons,src/game/map.c,map,mapcheck,122500,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x1CA89,rec_sub_table5,src/game/rec.c,rec,reccheck,42225,wired (repl.c),character record table (incl. round-34 leaves)
 0x1D4CB,ev5_1D4CB,src/game/ev5.c,ev5,ev2check,2400,wired (repl.c),small scene/map/record leaves batch 5 (28); out-buffers inside the record snapshot
 0x1D4F6,menu_stop_and_free_music,src/game/menu_actions.c,menu,?,?,wired (repl.c),
+0x1DF58,map_draw_status_popups,src/game/map.c,map,mapcheck,122500,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x1E0DB,map_enqueue_status,src/game/map.c,map,mapcheck,122500,wired (repl.c),map view render/reveal/cursor/scroller + view refresh
 0x1E1DC,ev4_1E1DC,src/game/ev4.c,ev4,ev2check,6000,wired (repl.c),scene move/map batch 4 (0x1366A + steppers + 0x196CB); obj1/obj2 + VGA + buffers
 0x1E529,msg_show_page,src/game/msg.c,dlg,msgcheck,465,wired (repl.c),portrait compositor 0x1956B/0x1974C/0x26996; event log + screen pair compared

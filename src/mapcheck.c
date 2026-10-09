@@ -73,6 +73,10 @@ typedef void (*draw_fn)(int);
 typedef void (*refreshall_fn)(void);
 #define ORIG_DRAW    ((draw_fn)       (uintptr_t)0x000127E0u)
 #define ORIG_ALLPORT ((refreshall_fn) (uintptr_t)0x000127A9u)
+typedef void (*popups_fn)(void);
+#define ORIG_POPUPS  ((popups_fn)     (uintptr_t)0x0001DF58u)
+typedef void (*icons_fn)(int, int, int, const uint8_t *);
+#define ORIG_ICONS   ((icons_fn)      (uintptr_t)0x0001C2DAu)
 
 #define BITMAP_SZ (400 * 1024)
 #define SCR_SZ    (256 * 1024)
@@ -87,6 +91,7 @@ static char g_why[256];
 static int  g_delays;
 
 static void __cdecl stub_delay(unsigned ms) { (void)ms; g_delays++; }
+static void __cdecl stub_wait(int n) { (void)n; }
 static void *__cdecl stub_malloc(size_t n) { return malloc(n); }
 static void *__cdecl stub_memmove(void *d, const void *s, size_t n)
 { return memmove(d, s, n); }
@@ -395,6 +400,7 @@ int main(int argc, char **argv)
     res_recs  = (uint8_t *)malloc(80 * 16);
 
     install_hook(0x3790A, stub_delay);
+    install_hook(0x17AA9, stub_wait);   /* svc_wait_ticks: no tick thread here */
     /* The map render core reaches the Watcom CRT heap (0x24D22 -> malloc /
      * memmove / free); point them at the host libc so the original machine
      * code and the C translation use the same heap, exactly like rescheck. */
@@ -731,6 +737,81 @@ int main(int argc, char **argv)
                 fail("dlg_draw_number_signed"); break;
             }
         }
+
+        /* ---- map_draw_status_popups (0x1DF58) ------------------------- */
+        for (i = 0; i < 6 && !g_fail; i++) {
+            int n  = 1 + (int)(rnd() % 4);
+            int ns = 1 + (int)(rnd() % 6);
+            int k;
+
+            PTR(0x53A45) = recs;   I32(0x53BEB) = n;
+            PTR(0x53A81) = nres;
+            I32(0x53AA9) = 0;      I32(0x53AAD) = 0;
+            for (k = 0; k < 80 * n; k++) recs[k] = (uint8_t)rnd();
+            for (k = 0; k < n; k++) {
+                recs[80 * k + 0] = (uint8_t)(rnd() % 8u);
+                recs[80 * k + 1] = (uint8_t)(rnd() % 6u);
+            }
+            I32(0x53EC4) = ns;
+            for (k = 0; k < ns; k++) {
+                B8(0x53C6C + k) = (uint8_t)(rnd() % 8u);
+                B8(0x53D34 + k) = (uint8_t)(rnd() % 16u);
+                B8(0x53DFC + k) = (uint8_t)(rnd() % n);
+            }
+            memset(dstA, 0x66, BITMAP_SZ);
+            memcpy(dstB, dstA, BITMAP_SZ);
+            PTR(0x53A49) = dstA;
+            ORIG_POPUPS();
+            PTR(0x53A49) = dstB;
+            map_draw_status_popups();
+            cases++;
+            if (memcmp(dstA, dstB, BITMAP_SZ) != 0) {
+                size_t q, where = 0;
+                for (q = 0; q < BITMAP_SZ; q++)
+                    if (dstA[q] != dstB[q]) { where = q; break; }
+                snprintf(g_why, sizeof g_why, "n=%d ns=%d @%u (%02X/%02X)",
+                         n, ns, (unsigned)where, dstA[where], dstB[where]);
+                fail("map_draw_status_popups"); break;
+            }
+        }
+        PTR(0x53A49) = bitmap;   /* restore for the tests that follow */
+
+        /* ---- map_draw_party_icons (0x1C2DA) --------------------------- */
+        for (i = 0; i < 6 && !g_fail; i++) {
+            int n   = 1 + (int)(rnd() % 8);
+            int cnt = 1 + (int)(rnd() % n);
+            uint8_t list[16];
+            int k;
+
+            PTR(0x53A45) = recs;   I32(0x53BEB) = n;
+            PTR(0x53A81) = nres;   PTR(0x53A61) = ibank;
+            PTR(0x53A49) = bitmap;
+            I32(0x53AA9) = 0;      I32(0x53AAD) = 0;
+            I32(0x53C0B) = (int)(rnd() % 4u);
+            for (k = 0; k < 80 * n; k++) recs[k] = (uint8_t)rnd();
+            for (k = 0; k < n; k++) {
+                recs[80 * k + 0] = (uint8_t)(rnd() % 8u);
+                recs[80 * k + 1] = (uint8_t)(rnd() % 6u);
+                recs[80 * k + 2] = (uint8_t)(rnd() % 4u);
+            }
+            for (k = 0; k < cnt; k++) list[k] = (uint8_t)(rnd() % n);
+            memset(dstA, 0x66, BITMAP_SZ);
+            memcpy(dstB, dstA, BITMAP_SZ);
+            PTR(0x53A49) = dstA;
+            ORIG_ICONS(0, 0, cnt, list);
+            PTR(0x53A49) = dstB;
+            map_draw_party_icons(0, 0, cnt, list);
+            cases++;
+            if (memcmp(dstA, dstB, BITMAP_SZ) != 0) {
+                size_t q, where = 0;
+                for (q = 0; q < BITMAP_SZ; q++)
+                    if (dstA[q] != dstB[q]) { where = q; break; }
+                snprintf(g_why, sizeof g_why, "n=%d cnt=%d @%u (%02X/%02X)",
+                         n, cnt, (unsigned)where, dstA[where], dstB[where]);
+                fail("map_draw_party_icons"); break;
+            }
+        }
+        PTR(0x53A49) = bitmap;
 
         /* ---- rec_skip (0x1F183) --------------------------------------- */
         for (i = 0; i < 20 && !g_fail; i++) {

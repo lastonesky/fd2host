@@ -50,4 +50,12 @@ void map_enqueue_status(int value, int char_base, int rec_index);
  * time, waiting for a tick between steps. */
 void map_slide_view(int target_x, int target_y);
 
+/* 0x1DF58 - animate the queued status numbers: for 22 frames, redraw the
+ * queued digit glyphs at rising rows and blit the view to 0xA0504. */
+void map_draw_status_popups(void);
+
+/* 0x1C2DA - draw each record in `list` (count) as a 24x24 icon in the map
+ * bitmap, then flash between the current and saved bitmap five times. */
+void map_draw_party_icons(int unused, int table_idx, int count, const uint8_t *list);
+
 #endif /* GAME_MAP_H */

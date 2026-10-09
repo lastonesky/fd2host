@@ -526,6 +526,8 @@ static const struct repl_entry g_repl[] = {
     { 0x1ACF3, "map_draw_cursor",     (void *)map_draw_cursor,      REPL_MAP },
     { 0x32230, "map_unit_ping",       (void *)map_unit_ping,        REPL_MAP },
     { 0x11CAC, "map_view_update",     (void *)map_view_update,      REPL_MAP },
+    { 0x1DF58, "map_draw_status_popups", (void *)map_draw_status_popups, REPL_MAP },
+    { 0x1C2DA, "map_draw_party_icons", (void *)map_draw_party_icons,  REPL_MAP },
 
     /* --- portrait icon draw chain (src/game/dlg.c) -----------------------
      * 0x127E0 draws one record's 24x24 icon (sprite24 plain/ramp24) and

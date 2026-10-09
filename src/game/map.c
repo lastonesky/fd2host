@@ -623,3 +623,95 @@ void map_slide_view(int target_x, int target_y)
         ORIG_4E381();
     }
 }
+
+/* 0x1DF58 */
+typedef void (*rle2trans_fn2)(void *, const void *, int);
+typedef void (*gfxrows_fn)(void *, int, const void *, int, int, int);
+typedef void (*delay_fn2)(int);
+#define ORIG_RLE2TRANS2 ((rle2trans_fn2)(uintptr_t)0x0004EBABu)
+#define ORIG_GFXROWS    ((gfxrows_fn)   (uintptr_t)0x00011EB0u)
+#define ORIG_DELAY2     ((delay_fn2)    (uintptr_t)0x0003790Au)
+#define byte_5202C ((const uint8_t *)(uintptr_t)0x0005202Cu)
+
+void map_draw_status_popups(void)
+{
+    uint8_t v3[28];
+    uint8_t *p;
+    uint32_t i, j;
+
+    memcpy(v3, byte_5202C, 25);
+    if (dword_53EC4 == 0)
+        return;
+    p = (uint8_t *)guest_malloc(0x25680u);
+    memmove(p, dword_53A49, 0x25680u);
+    for (i = 0; i < 22; i++) {
+        memmove(dword_53A49, p, 0x25680u);
+        for (j = 0; j < (uint32_t)dword_53EC4; j++) {
+            if (byte_53C6C[j] != 0) {
+                const uint8_t *rec = dword_53A45 + 80u * (uint32_t)byte_53DFC[j];
+                uint8_t *dst = dword_53A49
+                    + 0x8088u
+                    + 24u * (uint32_t)(rec[0] - dword_53AA9)
+                    + 10944u * (uint32_t)(rec[1] - dword_53AAD)
+                    + byte_53D34[j]
+                    + (uint32_t)(456 * ((int)v3[j % 4u + i] - 3));
+                ORIG_RLE2TRANS2(dst,
+                    (const void *)(uintptr_t)(dword_53A81 +
+                        *(const uint32_t *)(uintptr_t)(dword_53A81 +
+                            4u * (uint32_t)byte_53C6C[j] + 6u)), 456);
+            }
+        }
+        ORIG_GFXROWS((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
+        ORIG_DELAY2(2);
+    }
+    guest_free(p);
+    ORIG_DELAY2(500);
+}
+
+/* 0x1C2DA - draw a list of party records' 24x24 icons into the map bitmap,
+ * then flash between the current and saved bitmap five times. */
+typedef int  (*sfx_fn2)(void *, int, int);
+typedef void (*wait_fn2)(int);
+typedef void (*spr24_fn)(const void *, void *, int);
+#define ORIG_SFX2   ((sfx_fn2) (uintptr_t)0x00025A96u)
+#define ORIG_WAIT   ((wait_fn2)(uintptr_t)0x00017AA9u)
+#define ORIG_SPR24  ((spr24_fn)(uintptr_t)0x0004E127u)
+#define dword_53B13 (*(uint32_t *)(uintptr_t)0x00053B13u)
+#define dword_53C0B (*(int32_t  *)(uintptr_t)0x00053C0Bu)
+#define dword_53A61 (*(uint8_t **)(uintptr_t)0x00053A61u)
+
+void map_draw_party_icons(int unused, int table_idx, int count, const uint8_t *list)
+{
+    uint8_t *p;
+    int i;
+
+    (void)unused;
+    (void)table_idx;   /* only feeds sprite24_const's ignored 4th argument */
+    ORIG_SFX2((void *)(uintptr_t)dword_53B13, 1, 1);
+    p = (uint8_t *)guest_malloc(0x25680u);
+    memmove(p, dword_53A49, 0x25680u);
+    for (i = 0; i < count; i++) {
+        const uint8_t *rec = dword_53A45 + 80u * (uint32_t)list[i];
+        int x = rec[0], y = rec[1], kind = rec[2];
+        if (x >= dword_53AA9 - 1 && x <= dword_51A87 + dword_53AA9 &&
+            y >= dword_53AAD - 1 && y <= dword_51A8B + dword_53AAD + 1) {
+            uint8_t *dst = dword_53A49 + 0x8088u
+                + 24u * (uint32_t)(x - dword_53AA9)
+                + 10944u * (uint32_t)(y - dword_53AAD) - 0xAB0u;
+            int ebx = kind * 12;
+            const void *src;
+            ebx += (dword_53C0B == 3) ? 2 : dword_53C0B;
+            src = dword_53A61 + *(uint32_t *)(uintptr_t)(dword_53A61 + 4u * (uint32_t)ebx);
+            ORIG_SPR24(src, dst, 456);
+        }
+    }
+    for (i = 0; i < 5; i++) {
+        ORIG_GFXROWS((void *)0xA0504u, 320, dword_53A49 + 32904u, 456, 312, 192);
+        ORIG_WAIT(1);
+        ORIG_GFXROWS((void *)0xA0504u, 320, p + 32904u, 456, 312, 192);
+        ORIG_WAIT(1);
+    }
+    ORIG_GFXROWS((void *)0xA0504u, 320, p + 32904u, 456, 312, 192);
+    guest_free(p);
+}
+
