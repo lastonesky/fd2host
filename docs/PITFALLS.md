@@ -854,3 +854,25 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
       环境变量 / 常见 soundfont 路径），而不是硬编码 `C:\`；README 说"默认用系统 gm.dls"在
       Linux 上是误导。与 §8-25 同类：**不能把"听起来像"当判据，要看 `dls:`/`synth:` 行**。
 
+97. **`build/start.bat` 闪退：`.bat` 里写的是 PowerShell cmdlet，且旧 `build\fd2host.exe`
+    按自身目录找游戏**：
+    - 症状：双击 `build\start.bat` 只闪一下控制台就没了，游戏窗口根本不出现（不是游戏崩）。
+    - 根因①（语法）：`start.bat` 内容是
+      `start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=120' -WorkingDirectory 'E:\FD2'`。
+      `.bat` 由 `cmd.exe` 执行，cmd 只有 `start`，没有带连字符的 `start-Process`（那是 PowerShell
+      cmdlet）⇒ 直接 `'start-Process' 不是内部或外部命令` 退出。
+      判据：`cmd //c start.bat` 打印该错误、`%errorlevel%` 非 0。
+    - 根因②（陈旧构建）：修完语法后仍会瞬间退出——当时 `build\fd2host.exe`（300544 B）是从
+      **按 exe 所在目录决定 gamedir** 的源码变体编出来的，于是从 `build\` 启动就去开
+      `E:\FD2\port\build\FD2.EXE`（不存在）⇒ `le: cannot open ...`。当前源码
+      （`src/host.c:551-552`）硬编码默认 `E:\FD2\FD2.EXE` / gamedir `E:\FD2`；**重建后**
+      `build\fd2host.exe` 从任何目录启动都打印 `host: working directory = E:\FD2` 并正常进游戏。
+      判据：对二进制做字符串扫描，旧 build 里没有 `E:\FD2\FD2.EXE` 字面量，新 build 有。
+    - 修法：`start.bat` 改纯 cmd（ASCII + CRLF）
+      `@echo off` / `start "" /D "E:\FD2" "E:\FD2\port\build\fd2host.exe" --exit-after=120`；
+      并 `aux_build.bat fd2host` 重建一次宿主（回归 `regress.ps1` 8/8 PASS）。
+    - **另记（偶发瞬间退出，与本 bug 独立）**：低 1 MiB 地址窗口偶尔被 DLL/私有提交占住
+      （见 §8-83 / §8-48），宿主启动即失败或稍后访问 VGA `0xA3000` 崩。判据：`host.err` 出现
+      `host: fixed address space unavailable ...` 或 `le: guest window blocks 0x... not reserved`。
+      重试通常即恢复；连续失败才需要 `--gamedir`/重建排查。
+
