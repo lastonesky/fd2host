@@ -65,6 +65,7 @@ GAME_SRCS  := $(SRC)/game/rle.c $(SRC)/game/gfx.c $(SRC)/game/sprite24.c \
               $(SRC)/game/fx.c $(SRC)/game/msg.c $(SRC)/game/ev.c \
               $(SRC)/game/ev2.c $(SRC)/game/ev3.c $(SRC)/game/ev4.c \
               $(SRC)/game/ev5.c $(SRC)/game/ev6.c $(SRC)/game/menu_actions.c \
+              $(SRC)/game/world_load.c \
               $(SRC)/game/unit_load.c $(SRC)/game/guest_mem.c
 HOST_SRCS  := $(SRC)/host.c $(SRC)/main_sokol.c $(SRC)/render_sokol.c \
               $(SRC)/sokol_impl.c $(SRC)/keylog.c $(SRC)/keys.c \

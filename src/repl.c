@@ -55,6 +55,7 @@
 #include "game/ev6.h"
 #include "game/unit_load.h"
 #include "game/menu_actions.h"
+#include "game/world_load.h"
 
 #define OBJ0_BASE 0x00010000u
 
@@ -412,6 +413,8 @@ static const struct repl_entry g_repl[] = {
     { 0x338C4, "menu_show_step_pairs",          (void *)menu_show_step_pairs,          REPL_MENU },
     { 0x3396A, "menu_show_map_pan",             (void *)menu_show_map_pan,             REPL_MENU },
     { 0x1D4F6, "menu_stop_and_free_music",      (void *)menu_stop_and_free_music,      REPL_MENU },
+    { 0x10652, "world_load_tiles",              (void *)world_load_tiles,              REPL_MENU },
+    { 0x1088D, "world_load_party",              (void *)world_load_party,              REPL_MENU },
 
     /* --- small dependency-closed scene/UI leaves (batch 45) ------------- */
     { 0x1C269, "rec_collect_slot_bits",         (void *)rec_collect_slot_bits,         REPL_REC },

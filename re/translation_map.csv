@@ -1,5 +1,7 @@
 addr,c_name,source_file,group,check,cases,status,note
 0x10620,kbd_pending,src/game/kbd.c,svc,leafcheck,72000,wired (repl.c),
+0x10652,world_load_tiles,src/game/world_load.c,menu,?,?,wired (repl.c),
+0x1088D,world_load_party,src/game/world_load.c,menu,?,?,wired (repl.c),
 0x10B4E,unit_sprites_build,src/game/unit_load.c,unitld,?,?,wired (repl.c),
 0x10C50,unit_entry_build,src/game/unit_load.c,unitld,?,?,wired (repl.c),
 0x11019,unit_entry_data,src/game/unit_load.c,unitld,?,?,wired (repl.c),
