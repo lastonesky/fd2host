@@ -305,7 +305,14 @@ static void stream_init(const synth_event *ev, int count, double tick_rate,
     g_ev        = ev;
     g_ev_count  = count;
     g_tick_rate = tick_rate;
-    g_total = (uint32_t)((double)ev[count - 1].tick / tick_rate * (double)rate) + rate;
+    /* End at the last event.  A one-shot gets one extra second so the final
+     * release can ring out, but a looping track must NOT: that +1 s was added
+     * on *every* cycle, inserting ~0.85 s of silence at each loop point, which
+     * made the long background themes (map/place/shop) feel slower than the
+     * original.  g_loop is already set by the caller before this call. */
+    g_total = (uint32_t)((double)ev[count - 1].tick / tick_rate * (double)rate);
+    if (!g_loop)
+        g_total += rate;
     if (g_total < rate)
         g_total = rate;
     g_t  = 0;
