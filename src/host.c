@@ -446,16 +446,53 @@ const char *host_window_shot_path(void)
  * it (host_key_set_last_ascii). 0xFFFF = nothing patchable. */
 static uint16_t g_last_ascii_tail = 0xFFFF;
 
-void host_key(uint8_t scan, uint8_t ascii)
+/* ------------------------------------------------- typematic (auto-repeat)
+ *
+ * The original reads keys through INT 16h, so it sees what the keyboard
+ * controller really produces: one make code on press, then - after ~500 ms -
+ * the same make code again every ~91 ms until the matching break.  Both entry
+ * layers drop that stream (the sokol/Win32 auto-repeat is ignored and
+ * main_sokol.c/main_win32.c de-dup with g_down[]), so a held arrow key moved
+ * exactly one cell while the original keeps stepping.  Nothing in the game is
+ * wrong - every consumer is "read one key, take one step" - so the host
+ * reproduces the missing stream here instead of touching game logic
+ * (PROGRESS.md §7.5 of the port3 line).
+ *
+ * FD2_TYPEMATIC=0 disables it; FD2_TYPEMATIC_DELAY / FD2_TYPEMATIC_RATE
+ * override the two timings in ms (defaults 500 / 91, the 8042's own values);
+ * FD2_TYPEMATIC_DEBUG=1 logs every repeat.  Repeats go through kbd_deliver()
+ * but not through keylog_note(), so --keylog stays the record of real input.
+ * --autokey and --keyplay inject make+break back to back and never arm it. */
+static int      g_rep_enabled = 1;
+static unsigned g_rep_delay   = 500;
+static unsigned g_rep_period  = 91;
+static int      g_rep_debug;
+static volatile uint8_t  g_rep_scan;
+static volatile uint8_t  g_rep_ascii;
+static volatile int      g_rep_held;
+static volatile uint64_t g_rep_due;
+
+static void kbd_repeat_note(uint8_t scan, uint8_t ascii)
+{
+    if (!g_rep_enabled)
+        return;
+    if (scan & 0x80) {                       /* break: release the slot   */
+        if (g_rep_held && g_rep_scan == (uint8_t)(scan & 0x7F))
+            g_rep_held = 0;
+        return;
+    }
+    g_rep_scan  = scan;                      /* last key pressed repeats  */
+    g_rep_ascii = ascii;
+    g_rep_held  = 1;
+    g_rep_due   = plat_now_ms() + g_rep_delay;
+}
+
+/* Put one keystroke where the guest is reading it.  Returns the BDA ring slot
+ * it wrote to, or -1 when the guest's own INT 9 handler took it. */
+static int kbd_deliver(uint8_t scan, uint8_t ascii)
 {
     uint8_t *lm;
     uint16_t tail, head, next;
-
-    g_last_ascii_tail = 0xFFFF;
-
-    /* Record every make code before anything else: this is the one funnel
-     * both backends and both the real keyboard and --autokey go through. */
-    keylog_note(scan, ascii);
 
     /* A game that replaced INT 9 owns the key queue: in the original the
      * BIOS handler that fills the ring at 0x41E is *not* chained to, so
@@ -463,7 +500,7 @@ void host_key(uint8_t scan, uint8_t ascii)
      * twice per press and jumps through a table it has not filled -
      * PROGRESS.md §18). */
     if (dos_deliver_key(scan))
-        return;
+        return -1;
 
     lm = lowmem();
     tail = (uint16_t)(lm[0x41C] | (lm[0x41D] << 8));
@@ -471,13 +508,58 @@ void host_key(uint8_t scan, uint8_t ascii)
     next = (uint16_t)(tail + 2);
 
     if (next >= 0x43E) next = 0x41E;
-    if (next == head) return;                 /* buffer full */
+    if (next == head) return -1;              /* buffer full */
     lm[tail]     = ascii;
     lm[tail + 1] = scan;
     lm[0x41C] = (uint8_t)(next & 0xFF);
     lm[0x41D] = (uint8_t)(next >> 8);
-    if (!(scan & 0x80))
-        g_last_ascii_tail = tail;             /* a make code: char may patch */
+    return (int)tail;
+}
+
+static void kbd_repeat_thread(void *arg)
+{
+    (void)arg;
+    for (;;) {
+        plat_sleep_ms(10);
+        if (!g_running)
+            return;
+        if (g_rep_held && plat_now_ms() >= g_rep_due) {
+            if (g_rep_debug)
+                printf("host: repeat scan=%02X ascii=%02X\n",
+                       (unsigned)g_rep_scan, (unsigned)g_rep_ascii);
+            kbd_deliver(g_rep_scan, g_rep_ascii);
+            g_rep_due = plat_now_ms() + g_rep_period;
+        }
+    }
+}
+
+void host_key(uint8_t scan, uint8_t ascii)
+{
+    int tail;
+
+    g_last_ascii_tail = 0xFFFF;
+
+    /* Record every make code before anything else: this is the one funnel
+     * both backends and both the real keyboard and --autokey go through. */
+    keylog_note(scan, ascii);
+
+    /* Arm / clear the typematic state (see above); a break matters only
+     * here, never to the guest. */
+    kbd_repeat_note(scan, ascii);
+
+    /* The real BIOS INT 9 stores only MAKE codes in the 0040:001E ring: the
+     * controller does send the break (and a guest that hooks INT 9 still sees
+     * it, via `in al,60h`), but INT 16h never returns one.  Pushing the break
+     * as well let the game read a phantom second key on every press, with AL
+     * still holding the character (0x0D for Enter) - so one Enter skipped the
+     * command menu and closed NPC info panels at once.  FD2 never hooks
+     * INT 9 (docs/FDPS-ARCHIVE.md §18), so this ring is the only path. */
+    if (scan & 0x80)
+        return;
+
+    tail = kbd_deliver(scan, ascii);
+    if (tail >= 0)
+        g_last_ascii_tail = (uint16_t)tail;   /* char may still be patched */
 }
 
 void host_key_set_last_ascii(uint8_t ascii)
@@ -553,6 +635,16 @@ int host_init(int argc, char **argv)
     char logpath[PLAT_MAX_PATH];
 
     g_start_tick = plat_now_ms();
+
+    /* Typematic timing knobs (kbd_repeat_note): the 8042's own defaults. */
+    if (getenv("FD2_TYPEMATIC") && atoi(getenv("FD2_TYPEMATIC")) == 0)
+        g_rep_enabled = 0;
+    if (getenv("FD2_TYPEMATIC_DELAY"))
+        g_rep_delay = (unsigned)atoi(getenv("FD2_TYPEMATIC_DELAY"));
+    if (getenv("FD2_TYPEMATIC_RATE"))
+        g_rep_period = (unsigned)atoi(getenv("FD2_TYPEMATIC_RATE"));
+    if (getenv("FD2_TYPEMATIC_DEBUG"))
+        g_rep_debug = 1;
 
     /* Diagnostics first: this dumps everything to a file, never to a console
      * window. On failure the process exits silently so the user is not left
@@ -891,6 +983,7 @@ int host_start(void)
         return -1;
     }
     printf("host: game thread started\n");
+    plat_thread(kbd_repeat_thread, NULL);   /* BIOS typematic stream */
 
     if (keylog_start()) {               /* --keyplay wins over --autokey    */
         if (g_autokey && g_autokey[0])

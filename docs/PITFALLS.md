@@ -876,3 +876,43 @@ read/write/**instruction fetch**（之前把 8 误报成 "write"）。
       `host: fixed address space unavailable ...` 或 `le: guest window blocks 0x... not reserved`。
       重试通常即恢复；连续失败才需要 `--gamedir`/重建排查。
 
+98. **宿主把 break 码也塞进了 BIOS 键环 ⇒ 按一次键被游戏读成两次**（移植 port3 §7.7）：
+    - 症状：地图上选人物按一次回车，命令菜单不出现或被顶掉；NPC/敌人信息面板一闪就关。
+      任何“按任意键继续”的等待一读就过。
+    - 根因：`host_key()` 把 make 和 break **都**写进 BDA 键环（`0040:001E`，`lm[0x41C]` 尾指针）。
+      真实 BIOS 的 INT 9 只把 **make 码**入环（release 只用于内部换挡），**INT 16h 永不返回 break**。
+      于是每按一次键，游戏都会从环里多读出一条幽灵键；其 AL 还是那个字符（回车 = `0x0D`），
+      AH 是 break 扫描码（回车的 `0x9C`）。
+    - 为什么 port 会被这条打中：**FD2 不挂 INT 9**（`docs/FDPS-ARCHIVE.md` §18），所以
+      `dos_deliver_key()` 恒返回 0，`host_key()` 每次都直接写环——这条环是按键的**唯一通路**。
+      （挂 INT 9 的 FDPS 走 ISR 私有队列，那条路必须**照旧**投递 break：其 handler 直接 `in al,60h`，
+      真机上它看得到 break。所以修法只能砍“写环”这一步，不能砍 `dos_deliver_key()`。）
+    - 判据：`FD2_KEYTRACE=1` 时在 `dos.c` 的 `kbd_fetch()` 打点，一次回车应只出现
+      `scan=1C`，不得出现 `scan=9C`。（port3 侧的同一根因已用 int16 打点回归过。）
+    - 修法：`host_key()` 仍先用 break 解除 typematic（`kbd_repeat_note()`），但 `scan & 0x80`
+      不再进环。
+
+99. **入口层丢掉键盘自动重复 ⇒ 长按方向键只走一格**（移植 port3 §7.5）：
+    - 症状：地图上按住方向键不放，原版会先停一下再连续走，port 只走一格。
+    - 根因：输入层把键盘自动重复丢了——`main_sokol.c` 的 `event_cb` `if (e->key_repeat) break;`
+      丢掉 sokol 的重复 KEY_DOWN，`main_win32.c` 的重复 WM_KEYDOWN 也进不来，`push_vk()`/
+      `push_fr_key()` 的 `g_down[]` 按住去重再丢一次。于是每次物理按压在 BDA 环里只有一个 make 码。
+      原版经 INT 16h 读到的是键盘控制器的 **typematic 重复 make 流**（约 500 ms 延迟后 ~11 次/秒）。
+      游戏逻辑本身正确（每个消费者都是"读一个键→走一步"）。
+    - 修法（模拟 DOS BIOS typematic）：`host.c` 新增 `kbd_repeat_note()`（make 记下"最后按下的键"
+      并起 500 ms 定时，匹配的 break 解除）与 `kbd_repeat_thread()`（10 ms 轮询，到点每 91 ms
+      推一个 make 进 `kbd_deliver()`，直到松开）。重复 make **不过 `keylog_note()`**，所以
+      `--keylog` 仍是真实输入的记录；`--autokey`/`--keyplay` 是 make+break 连发，不会触发重复。
+      可调：`FD2_TYPEMATIC=0` 关闭、`FD2_TYPEMATIC_DELAY`（默认 500）、`FD2_TYPEMATIC_RATE`
+      （默认 91）、`FD2_TYPEMATIC_DEBUG=1` 每次重复打一行。
+    - 判据：`FD2_TYPEMATIC_DEBUG=1` 下回放/按住一个键 4.5 s，`host.log` 出现约 38 行
+      `host: repeat scan=..`（~91 ms 周期），松开后停止。
+
+100. **`stream_init()` 给每个循环都加 1 s 尾巴 ⇒ 循环 BGM 每圈插 ~0.85 s 静音**（移植 port3 §7.8）：
+    - 症状：地图/村庄/商店的长背景曲听起来比原版“慢一点”“拖着走”。
+    - 根因：`synth.c` 的 `stream_init()` 无条件 `g_total = 最后一个事件 + rate`（整整 1 s）。
+      一次性播放需要它让收尾释放音余响，但**循环曲每转一圈都加一次**，于是每个循环点前都多出
+      ~0.85 s 静音。曲速本身是准的（BPM/tick_rate 没算错）。
+    - 修法：尾巴只留给一次性播放——`if (!g_loop) g_total += rate;`（`g_loop` 已由调用者
+      `synth_music_play()` 在 `stream_init()` 之前设好）。
+

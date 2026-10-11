@@ -48,6 +48,7 @@ Start-Process E:\FD2\port\build\fd2host.exe -ArgumentList '--exit-after=25' -Wor
 | `--autokey=<延时ms:VK[,VK...];...>` | 无人值守按键序列（菜单路径回归） |
 | `--replace=none\|all\|rle,gfx,sprite24,util,path,dlg,rec,svc,vm,res,bgm,scene,fade,map,fx,ev2,ev3,ev4,ev5` | 是否把已对拍的转译函数接进游戏（默认 `all`）；`none` 用于 A/B（见 `TRANSLATION.md`）。分组名与 `src/repl.c` 的 `REPL_*` 一一对应。**token 可加 `-` 前缀取反**（后生效），如 `--replace=all,-ev2` = 全集去掉某一批 |
 | 环境变量 `FD2_REPL_SKIP=0x...,0x...` | 调试用：把列出的地址**留成机器码**（即使分组已选），用于**批量免重建二分**。正常跑不要设 |
+| 环境变量 `FD2_TYPEMATIC=0` / `FD2_TYPEMATIC_DELAY=<ms>` / `FD2_TYPEMATIC_RATE=<ms>` / `FD2_TYPEMATIC_DEBUG=1` | 宿主模拟的 BIOS **typematic 自动重复**（长按方向键连续走一格以上）。`=0` 关闭；`DELAY` = 首次延迟（默认 **500**）、`RATE` = 重复周期（默认 **91**），都是 8042 的原值；`DEBUG=1` 每次重复打一行 `host: repeat scan=.. ascii=..`。重复 make 不进 `--keylog`。见 `PITFALLS.md` §8-99 |
 | `--no-user-input` | 忽略真实键鼠，避免测试机被使用时干扰 autokey |
 | `--cmdtail=<尾巴>` | 写进 `PSP:0x80` 的命令行；`INT 21h AH=4B` 拉起子进程时自动传递 |
 | `--log=<路径>` | 换日志文件；子进程各用各的 `host.<pid>.log`，否则会截掉父日志（§8-47） |
